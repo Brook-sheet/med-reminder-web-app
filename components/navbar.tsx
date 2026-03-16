@@ -22,7 +22,7 @@ const Navbar = () => {
               className={`p-6 w-1/2 h-screen bg-gray-100 border-r border-gray-400 z-20 fixed top-0 transition-transform ease-out delay-150 duration-200 ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:w-64 md:left-0`}
             >
               <div className="flex flex-col justify-start items-center">
-                <h1 className="text-base text-center cursor-pointer font-bold text-blue-900 border-b border-gray-300 pb-4 w-full">
+                <h1 className="text-base text-center font-bold text-blue-900 border-b border-gray-300 pb-4 w-full">
                   Med App Reminder
                 </h1>
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
