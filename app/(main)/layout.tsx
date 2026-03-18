@@ -8,9 +8,7 @@ export default function DashboardLayout({
   return (
     <div>
       <Navbar />
-      <div className="md:ml-64">
-        {children}
-      </div>
+      <div className="md:ml-64">{children}</div>
     </div>
   );
 }

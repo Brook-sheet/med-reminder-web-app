@@ -29,7 +29,7 @@ const Navbar = () => {
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
                   <Link href="/">
                     <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <MdOutlineSpaceDashboard className="text-2xl text-gray-800 group-hover:text-white"/>
+                      <MdOutlineSpaceDashboard className="text-2xl text-gray-800 group-hover:text-white" />
                       <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
                         Dashboard
                       </h3>
@@ -63,12 +63,12 @@ const Navbar = () => {
                   </Link>
                 </div>
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <CiLogout className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
-                        Logout
-                      </h3>
-                    </div>
+                  <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                    <CiLogout className="text-2xl text-gray-800 group-hover:text-white" />
+                    <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                      Logout
+                    </h3>
+                  </div>
                 </div>
               </div>
             </div>
