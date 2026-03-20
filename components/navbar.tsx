@@ -27,48 +27,50 @@ const Navbar = () => {
                   Med App Reminder
                 </h1>
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
-                  <Link href="/">
+                  <DisclosureButton as={Link} href="/">
                     <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
                       <MdOutlineSpaceDashboard className="text-2xl text-gray-800 group-hover:text-white" />
                       <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
                         Dashboard
                       </h3>
                     </div>
-                  </Link>
-                  <Link href="/medicines">
+                  </DisclosureButton>
+                  <DisclosureButton as={Link} href="/medicines">
                     <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
                       <CiPill className="text-2xl text-gray-800 group-hover:text-white" />
                       <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
                         Medicines
                       </h3>
                     </div>
-                  </Link>
+                  </DisclosureButton>
                 </div>
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
-                  <Link href="/history">
+                  <DisclosureButton as={Link} href="/history">
                     <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
                       <GoHistory className="text-2xl text-gray-800 group-hover:text-white" />
                       <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
                         History
                       </h3>
                     </div>
-                  </Link>
-                  <Link href="/settings">
+                  </DisclosureButton>
+                  <DisclosureButton as={Link} href="/settings">
                     <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
                       <CiSettings className="text-2xl text-gray-800 group-hover:text-white" />
                       <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
                         Settings
                       </h3>
                     </div>
-                  </Link>
+                  </DisclosureButton>
                 </div>
                 <div className="my-4 border-b border-gray-300 pb-4 w-full">
-                  <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                    <CiLogout className="text-2xl text-gray-800 group-hover:text-white" />
-                    <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
-                      Logout
-                    </h3>
-                  </div>
+                  <DisclosureButton as={Link} href="/sign-in">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <CiLogout className="text-2xl text-gray-800 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                        Logout
+                      </h3>
+                    </div>
+                  </DisclosureButton>
                 </div>
               </div>
             </div>
