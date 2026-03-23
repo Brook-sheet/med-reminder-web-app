@@ -1,17 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Plus } from 'lucide-react';
 import MedicineCard from '@/components/dashboard/medicines/MedicineCard';
-import AddMedicine, { MedicineData } from '@/components/dashboard/medicines/AddMedicine';
-
-interface Medicine extends MedicineData {
-  id: number;
-}
 
 const Medicines = () => {
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [medicines, setMedicines] = useState<Medicine[]>([
+  const medicines = [
     {
       id: 1,
       name: 'Aspirin',
@@ -26,23 +20,7 @@ const Medicines = () => {
       frequency: 'Once daily',
       scheduledTimes: ['12:00 PM'],
     },
-  ]);
-
-  const handleAddMedicine = (newMedicine: MedicineData) => {
-    const medicine: Medicine = {
-      ...newMedicine,
-      id: Date.now(),
-    };
-    setMedicines([...medicines, medicine]);
-  };
-
-  const handleEditMedicine = (index: number) => {
-    console.log('Edit medicine:', index);
-  };
-
-  const handleDeleteMedicine = (index: number) => {
-    setMedicines(medicines.filter((_, i) => i !== index));
-  };
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -58,7 +36,6 @@ const Medicines = () => {
         {/* Add Medicine Button */}
         <div className="mb-6">
           <button
-            onClick={() => setIsAddOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <Plus className="w-5 h-5" />
@@ -68,39 +45,19 @@ const Medicines = () => {
 
         {/* Medicine Cards Grid */}
         <div className="space-y-4">
-          {medicines.map((medicine, index) => (
+          {medicines.map((medicine) => (
             <MedicineCard
               key={medicine.id}
               name={medicine.name}
               dosage={medicine.dosage}
               frequency={medicine.frequency}
               scheduledTimes={medicine.scheduledTimes}
-              onEdit={() => handleEditMedicine(index)}
-              onDelete={() => handleDeleteMedicine(index)}
+              onEdit={() => {}}
+              onDelete={() => {}}
             />
           ))}
         </div>
-
-        {/* Empty State (if no medicines) */}
-        {medicines.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 mb-4">No medicines added yet</p>
-            <button
-              onClick={() => setIsAddOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Add Your First Medicine
-            </button>
-          </div>
-        )}
       </div>
-
-      {/* Add Medicine Modal */}
-      <AddMedicine
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        onSave={handleAddMedicine}
-      />
     </div>
   );
 };
