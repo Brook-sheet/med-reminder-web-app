@@ -16,13 +16,13 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Adherence Rate"
-            value={<span className="text-blue-600">85%</span>}
+            value={<span className="text-blue-600">0%</span>}
             subtitle="This month"
             className="border-l-4 border-blue-500"
           />
           <StatCard
             title="Today's Progress"
-            value="1/4"
+            value="0/4"
             subtitle="medicines taken"
           />
           <StatCard
