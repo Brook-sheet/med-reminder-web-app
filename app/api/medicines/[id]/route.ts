@@ -1,6 +1,6 @@
 // app/api/medicines/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
+import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
@@ -29,7 +29,7 @@ export async function PUT(
       return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid medicine ID' }, { status: 400 });
     }
 
-    await connectToDatabase();
+    await connectDB();
     const body = await request.json();
     const { name, dosage, frequency, scheduledTimes, notes } = body;
 
@@ -83,7 +83,7 @@ export async function DELETE(
       return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid medicine ID' }, { status: 400 });
     }
 
-    await connectToDatabase();
+    await connectDB();
 
     // Soft delete — keeps history intact
     const medicine = await Medicine.findOneAndUpdate(
