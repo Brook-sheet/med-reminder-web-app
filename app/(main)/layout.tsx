@@ -1,14 +1,14 @@
+// app/(main)/layout.tsx
 import Navbar from "@/components/navbar";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div>
+    <div className="flex h-screen overflow-hidden">
       <Navbar />
-      <div className="md:ml-64">{children}</div>
+      {/* Offset for fixed sidebar on md+ screens */}
+      <main className="flex-1 overflow-y-auto md:ml-64">
+        {children}
+      </main>
     </div>
   );
 }

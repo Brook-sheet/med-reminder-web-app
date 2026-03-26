@@ -1,34 +1,32 @@
-import React from 'react';
-import DayBar from './DayBar';
+import React from "react";
+import DayBar from "./DayBar";
+import type { WeeklyDayData } from "@/types";
 
-interface WeeklyData {
-  day: string;
-  taken: number;
-  total: number;
+interface WeeklyAdherenceProps {
+  weeklyData: WeeklyDayData[];
+  loading: boolean;
 }
 
-const WeeklyAdherence: React.FC = () => {
-  // Sample data - replace with actual data from your backend
-  const weeklyData: WeeklyData[] = [
-    { day: 'Mon', taken: 2, total: 4 },
-    { day: 'Tue', taken: 4, total: 4 },
-    { day: 'Wed', taken: 2, total: 4 },
-    { day: 'Thu', taken: 4, total: 4 },
-    { day: 'Fri', taken: 3, total: 4 },
-    { day: 'Sat', taken: 1, total: 4 },
-    { day: 'Sun', taken: 1, total: 4 },
-  ];
+const WeeklyAdherence: React.FC<WeeklyAdherenceProps> = ({ weeklyData, loading }) => {
+  if (loading) {
+    return (
+      <div className="flex gap-2 h-64 md:gap-4 md:h-72">
+        {Array(7).fill(0).map((_, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-3">
+            <div className="w-3/4 bg-gray-200 rounded-t-lg animate-pulse h-full" />
+            <div className="h-3 w-8 bg-gray-200 rounded animate-pulse" />
+            <div className="h-3 w-6 bg-gray-200 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
       <div className="flex gap-2 h-64 md:gap-4 md:h-72">
         {weeklyData.map((data, index) => (
-          <DayBar
-            key={index}
-            day={data.day}
-            taken={data.taken}
-            total={data.total}
-          />
+          <DayBar key={index} day={data.day} taken={data.taken} total={data.total} />
         ))}
       </div>
     </div>
