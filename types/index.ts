@@ -1,6 +1,6 @@
 // types/index.ts
 
-export interface IUser {
+export interface User {
   _id?: string;
   email: string;
   password?: string;
@@ -10,7 +10,7 @@ export interface IUser {
   updatedAt?: Date;
 }
 
-export interface IMedicine {
+export interface Medicine {
   _id?: string;
   userId: string;
   name: string;
@@ -24,7 +24,7 @@ export interface IMedicine {
   updatedAt?: Date;
 }
 
-export interface IMedicationLog {
+export interface MedicationLog {
   _id?: string;
   userId: string;
   medicineId: string;
@@ -34,12 +34,12 @@ export interface IMedicationLog {
   takenAt?: Date;
   status: 'taken' | 'missed' | 'pending' | 'reminder';
   source: 'manual' | 'sensor' | 'auto';
-  sensorData?: ISensorData;
+  sensorData?: SensorData;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface ISensorData {
+export interface SensorData {
   _id?: string;
   userId?: string;
   deviceId: string;
