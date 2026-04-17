@@ -4,13 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Plus } from "lucide-react";
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
-import type { IMedicine } from "@/types";
+import type { Medicine } from "@/types";
 
 const Medicines = () => {
-  const [medicines, setMedicines] = useState<IMedicine[]>([]);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingMedicine, setEditingMedicine] = useState<IMedicine | null>(null);
+  const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchMedicines = useCallback(async () => {
@@ -34,7 +34,7 @@ const Medicines = () => {
     setModalOpen(true);
   };
 
-  const handleEdit = (medicine: IMedicine) => {
+  const handleEdit = (medicine: Medicine) => {
     setEditingMedicine(medicine);
     setModalOpen(true);
   };
@@ -62,7 +62,7 @@ const Medicines = () => {
     setEditingMedicine(null);
   };
 
-  const handleModalSave = async (formData: Omit<IMedicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">) => {
+  const handleModalSave = async (formData: Omit<Medicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">) => {
     const isEdit = !!editingMedicine;
     const url = isEdit ? `/api/medicines/${editingMedicine._id}` : "/api/medicines";
     const method = isEdit ? "PUT" : "POST";
