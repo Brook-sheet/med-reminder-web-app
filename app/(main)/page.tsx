@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import ScheduleList from "@/components/dashboard/Schedule/ScheduleList";
-import WeeklyAdherence from "@/components/dashboard/weekly/WeeklyAdherence";
 import type { DashboardStats } from "@/types";
+import UpcomingList from "@/components/dashboard/Upcoming/UpcomingList";
 
 export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -92,13 +92,11 @@ export default function Home() {
             onStatusChange={fetchDashboard}
           />
         </div>
-
-        {/* Weekly Adherence */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Weekly Adherence
+            Upcoming
           </h2>
-          <WeeklyAdherence weeklyData={stats?.weeklyData ?? []} loading={loading} />
+          <UpcomingList />
         </div>
       </div>
     </div>

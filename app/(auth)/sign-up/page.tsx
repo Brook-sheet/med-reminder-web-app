@@ -11,6 +11,10 @@ import { useRouter } from "next/navigation";
 
 const Signup = () => {
   const router = useRouter();
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -71,6 +75,30 @@ const Signup = () => {
                 {error}
               </div>
             )}
+            <Input
+              type="firstname"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              placeholder="First Name"
+              disabled={loading}
+            />
+            <Input
+              type="middlename"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              required
+              placeholder="Middle Name"
+              disabled={loading}
+            />
+            <Input
+              type="lastname"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              placeholder="Last Name"
+              disabled={loading}
+            />
             <Input
               type="email"
               value={email}

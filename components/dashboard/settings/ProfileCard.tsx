@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
 
 const ProfileCard = () => {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstname] = useState("");
+  const [middleName, setMiddlename] = useState("");
+  const [lastName, setLastname] = useState("");
   const [patientId, setPatientId] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,9 @@ const ProfileCard = () => {
       const res = await fetch("/api/profile");
       const data = await res.json();
       if (data.success) {
-        setFullName(data.data.fullName || "");
+        setFirstname(data.data.firstname || "");
+        setMiddlename(data.data.middlename || "");
+        setLastname(data.data.lastname || "");
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
       }
@@ -41,7 +45,7 @@ const ProfileCard = () => {
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, patientId, email }),
+        body: JSON.stringify({ firstName, middleName, lastName, patientId, email }),
       });
       const data = await res.json();
       if (data.success) {
@@ -96,29 +100,40 @@ const ProfileCard = () => {
           </div>
         )}
         <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-            Full Name
+          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+            First Name
           </label>
           <Input
-            id="fullName"
+            id="firstName"
             type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Enter your full name"
+            value={firstName}
+            onChange={(e) => setFirstname(e.target.value)}
             className="bg-gray-50 border-gray-300 rounded-lg"
             disabled={saving}
           />
         </div>
         <div>
-          <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
-            Patient ID
+          <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
+            Middle Name
           </label>
           <Input
-            id="patientId"
+            id="middleName"
             type="text"
-            value={patientId}
-            onChange={(e) => setPatientId(e.target.value)}
-            placeholder="Enter patient ID"
+            value={middleName}
+            onChange={(e) => setMiddlename(e.target.value)}
+            className="bg-gray-50 border-gray-300 rounded-lg"
+            disabled={saving}
+          />
+        </div>
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+            Last Name
+          </label>
+          <Input
+            id="lastName"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastname(e.target.value)}
             className="bg-gray-50 border-gray-300 rounded-lg"
             disabled={saving}
           />

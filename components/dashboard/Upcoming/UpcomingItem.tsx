@@ -1,19 +1,17 @@
 import React from 'react';
-import { FaCheckCircle } from "react-icons/fa";
 import { FaBell } from "react-icons/fa";
 import { FaClock } from "react-icons/fa";
 
-interface ScheduleItemProps {
+interface UpcomingItemProps {
   name: string;
   time: string;
-  status: 'Taken' | 'Upcoming' | 'Scheduled' | 'Missed';
+  date: string;
+  status: 'Upcoming' | 'Scheduled';
 }
 
-const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
+const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status }) => {
   const getStatusStyles = () => {
     switch (status) {
-      case 'Taken':
-        return 'bg-green-100 text-green-800 border-green-200';
       case 'Upcoming':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Scheduled':
@@ -25,8 +23,6 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
 
   const getIcon = () => {
     switch (status) {
-      case 'Taken':
-        return <FaCheckCircle className="w-4 h-4" />;
       case 'Upcoming':
         return <FaBell className="w-4 h-4" />;
       case 'Scheduled':
@@ -42,6 +38,7 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-gray-900">{name}</h3>
           <p className="text-gray-600">{time}</p>
+          <p className="text-gray-600">{date}</p>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-medium ${getStatusStyles()}`}>
           {getIcon()}
@@ -52,4 +49,4 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
   );
 };
 
-export default ScheduleItem;
+export default UpcomingItem;
