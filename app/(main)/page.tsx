@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import ScheduleList from "@/components/dashboard/Schedule/ScheduleList";
-import type { DashboardStats } from "@/types";
 import UpcomingList from "@/components/dashboard/Upcoming/UpcomingList";
+import type { DashboardStats } from "@/types";
 
 export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -21,10 +21,17 @@ export default function Home() {
       const profileData = await profileRes.json();
 
       if (dashData.success) setStats(dashData.data);
-      if (profileData.success && profileData.data.fullName) {
-        setUserName(profileData.data.fullName.split(" ")[0]);
-      } else if (profileData.success && profileData.data.email) {
-        setUserName(profileData.data.email.split("@")[0]);
+
+      if (profileData.success) {
+        const p = profileData.data;
+        // Prefer firstName, fallback to fullName, fallback to email prefix
+        if (p.firstName) {
+          setUserName(p.firstName);
+        } else if (p.fullName) {
+          setUserName(p.fullName.split(" ")[0]);
+        } else if (p.email) {
+          setUserName(p.email.split("@")[0]);
+        }
       }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
@@ -35,7 +42,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchDashboard();
-    // Poll every 30 seconds for real-time sensor updates
+    // Poll every 30 seconds for real-time updates
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
   }, [fetchDashboard]);
@@ -82,7 +89,7 @@ export default function Home() {
         </div>
 
         {/* Today's Schedule */}
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
+        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Today&apos;s Schedule
           </h2>
@@ -92,10 +99,10 @@ export default function Home() {
             onStatusChange={fetchDashboard}
           />
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Upcoming
-          </h2>
+
+        {/* Upcoming — dynamically fetched from API */}
+        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Upcoming</h2>
           <UpcomingList />
         </div>
       </div>

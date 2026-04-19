@@ -4,6 +4,9 @@ export interface User {
   _id?: string;
   email: string;
   password?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
   fullName?: string;
   patientId?: string;
   createdAt?: Date;
@@ -16,9 +19,11 @@ export interface Medicine {
   name: string;
   dosage: string;
   frequency: string;
-  scheduledTimes: string[]; // e.g. ["08:00", "20:00"]
+  scheduledTimes: string[];
   color?: string;
   notes?: string;
+  startDate?: string;
+  endDate?: string;
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -30,7 +35,7 @@ export interface MedicationLog {
   medicineId: string;
   medicineName: string;
   scheduledTime: string;
-  scheduledDate: string; // "YYYY-MM-DD"
+  scheduledDate: string;
   takenAt?: Date;
   status: 'taken' | 'missed' | 'pending' | 'reminder';
   source: 'manual' | 'sensor' | 'auto';
@@ -87,12 +92,4 @@ export interface AuthPayload {
   email: string;
   iat?: number;
   exp?: number;
-}
-
-// types/index.ts
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  error?: string;
 }

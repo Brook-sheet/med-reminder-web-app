@@ -132,3 +132,4 @@ export async function GET(request: NextRequest) {
   }
   return NextResponse.json<ApiResponse>({ success: true, message: 'Sensor API is online', data: { timestamp: new Date() } });
 }
+

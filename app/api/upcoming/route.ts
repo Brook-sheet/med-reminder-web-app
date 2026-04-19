@@ -42,9 +42,9 @@ export interface UpcomingItem {
   medicineId: string;
   medicineName: string;
   dosage: string;
-  scheduledDate: string;       // "YYYY-MM-DD"
-  scheduledDateFormatted: string; // "Mon, Apr 21"
-  scheduledTime: string;       // "8:00 AM"
+  scheduledDate: string;          // "YYYY-MM-DD"
+  scheduledDateFormatted: string; // "Mon, Apr 21" or "Today"
+  scheduledTime: string;          // "8:00 AM"
   status: 'Upcoming' | 'Scheduled';
   logId?: string;
 }
@@ -72,7 +72,8 @@ export async function GET(request: NextRequest) {
 
     for (const med of medicines) {
       const startDate = med.startDate || todayStr;
-      const endDate = med.endDate || ''; // empty = no end
+      // endDate: if not set, look ahead 30 days from today
+      const endDate = med.endDate || '';
 
       // Build list of dates to check
       for (let i = 0; i <= lookAheadDays; i++) {
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
 
           // For TODAY: only show times that haven't passed yet
           if (checkDateStr === todayStr) {
-            if (timeMinutes <= nowMinutes) continue; // already past, skip (shown in Today's Schedule)
+            if (timeMinutes <= nowMinutes) continue; // already past, skip
           }
 
           // Check if there's already a "taken" log for this slot

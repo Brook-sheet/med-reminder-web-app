@@ -4,7 +4,10 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export interface IUserDocument extends Document {
   email: string;
   password: string;
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  fullName?: string;
   patientId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +27,21 @@ const UserSchema = new Schema<IUserDocument>(
       type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
+    },
+    firstName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    middleName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      default: '',
+      trim: true,
     },
     fullName: {
       type: String,

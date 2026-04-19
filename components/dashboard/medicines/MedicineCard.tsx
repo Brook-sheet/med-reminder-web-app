@@ -1,11 +1,14 @@
+// components/dashboard/medicines/MedicineCard.tsx
 import React from "react";
-import { Edit2, Trash2, Clock } from "lucide-react";
+import { Edit2, Trash2, Clock, Calendar } from "lucide-react";
 
 interface MedicineCardProps {
   name: string;
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  startDate?: string;
+  endDate?: string;
   onEdit?: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
@@ -16,6 +19,8 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
   dosage,
   frequency,
   scheduledTimes,
+  startDate,
+  endDate,
   onEdit,
   onDelete,
   isDeleting = false,
@@ -31,6 +36,12 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
       Y: "bg-cyan-400", Z: "bg-lime-400",
     };
     return colors[letter.toUpperCase()] || "bg-gray-400";
+  };
+
+  // Format "YYYY-MM-DD" → "Apr 19, 2026"
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
   const firstLetter = name.charAt(0).toUpperCase();
@@ -76,13 +87,14 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 
       <div className="h-px bg-gray-100 mb-4" />
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
             Frequency
           </p>
           <p className="text-sm text-gray-700">{frequency}</p>
         </div>
+
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
             Scheduled Times
@@ -91,14 +103,30 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
             {scheduledTimes.map((time, index) => (
               <div
                 key={index}
-                className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100"
+                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100"
               >
-                <Clock className="w-4 h-4" />
+                <Clock className="w-3.5 h-3.5" />
                 {time}
               </div>
             ))}
           </div>
         </div>
+
+        {/* Date range */}
+        {(startDate || endDate) && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Duration
+            </p>
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+              <span>
+                {startDate ? formatDate(startDate) : "—"}{" "}
+                {endDate ? `→ ${formatDate(endDate)}` : "(no end date)"}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

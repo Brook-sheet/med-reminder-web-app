@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
 
 const ProfileCard = () => {
-  const [firstName, setFirstname] = useState("");
-  const [middleName, setMiddlename] = useState("");
-  const [lastName, setLastname] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [patientId, setPatientId] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -21,9 +21,9 @@ const ProfileCard = () => {
       const res = await fetch("/api/profile");
       const data = await res.json();
       if (data.success) {
-        setFirstname(data.data.firstname || "");
-        setMiddlename(data.data.middlename || "");
-        setLastname(data.data.lastname || "");
+        setFirstName(data.data.firstName || "");
+        setMiddleName(data.data.middleName || "");
+        setLastName(data.data.lastName || "");
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
       }
@@ -69,7 +69,7 @@ const ProfileCard = () => {
           <div className="h-5 w-40 bg-gray-200 rounded" />
         </CardHeader>
         <CardContent className="space-y-4">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="space-y-1">
               <div className="h-3 w-20 bg-gray-200 rounded" />
               <div className="h-9 bg-gray-100 rounded" />
@@ -99,6 +99,8 @@ const ProfileCard = () => {
             {message.text}
           </div>
         )}
+
+        {/* First Name */}
         <div>
           <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
             First Name
@@ -107,24 +109,31 @@ const ProfileCard = () => {
             id="firstName"
             type="text"
             value={firstName}
-            onChange={(e) => setFirstname(e.target.value)}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Enter your first name"
             className="bg-gray-50 border-gray-300 rounded-lg"
             disabled={saving}
           />
         </div>
+
+        {/* Middle Name */}
         <div>
           <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
-            Middle Name
+            Middle Name{" "}
+            <span className="text-gray-400 text-xs font-normal">(optional)</span>
           </label>
           <Input
             id="middleName"
             type="text"
             value={middleName}
-            onChange={(e) => setMiddlename(e.target.value)}
+            onChange={(e) => setMiddleName(e.target.value)}
+            placeholder="Enter your middle name"
             className="bg-gray-50 border-gray-300 rounded-lg"
             disabled={saving}
           />
         </div>
+
+        {/* Last Name */}
         <div>
           <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
             Last Name
@@ -133,11 +142,14 @@ const ProfileCard = () => {
             id="lastName"
             type="text"
             value={lastName}
-            onChange={(e) => setLastname(e.target.value)}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Enter your last name"
             className="bg-gray-50 border-gray-300 rounded-lg"
             disabled={saving}
           />
         </div>
+
+        {/* Email */}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
             Email
@@ -152,6 +164,24 @@ const ProfileCard = () => {
             disabled={saving}
           />
         </div>
+
+        {/* Patient ID */}
+        <div>
+          <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
+            Patient ID{" "}
+            <span className="text-gray-400 text-xs font-normal">(optional)</span>
+          </label>
+          <Input
+            id="patientId"
+            type="text"
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+            placeholder="Enter your patient ID"
+            className="bg-gray-50 border-gray-300 rounded-lg"
+            disabled={saving}
+          />
+        </div>
+
         <Button
           onClick={handleSave}
           disabled={saving}

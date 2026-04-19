@@ -43,11 +43,22 @@ export async function PUT(request: NextRequest) {
 
     await connectDB();
     const body = await request.json();
-    const { fullName, patientId, email } = body;
+    const { firstName, middleName, lastName, patientId, email } = body;
+
+    // Build fullName from parts
+    const nameParts = [firstName, middleName, lastName].filter(Boolean);
+    const fullName = nameParts.join(' ').trim();
 
     const updatedUser = await User.findByIdAndUpdate(
       user.userId,
-      { fullName, patientId, email: email?.toLowerCase() },
+      {
+        firstName: firstName || '',
+        middleName: middleName || '',
+        lastName: lastName || '',
+        fullName,
+        patientId,
+        email: email?.toLowerCase(),
+      },
       { new: true, runValidators: true }
     ).select('-password');
 

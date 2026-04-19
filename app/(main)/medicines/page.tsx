@@ -62,7 +62,9 @@ const Medicines = () => {
     setEditingMedicine(null);
   };
 
-  const handleModalSave = async (formData: Omit<Medicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">) => {
+  const handleModalSave = async (
+    formData: Omit<Medicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">
+  ) => {
     const isEdit = !!editingMedicine;
     const url = isEdit ? `/api/medicines/${editingMedicine._id}` : "/api/medicines";
     const method = isEdit ? "PUT" : "POST";
@@ -135,6 +137,8 @@ const Medicines = () => {
                 dosage={medicine.dosage}
                 frequency={medicine.frequency}
                 scheduledTimes={medicine.scheduledTimes}
+                startDate={medicine.startDate}
+                endDate={medicine.endDate}
                 onEdit={() => handleEdit(medicine)}
                 onDelete={() => handleDelete(medicine._id!)}
                 isDeleting={deletingId === medicine._id}

@@ -13,3 +13,4 @@ export async function POST() {
   response.cookies.set({ ...COOKIE_OPTIONS, value: '', maxAge: 0 });
   return response;
 }
+

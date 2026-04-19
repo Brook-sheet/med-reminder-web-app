@@ -14,7 +14,6 @@ const Signup = () => {
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -39,7 +38,14 @@ const Signup = () => {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, confirmPassword }),
+        body: JSON.stringify({
+          email,
+          password,
+          confirmPassword,
+          firstName,
+          middleName,
+          lastName,
+        }),
       });
 
       const data = await res.json();
@@ -75,8 +81,9 @@ const Signup = () => {
                 {error}
               </div>
             )}
+
             <Input
-              type="firstname"
+              type="text"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
@@ -84,15 +91,14 @@ const Signup = () => {
               disabled={loading}
             />
             <Input
-              type="middlename"
+              type="text"
               value={middleName}
               onChange={(e) => setMiddleName(e.target.value)}
-              required
-              placeholder="Middle Name"
+              placeholder="Middle Name (optional)"
               disabled={loading}
             />
             <Input
-              type="lastname"
+              type="text"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               required

@@ -8,6 +8,8 @@ export interface IMedicineDocument extends Document {
   frequency: string;
   scheduledTimes: string[];
   notes: string;
+  startDate: string;
+  endDate?: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -47,6 +49,14 @@ const MedicineSchema = new Schema<IMedicineDocument>(
     notes: {
       type: String,
       default: '',
+    },
+    startDate: {
+      type: String,
+      default: () => new Date().toISOString().split('T')[0],
+    },
+    endDate: {
+      type: String,
+      default: null,
     },
     isActive: {
       type: Boolean,

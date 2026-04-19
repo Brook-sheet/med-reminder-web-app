@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
     await connectDB();
     const body = await request.json();
-    const { name, dosage, frequency, scheduledTimes, notes, startDate } = body;
+    const { name, dosage, frequency, scheduledTimes, notes, startDate, endDate } = body;
 
     if (!name || !dosage || !frequency || !scheduledTimes || scheduledTimes.length === 0) {
       return NextResponse.json<ApiResponse>(
@@ -62,9 +62,15 @@ export async function POST(request: NextRequest) {
     const effectiveStartDate = startDate || new Date().toISOString().split('T')[0];
 
     const medicine = await Medicine.create({
-      userId: user.userId, name: name.trim(), dosage: dosage.trim(),
-      frequency, scheduledTimes, startDate: effectiveStartDate,
-      notes: notes || '', isActive: true,
+      userId: user.userId,
+      name: name.trim(),
+      dosage: dosage.trim(),
+      frequency,
+      scheduledTimes,
+      startDate: effectiveStartDate,
+      endDate: endDate || null,
+      notes: notes || '',
+      isActive: true,
     });
 
     await createLogsFromStartDate(

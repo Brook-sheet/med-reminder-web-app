@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { email, password, confirmPassword } = body;
+    const { email, password, confirmPassword, firstName, middleName, lastName } = body;
 
     // ── Validation ─────────────────────────────────────────────────────────────
     if (!email || !password || !confirmPassword) {
@@ -46,9 +46,18 @@ export async function POST(request: NextRequest) {
 
     // ── Hash password & create user ────────────────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Build fullName from parts
+    const nameParts = [firstName, middleName, lastName].filter(Boolean);
+    const fullName = nameParts.join(' ').trim();
+
     const user = await User.create({
       email: email.toLowerCase(),
       password: hashedPassword,
+      firstName: firstName || '',
+      middleName: middleName || '',
+      lastName: lastName || '',
+      fullName,
     });
 
     // ── Issue JWT ──────────────────────────────────────────────────────────────
@@ -62,6 +71,9 @@ export async function POST(request: NextRequest) {
           user: {
             id: user._id.toString(),
             email: user.email,
+            firstName: user.firstName,
+            middleName: user.middleName,
+            lastName: user.lastName,
             fullName: user.fullName,
           },
         },
