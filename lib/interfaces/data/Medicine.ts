@@ -7,6 +7,8 @@ export interface Medicine {
   scheduledTimes: string[];
   color?: string;
   notes?: string;
+  startDate?: string;
+  endDate?: string;
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;

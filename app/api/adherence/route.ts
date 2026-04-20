@@ -1,4 +1,3 @@
-// app/api/adherence/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
@@ -14,53 +13,44 @@ async function getAuthUser(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
-    if (!user)
+    if (!user) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
+    }
 
     await connectDB();
 
-    // ── Fetch ALL logs for this user (no date window) ──────────────────────
     const allLogs = await MedicationLog.find({ userId: user.userId });
 
     const totalScheduled = allLogs.length;
-    const totalTaken     = allLogs.filter(l => l.status === 'taken').length;
-    const totalMissed    = allLogs.filter(l => l.status === 'missed').length;
-    const totalPending   = allLogs.filter(l => l.status === 'pending').length;
+    const totalTaken = allLogs.filter((l) => l.status === 'taken').length;
+    const totalMissed = allLogs.filter((l) => l.status === 'missed').length;
+    const totalPending = allLogs.filter((l) => l.status === 'pending').length;
 
-    // ── Adherence rate: simple ratio ───────────────────────────────────────
-    // Only count logs that have been resolved (taken or missed), not pending
     const resolvedLogs = totalTaken + totalMissed;
     const adherenceRate =
-      resolvedLogs > 0
-        ? Math.round((totalTaken / resolvedLogs) * 100)
-        : 0;
+      resolvedLogs > 0 ? Math.round((totalTaken / resolvedLogs) * 100) : 0;
 
-    // ── Rule-based classification (Ratio-Based Threshold) ─────────────────
     let riskLevel: 'Low' | 'Moderate' | 'High' = 'Low';
-
     if (adherenceRate < 40) {
       riskLevel = 'High';
     } else if (adherenceRate < 70) {
       riskLevel = 'Moderate';
     }
-    // else: adherenceRate >= 70 → Low (default)
 
-    // ── Optional: recent trend (last 7 resolved logs vs earlier) ──────────
-    // Used only as extra context for Claude AI — NOT part of the rule
     const resolvedSorted = allLogs
-      .filter(l => l.status === 'taken' || l.status === 'missed')
-      .sort((a, b) =>
-        new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+      .filter((l) => l.status === 'taken' || l.status === 'missed')
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
       );
 
     const recent = resolvedSorted.slice(-7);
-    const recentTaken = recent.filter(l => l.status === 'taken').length;
-    const recentRate  = recent.length > 0
-      ? Math.round((recentTaken / recent.length) * 100)
-      : adherenceRate;
+    const recentTaken = recent.filter((l) => l.status === 'taken').length;
+    const recentRate =
+      recent.length > 0 ? Math.round((recentTaken / recent.length) * 100) : adherenceRate;
 
     const trend =
       recentRate > adherenceRate + 5
@@ -69,8 +59,7 @@ export async function GET(request: NextRequest) {
         ? 'declining'
         : 'stable';
 
-    // ── Claude AI enhancement ──────────────────────────────────────────────
-    let aiInsight   = '';
+    let aiInsight = '';
     let aiRiskLevel = riskLevel;
 
     try {
@@ -111,7 +100,7 @@ Respond ONLY as valid JSON with this exact structure (no markdown, no extra text
 
       if (res.ok) {
         const data = await res.json();
-        const text  = data.content?.[0]?.text || '';
+        const text = data.content?.[0]?.text || '';
         const clean = text.replace(/```json|```/g, '').trim();
         const parsed = JSON.parse(clean);
 
@@ -119,9 +108,9 @@ Respond ONLY as valid JSON with this exact structure (no markdown, no extra text
         aiInsight = (parsed.insight || '') + (rec ? ` ${rec}` : '');
 
         const lvl = parsed.riskLevel || '';
-        if (lvl.includes('High'))     aiRiskLevel = 'High';
+        if (lvl.includes('High')) aiRiskLevel = 'High';
         else if (lvl.includes('Moderate')) aiRiskLevel = 'Moderate';
-        else if (lvl.includes('Low'))  aiRiskLevel = 'Low';
+        else if (lvl.includes('Low')) aiRiskLevel = 'Low';
       }
     } catch (aiError) {
       console.warn('[AI adherence] Claude call failed, using rule-based:', aiError);
@@ -130,13 +119,13 @@ Respond ONLY as valid JSON with this exact structure (no markdown, no extra text
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
-        riskLevel:      aiRiskLevel,
-        adherenceRate,          // overall rate (all time)
+        riskLevel: aiRiskLevel,
+        adherenceRate,
         totalScheduled,
         totalTaken,
         totalMissed,
         totalPending,
-        recentRate,             // last 7 resolved doses
+        recentRate,
         weeklyTrend: trend,
         aiInsight,
       },

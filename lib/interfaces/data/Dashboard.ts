@@ -5,13 +5,13 @@ export interface DashboardStats {
   weeklyData: WeeklyDayData[];
   todaySchedule: ScheduleItem[];
 }
- 
+
 export interface WeeklyDayData {
   day: string;
   taken: number;
   total: number;
 }
- 
+
 export interface ScheduleItem {
   medicineId: string;
   name: string;

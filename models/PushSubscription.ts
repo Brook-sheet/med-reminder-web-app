@@ -27,3 +27,4 @@ const PushSubscription: Model<IPushSubscriptionDocument> =
   mongoose.model<IPushSubscriptionDocument>('PushSubscription', PushSubscriptionSchema);
 
 export default PushSubscription;
+

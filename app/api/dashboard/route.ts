@@ -1,10 +1,10 @@
-// app/api/dashboard/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse, DashboardStats, WeeklyDayData, ScheduleItem } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
+import type { DashboardStats, WeeklyDayData, ScheduleItem } from '@/lib/interfaces/data/Dashboard';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -12,7 +12,6 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-// ── Format "HH:MM" → "8:00 AM" ────────────────────────────────────────────────
 function formatTime(time24: string): string {
   const [h, m] = time24.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -20,7 +19,6 @@ function formatTime(time24: string): string {
   return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
-// ── Parse "8:00 AM" → minutes since midnight ──────────────────────────────────
 function timeToMinutes(timeStr: string): number {
   const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return 0;
@@ -32,12 +30,14 @@ function timeToMinutes(timeStr: string): number {
   return h * 60 + m;
 }
 
-// ── GET /api/dashboard ────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     await connectDB();
@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const nowMinutes = today.getHours() * 60 + today.getMinutes();
 
-    // ── Ensure today's logs exist for all active medicines ────────────────────
     const medicines = await Medicine.find({ userId: user.userId, isActive: true });
 
     for (const med of medicines) {
@@ -72,7 +71,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Today's schedule ──────────────────────────────────────────────────────
     const todayLogs = await MedicationLog.find({
       userId: user.userId,
       scheduledDate: todayStr,
@@ -99,7 +97,6 @@ export async function GET(request: NextRequest) {
     const todayTaken = todayLogs.filter((l) => l.status === 'taken').length;
     const todayTotal = todayLogs.length;
 
-    // ── Next reminder ─────────────────────────────────────────────────────────
     const upcomingLogs = todayLogs.filter((log) => {
       return log.status === 'pending' && timeToMinutes(log.scheduledTime) > nowMinutes;
     });
@@ -108,7 +105,6 @@ export async function GET(request: NextRequest) {
       ? { time: nextLog.scheduledTime, medicineName: `${nextLog.medicineName} ${nextLog.dosage}` }
       : null;
 
-    // ── Weekly adherence (last 7 days) ────────────────────────────────────────
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const weeklyData: WeeklyDayData[] = [];
 
@@ -124,8 +120,9 @@ export async function GET(request: NextRequest) {
       weeklyData.push({ day: days[d.getDay()], taken, total });
     }
 
-    // ── Monthly adherence rate ─────────────────────────────────────────────────
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      .toISOString()
+      .split('T')[0];
     const monthLogs = await MedicationLog.find({
       userId: user.userId,
       scheduledDate: { $gte: monthStart, $lte: todayStr },
@@ -145,6 +142,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json<ApiResponse>({ success: true, data: stats });
   } catch (error) {
     console.error('[GET /api/dashboard]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

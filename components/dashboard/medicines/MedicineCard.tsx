@@ -133,3 +133,4 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 };
 
 export default MedicineCard;
+

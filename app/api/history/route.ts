@@ -1,9 +1,8 @@
-// app/api/history/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -11,24 +10,21 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-// ── GET /api/history ──────────────────────────────────────────────────────────
-// Query params: ?period=today|lastWeek|thisMonth (default: all)
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     await connectDB();
 
-    const { searchParams } = new URL(request.url);
-    const period = searchParams.get('period');
-
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
-    // Calculate date ranges
     const lastWeekStart = new Date(today);
     lastWeekStart.setDate(lastWeekStart.getDate() - 7);
     const lastWeekStartStr = lastWeekStart.toISOString().split('T')[0];
@@ -36,9 +32,10 @@ export async function GET(request: NextRequest) {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthStartStr = monthStart.toISOString().split('T')[0];
 
-    // ── Query per section ──────────────────────────────────────────────────────
     const [todayLogs, lastWeekLogs, thisMonthLogs] = await Promise.all([
-      MedicationLog.find({ userId: user.userId, scheduledDate: todayStr }).sort({ scheduledTime: 1 }),
+      MedicationLog.find({ userId: user.userId, scheduledDate: todayStr }).sort({
+        scheduledTime: 1,
+      }),
       MedicationLog.find({
         userId: user.userId,
         scheduledDate: { $gte: lastWeekStartStr, $lt: todayStr },
@@ -49,7 +46,6 @@ export async function GET(request: NextRequest) {
       }).sort({ scheduledDate: -1, scheduledTime: 1 }),
     ]);
 
-    // ── Summary stats ──────────────────────────────────────────────────────────
     const allMonthLogs = await MedicationLog.find({
       userId: user.userId,
       scheduledDate: { $gte: monthStartStr, $lte: todayStr },
@@ -71,16 +67,21 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[GET /api/history]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
-// ── PATCH /api/history — mark a log as taken/missed manually ─────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     await connectDB();
@@ -88,11 +89,17 @@ export async function PATCH(request: NextRequest) {
     const { logId, status } = body;
 
     if (!logId || !status) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'logId and status are required' }, { status: 400 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'logId and status are required' },
+        { status: 400 }
+      );
     }
 
     if (!['taken', 'missed', 'pending'].includes(status)) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid status' }, { status: 400 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Invalid status' },
+        { status: 400 }
+      );
     }
 
     const log = await MedicationLog.findOneAndUpdate(
@@ -106,12 +113,22 @@ export async function PATCH(request: NextRequest) {
     );
 
     if (!log) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Log not found' }, { status: 404 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Log not found' },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json<ApiResponse>({ success: true, data: log, message: `Marked as ${status}` });
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: log,
+      message: `Marked as ${status}`,
+    });
   } catch (error) {
     console.error('[PATCH /api/history]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

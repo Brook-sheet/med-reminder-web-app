@@ -74,3 +74,4 @@ const HistoryItem: React.FC<HistoryItemProps> = ({
 };
 
 export default HistoryItem;
+

@@ -53,3 +53,4 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
 };
 
 export default ScheduleItem;
+

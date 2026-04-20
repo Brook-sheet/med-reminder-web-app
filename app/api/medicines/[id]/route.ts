@@ -1,10 +1,9 @@
-// app/api/medicines/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
 import mongoose from 'mongoose';
 
 async function getAuthUser(request: NextRequest) {
@@ -13,7 +12,6 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-// ── PUT /api/medicines/[id] ───────────────────────────────────────────────────
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,12 +19,18 @@ export async function PUT(
   try {
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid medicine ID' }, { status: 400 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Invalid medicine ID' },
+        { status: 400 }
+      );
     }
 
     await connectDB();
@@ -40,13 +44,19 @@ export async function PUT(
     );
 
     if (!medicine) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Medicine not found' }, { status: 404 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Medicine not found' },
+        { status: 404 }
+      );
     }
 
-    // Update today's pending logs to match new schedule
     const today = new Date().toISOString().split('T')[0];
-    // Remove today's pending logs and recreate with new times
-    await MedicationLog.deleteMany({ userId: user.userId, medicineId: id, scheduledDate: today, status: 'pending' });
+    await MedicationLog.deleteMany({
+      userId: user.userId,
+      medicineId: id,
+      scheduledDate: today,
+      status: 'pending',
+    });
     for (const time of scheduledTimes) {
       await MedicationLog.create({
         userId: user.userId,
@@ -60,14 +70,20 @@ export async function PUT(
       });
     }
 
-    return NextResponse.json<ApiResponse>({ success: true, data: medicine, message: 'Medicine updated successfully' });
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: medicine,
+      message: 'Medicine updated successfully',
+    });
   } catch (error) {
     console.error('[PUT /api/medicines/[id]]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
-// ── DELETE /api/medicines/[id] ────────────────────────────────────────────────
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -75,17 +91,22 @@ export async function DELETE(
   try {
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Invalid medicine ID' }, { status: 400 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Invalid medicine ID' },
+        { status: 400 }
+      );
     }
 
     await connectDB();
 
-    // Soft delete — keeps history intact
     const medicine = await Medicine.findOneAndUpdate(
       { _id: id, userId: user.userId },
       { isActive: false },
@@ -93,12 +114,21 @@ export async function DELETE(
     );
 
     if (!medicine) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Medicine not found' }, { status: 404 });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Medicine not found' },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json<ApiResponse>({ success: true, message: 'Medicine deleted successfully' });
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message: 'Medicine deleted successfully',
+    });
   } catch (error) {
     console.error('[DELETE /api/medicines/[id]]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

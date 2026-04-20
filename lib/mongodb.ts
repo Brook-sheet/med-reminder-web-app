@@ -35,3 +35,4 @@ export async function connectDB(): Promise<typeof mongoose> {
   console.log('[MongoDB] Connected successfully');
   return global.mongooseCache.conn;
 }
+

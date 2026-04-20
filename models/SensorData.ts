@@ -65,3 +65,4 @@ const SensorData: Model<ISensorDataDocument> =
   mongoose.model<ISensorDataDocument>('SensorData', SensorDataSchema);
 
 export default SensorData;
+

@@ -1,10 +1,9 @@
-// app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +19,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Find user ──────────────────────────────────────────────────────────────
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return NextResponse.json<ApiResponse>(
@@ -29,7 +27,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Compare password ───────────────────────────────────────────────────────
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json<ApiResponse>(
@@ -38,7 +35,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Issue JWT ──────────────────────────────────────────────────────────────
     const token = await signToken({ userId: user._id.toString(), email: user.email });
 
     const response = NextResponse.json<ApiResponse>({
@@ -48,7 +44,8 @@ export async function POST(request: NextRequest) {
         user: {
           id: user._id.toString(),
           email: user.email,
-          fullName: user.fullName,
+          firstName: user.firstName,
+          lastName: user.lastName,
           patientId: user.patientId,
         },
       },
@@ -64,4 +61,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

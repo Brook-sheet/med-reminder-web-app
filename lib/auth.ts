@@ -1,14 +1,10 @@
-// lib/auth.ts
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
+import type { AuthPayload } from '@/lib/interfaces/data/Auth';
 
-export interface AuthPayload {
-  userId: string;
-  email: string;
-  iat?: number;
-  exp?: number;
-}
+// Re-export so other files can still import AuthPayload from here if needed
+export type { AuthPayload };
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'fallback-secret-change-this-in-production-min-32'

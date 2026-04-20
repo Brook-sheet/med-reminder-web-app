@@ -1,7 +1,6 @@
-// app/api/auth/logout/route.ts
 import { NextResponse } from 'next/server';
 import { COOKIE_OPTIONS } from '@/lib/auth';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 export async function POST() {
   const response = NextResponse.json<ApiResponse>({
@@ -9,8 +8,7 @@ export async function POST() {
     message: 'Logged out successfully',
   });
 
-  // Clear the auth cookie
   response.cookies.set({ ...COOKIE_OPTIONS, value: '', maxAge: 0 });
   return response;
+  
 }
-

@@ -1,10 +1,9 @@
-// app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +12,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, confirmPassword, firstName, middleName, lastName } = body;
 
-    // ── Validation ─────────────────────────────────────────────────────────────
     if (!email || !password || !confirmPassword) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'All fields are required' },
@@ -35,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Check existing user ─────────────────────────────────────────────────────
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return NextResponse.json<ApiResponse>(
@@ -44,12 +41,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Hash password & create user ────────────────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Build fullName from parts
-    const nameParts = [firstName, middleName, lastName].filter(Boolean);
-    const fullName = nameParts.join(' ').trim();
 
     const user = await User.create({
       email: email.toLowerCase(),
@@ -57,10 +49,8 @@ export async function POST(request: NextRequest) {
       firstName: firstName || '',
       middleName: middleName || '',
       lastName: lastName || '',
-      fullName,
     });
 
-    // ── Issue JWT ──────────────────────────────────────────────────────────────
     const token = await signToken({ userId: user._id.toString(), email: user.email });
 
     const response = NextResponse.json<ApiResponse>(
@@ -74,7 +64,6 @@ export async function POST(request: NextRequest) {
             firstName: user.firstName,
             middleName: user.middleName,
             lastName: user.lastName,
-            fullName: user.fullName,
           },
         },
       },

@@ -1,19 +1,7 @@
-// models/User.ts
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
+import type { UserDoc } from '@/lib/interfaces/documents/UserDoc';
 
-export interface IUserDocument extends Document {
-  email: string;
-  password: string;
-  firstName: string;
-  middleName?: string;
-  lastName: string;
-  fullName?: string;
-  patientId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const UserSchema = new Schema<IUserDocument>(
+const UserSchema = new Schema<UserDoc>(
   {
     email: {
       type: String,
@@ -43,11 +31,6 @@ const UserSchema = new Schema<IUserDocument>(
       default: '',
       trim: true,
     },
-    fullName: {
-      type: String,
-      default: '',
-      trim: true,
-    },
     patientId: {
       type: String,
       default: '',
@@ -59,7 +42,8 @@ const UserSchema = new Schema<IUserDocument>(
   }
 );
 
-const User: Model<IUserDocument> =
-  mongoose.models.User || mongoose.model<IUserDocument>('User', UserSchema);
+const User: Model<UserDoc> =
+  mongoose.models.User || mongoose.model<UserDoc>('User', UserSchema);
 
 export default User;
+

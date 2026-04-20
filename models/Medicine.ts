@@ -72,3 +72,4 @@ const Medicine: Model<IMedicineDocument> =
   mongoose.models.Medicine || mongoose.model<IMedicineDocument>('Medicine', MedicineSchema);
 
 export default Medicine;
+

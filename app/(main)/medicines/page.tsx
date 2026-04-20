@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Plus } from "lucide-react";
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
-import type { Medicine } from "@/types";
+import type { Medicine } from "@/lib/interfaces/data/Medicine";
 
 const Medicines = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -85,13 +85,11 @@ const Medicines = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">My Medicines</h1>
           <p className="text-gray-600 mt-2">Manage your medication schedule</p>
         </div>
 
-        {/* Add Button */}
         <div className="mb-6">
           <button
             onClick={handleAdd}
@@ -102,7 +100,6 @@ const Medicines = () => {
           </button>
         </div>
 
-        {/* Medicine Cards */}
         {loading ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
@@ -148,7 +145,6 @@ const Medicines = () => {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
       <MedicineModal
         isOpen={modalOpen}
         onClose={handleModalClose}

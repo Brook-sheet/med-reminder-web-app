@@ -80,3 +80,4 @@ const MedicationLog: Model<IMedicationLogDocument> =
   mongoose.model<IMedicationLogDocument>('MedicationLog', MedicationLogSchema);
 
 export default MedicationLog;
+

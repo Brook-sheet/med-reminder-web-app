@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import ScheduleList from "@/components/dashboard/Schedule/ScheduleList";
 import UpcomingList from "@/components/dashboard/Upcoming/UpcomingList";
-import type { DashboardStats } from "@/types";
+import type { DashboardStats } from "@/lib/interfaces/data/Dashboard";
 
 export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -24,11 +24,8 @@ export default function Home() {
 
       if (profileData.success) {
         const p = profileData.data;
-        // Prefer firstName, fallback to fullName, fallback to email prefix
         if (p.firstName) {
           setUserName(p.firstName);
-        } else if (p.fullName) {
-          setUserName(p.fullName.split(" ")[0]);
         } else if (p.email) {
           setUserName(p.email.split("@")[0]);
         }
@@ -42,7 +39,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchDashboard();
-    // Poll every 30 seconds for real-time updates
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
   }, [fetchDashboard]);
@@ -57,7 +53,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome Back, {userName}!
@@ -67,7 +62,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Adherence Rate"
@@ -88,7 +82,6 @@ export default function Home() {
           />
         </div>
 
-        {/* Today's Schedule */}
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Today&apos;s Schedule
@@ -100,7 +93,6 @@ export default function Home() {
           />
         </div>
 
-        {/* Upcoming — dynamically fetched from API */}
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Upcoming</h2>
           <UpcomingList />
