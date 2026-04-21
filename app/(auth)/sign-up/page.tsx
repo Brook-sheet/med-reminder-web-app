@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import OnboardingDialog from "@/components/OnboardingDialog";
 
 const Signup = () => {
   const router = useRouter();
@@ -19,6 +20,7 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +57,8 @@ const Signup = () => {
         return;
       }
 
-      // Redirect to dashboard after successful registration
-      router.push("/");
-      router.refresh();
+      // Show onboarding dialog before going to dashboard
+      setShowOnboarding(true);
     } catch {
       setError("Network error. Please check your connection.");
     } finally {
@@ -65,8 +66,16 @@ const Signup = () => {
     }
   };
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    router.push("/");
+    router.refresh();
+  };
+
   return (
     <div className="h-full flex items-center justify-center bg-gray-800">
+      <OnboardingDialog isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
+
       <Card className="md:h-auto w-[80%] sm:w-[420px] p-4 sm:p-8">
         <CardHeader>
           <CardTitle className="text-center">Create Account</CardTitle>
@@ -81,54 +90,12 @@ const Signup = () => {
                 {error}
               </div>
             )}
-
-            <Input
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-              placeholder="First Name"
-              disabled={loading}
-            />
-            <Input
-              type="text"
-              value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-              placeholder="Middle Name (optional)"
-              disabled={loading}
-            />
-            <Input
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-              placeholder="Last Name"
-              disabled={loading}
-            />
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="Email"
-              disabled={loading}
-            />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Password"
-              disabled={loading}
-            />
-            <Input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              placeholder="Confirm Password"
-              disabled={loading}
-            />
+            <Input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required placeholder="First Name" disabled={loading} />
+            <Input type="text" value={middleName} onChange={(e) => setMiddleName(e.target.value)} placeholder="Middle Name (optional)" disabled={loading} />
+            <Input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required placeholder="Last Name" disabled={loading} />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="Email" disabled={loading} />
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Password" disabled={loading} />
+            <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="Confirm Password" disabled={loading} />
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Sign Up"}
             </Button>
@@ -138,9 +105,7 @@ const Signup = () => {
 
           <p className="text-sm text-center text-muted-foreground mt-2">
             Already have an account?{" "}
-            <a href="/sign-in" className="text-blue-500 hover:underline cursor-pointer">
-              Sign In
-            </a>
+            <a href="/sign-in" className="text-blue-500 hover:underline cursor-pointer">Sign In</a>
           </p>
         </CardContent>
       </Card>

@@ -16,34 +16,25 @@ const UserSchema = new Schema<UserDoc>(
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
     },
-    firstName: {
+    firstName: { type: String, default: '', trim: true },
+    middleName: { type: String, default: '', trim: true },
+    lastName: { type: String, default: '', trim: true },
+    patientId: { type: String, default: '', trim: true },
+    condition: {
       type: String,
+      enum: ['Diabetes', 'Hypertension', 'Both', 'Other', 'None', ''],
       default: '',
-      trim: true,
     },
-    middleName: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-    lastName: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-    patientId: {
-      type: String,
-      default: '',
-      trim: true,
-    },
+    age: { type: Number, default: null },
+    onboardingCompleted: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    dataResetAt: { type: Date, default: null },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 const User: Model<UserDoc> =
   mongoose.models.User || mongoose.model<UserDoc>('User', UserSchema);
 
 export default User;
-

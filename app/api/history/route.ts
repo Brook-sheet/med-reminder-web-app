@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
+import User from '@/models/User';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -22,6 +23,10 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
+    // Get dataResetAt so we can hide logs created before that point
+    const userDoc = await User.findById(user.userId).select('dataResetAt');
+    const dataResetAt = userDoc?.dataResetAt ?? null;
+
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
@@ -32,22 +37,26 @@ export async function GET(request: NextRequest) {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthStartStr = monthStart.toISOString().split('T')[0];
 
+    // Only show logs created after the last reset
+    const baseQuery: Record<string, unknown> = { userId: user.userId };
+    if (dataResetAt) {
+      baseQuery.createdAt = { $gt: dataResetAt };
+    }
+
     const [todayLogs, lastWeekLogs, thisMonthLogs] = await Promise.all([
-      MedicationLog.find({ userId: user.userId, scheduledDate: todayStr }).sort({
-        scheduledTime: 1,
-      }),
+      MedicationLog.find({ ...baseQuery, scheduledDate: todayStr }).sort({ scheduledTime: 1 }),
       MedicationLog.find({
-        userId: user.userId,
+        ...baseQuery,
         scheduledDate: { $gte: lastWeekStartStr, $lt: todayStr },
       }).sort({ scheduledDate: -1, scheduledTime: 1 }),
       MedicationLog.find({
-        userId: user.userId,
+        ...baseQuery,
         scheduledDate: { $gte: monthStartStr, $lt: lastWeekStartStr },
       }).sort({ scheduledDate: -1, scheduledTime: 1 }),
     ]);
 
     const allMonthLogs = await MedicationLog.find({
-      userId: user.userId,
+      ...baseQuery,
       scheduledDate: { $gte: monthStartStr, $lte: todayStr },
     });
 
@@ -104,11 +113,7 @@ export async function PATCH(request: NextRequest) {
 
     const log = await MedicationLog.findOneAndUpdate(
       { _id: logId, userId: user.userId },
-      {
-        status,
-        takenAt: status === 'taken' ? new Date() : null,
-        source: 'manual',
-      },
+      { status, takenAt: status === 'taken' ? new Date() : null, source: 'manual' },
       { new: true }
     );
 

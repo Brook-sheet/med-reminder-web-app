@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
       firstName: firstName || '',
       middleName: middleName || '',
       lastName: lastName || '',
+      onboardingCompleted: false,
     });
 
     const token = await signToken({ userId: user._id.toString(), email: user.email });
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
             firstName: user.firstName,
             middleName: user.middleName,
             lastName: user.lastName,
+            onboardingCompleted: false,
           },
         },
       },

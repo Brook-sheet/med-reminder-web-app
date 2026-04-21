@@ -52,17 +52,31 @@ export async function PUT(request: NextRequest) {
 
     await connectDB();
     const body = await request.json();
-    const { firstName, middleName, lastName, patientId, email } = body;
+    const {
+      firstName,
+      middleName,
+      lastName,
+      patientId,
+      email,
+      condition,
+      age,
+      onboardingCompleted,
+    } = body;
+
+    // Build update object only with fields that were sent
+    const updateData: Record<string, unknown> = {};
+    if (firstName !== undefined) updateData.firstName = firstName || '';
+    if (middleName !== undefined) updateData.middleName = middleName || '';
+    if (lastName !== undefined) updateData.lastName = lastName || '';
+    if (patientId !== undefined) updateData.patientId = patientId;
+    if (email !== undefined) updateData.email = email?.toLowerCase();
+    if (condition !== undefined) updateData.condition = condition;
+    if (age !== undefined) updateData.age = age;
+    if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
 
     const updatedUser = await User.findByIdAndUpdate(
       user.userId,
-      {
-        firstName: firstName || '',
-        middleName: middleName || '',
-        lastName: lastName || '',
-        patientId,
-        email: email?.toLowerCase(),
-      },
+      updateData,
       { new: true, runValidators: true }
     ).select('-password');
 

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import OnboardingDialog from "@/components/OnboardingDialog";
 
 const Signin = () => {
   const router = useRouter();
@@ -15,6 +16,7 @@ const Signin = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +37,12 @@ const Signin = () => {
         return;
       }
 
-      // Redirect to dashboard on success
+      // If user never completed onboarding, show the dialog
+      if (data.data?.user?.onboardingCompleted === false) {
+        setShowOnboarding(true);
+        return;
+      }
+
       router.push("/");
       router.refresh();
     } catch {
@@ -45,8 +52,16 @@ const Signin = () => {
     }
   };
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    router.push("/");
+    router.refresh();
+  };
+
   return (
     <div className="h-full flex items-center justify-center bg-gray-800">
+      <OnboardingDialog isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
+
       <Card className="md:h-auto w-[80%] sm:w-[420px] p-4 sm:p-8">
         <CardHeader>
           <CardTitle className="text-center">Login</CardTitle>
@@ -61,22 +76,8 @@ const Signin = () => {
                 {error}
               </div>
             )}
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="Email"
-              disabled={loading}
-            />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Password"
-              disabled={loading}
-            />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="Email" disabled={loading} />
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Password" disabled={loading} />
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
@@ -86,9 +87,7 @@ const Signin = () => {
 
           <p className="text-sm text-center text-muted-foreground mt-2">
             Create new account?{" "}
-            <a href="/sign-up" className="text-blue-500 hover:underline cursor-pointer">
-              Sign Up
-            </a>
+            <a href="/sign-up" className="text-blue-500 hover:underline cursor-pointer">Sign Up</a>
           </p>
         </CardContent>
       </Card>
@@ -97,4 +96,3 @@ const Signin = () => {
 };
 
 export default Signin;
-

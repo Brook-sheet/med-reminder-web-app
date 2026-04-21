@@ -27,6 +27,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block soft-deleted accounts
+    if (user.isDeleted) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: 'This account has been deleted. Please contact support if this is a mistake.',
+        },
+        { status: 403 }
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json<ApiResponse>(
@@ -47,6 +58,7 @@ export async function POST(request: NextRequest) {
           firstName: user.firstName,
           lastName: user.lastName,
           patientId: user.patientId,
+          onboardingCompleted: user.onboardingCompleted,
         },
       },
     });
