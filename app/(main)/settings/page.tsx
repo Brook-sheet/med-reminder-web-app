@@ -1,7 +1,9 @@
 "use client";
+// app/(main)/settings/page.tsx
 
 import React from "react";
 import ProfileCard from "@/components/dashboard/settings/ProfileCard";
+import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 
 const Settings = () => {
   return (
@@ -13,12 +15,14 @@ const Settings = () => {
             Customize your medication reminders and preferences
           </p>
         </div>
-        <ProfileCard />
+
+        <div className="space-y-6">
+          <ProfileCard />
+          <PushNotificationCard />
+        </div>
       </div>
     </div>
   );
 };
 
 export default Settings;
-
-
