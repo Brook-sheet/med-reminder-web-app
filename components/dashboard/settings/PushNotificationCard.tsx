@@ -81,10 +81,10 @@ const PushNotificationCard: React.FC = () => {
           <p className="text-xs font-semibold text-blue-700 mb-2">You&apos;ll receive:</p>
           <ul className="space-y-1">
             {[
-              '⏰ 30-minute advance medication reminders',
-              '🚨 Alarm when medication is due',
-              '✅ Confirmation when sensor detects intake',
-              '📊 Adherence risk alerts',
+              '30-minute advance medication reminders',
+              'Alarm when medication is due',
+              'Confirmation when sensor detects intake',
+              'Adherence risk alerts',
             ].map((item, i) => (
               <li key={i} className="text-xs text-blue-600">{item}</li>
             ))}
@@ -105,8 +105,8 @@ const PushNotificationCard: React.FC = () => {
             {loading
               ? 'Processing...'
               : subscribed
-              ? '🔕 Disable Push Notifications'
-              : '🔔 Enable Push Notifications'}
+              ? 'Disable Push Notifications'
+              : 'Enable Push Notifications'}
           </button>
         )}
       </CardContent>
