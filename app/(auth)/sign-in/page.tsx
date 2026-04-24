@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import OnboardingDialog from "@/components/OnboardingDialog";
+import { validateEmail, validatePassword, collectErrors } from "@/lib/validations";
 
 const Signin = () => {
   const router = useRouter();
@@ -21,6 +22,19 @@ const Signin = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // ── Client-side validation ──────────────────────────────────────────────
+    const validationError = collectErrors({
+      email: validateEmail(email),
+      password: validatePassword(password),
+    });
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     setLoading(true);
 
     try {
@@ -37,7 +51,6 @@ const Signin = () => {
         return;
       }
 
-      // If user never completed onboarding, show the dialog
       if (data.data?.user?.onboardingCompleted === false) {
         setShowOnboarding(true);
         return;
@@ -76,8 +89,22 @@ const Signin = () => {
                 {error}
               </div>
             )}
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="Email" disabled={loading} />
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Password" disabled={loading} />
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="Email"
+              disabled={loading}
+            />
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Password"
+              disabled={loading}
+            />
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
