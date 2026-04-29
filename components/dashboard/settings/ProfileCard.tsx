@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { User, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validateAge,
+  collectErrors,
+} from "@/lib/validations";
 
 const CONDITIONS = [
   { value: "", label: "Not specified" },
@@ -80,7 +87,6 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 const ProfileCard = () => {
   const router = useRouter();
 
-  // Profile state
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -93,7 +99,6 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Modal states
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -123,10 +128,26 @@ const ProfileCard = () => {
     fetchProfile();
   }, [fetchProfile]);
 
-  // ── Save Profile ────────────────────────────────────────────────────────────
+  // ── Save Profile ─────────────────────────────────────────────────────────
   const handleSave = async () => {
-    setSaving(true);
     setMessage(null);
+
+    // ── Client-side validation ─────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      age: validateAge(age),
+    });
+
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    setSaving(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -155,7 +176,7 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Reset Data ──────────────────────────────────────────────────────────────
+  // ── Reset Data ───────────────────────────────────────────────────────────
   const handleResetData = async () => {
     setResetting(true);
     try {
@@ -180,7 +201,7 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Delete Account ──────────────────────────────────────────────────────────
+  // ── Delete Account ───────────────────────────────────────────────────────
   const handleDeleteAccount = async () => {
     setDeleting(true);
     try {
@@ -202,7 +223,6 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Loading Skeleton ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <Card className="w-full mx-auto shadow-lg animate-pulse">
@@ -221,7 +241,6 @@ const ProfileCard = () => {
 
   return (
     <>
-      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showResetConfirm}
         title="Reset All Data?"
@@ -243,14 +262,12 @@ const ProfileCard = () => {
         loading={deleting}
       />
 
-      {/* ── Profile Information Card ──────────────────────────────────────── */}
       <Card className="w-full mx-auto shadow-lg mb-6">
         <CardHeader className="flex items-center space-x-2 pb-4">
           <User className="h-5 w-5 text-gray-600" />
           <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Status message */}
           {message && (
             <div
               className={`text-sm rounded-lg px-4 py-3 border ${
@@ -263,7 +280,6 @@ const ProfileCard = () => {
             </div>
           )}
 
-          {/* First Name */}
           <div>
             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
               First Name
@@ -279,7 +295,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Middle Name */}
           <div>
             <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
               Middle Name{" "}
@@ -296,7 +311,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Last Name */}
           <div>
             <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
               Last Name
@@ -312,7 +326,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Email */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
               Email
@@ -328,7 +341,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Patient ID */}
           <div>
             <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
               Patient ID{" "}
@@ -345,7 +357,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Age — number input only */}
           <div>
             <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
               Age{" "}
@@ -364,7 +375,6 @@ const ProfileCard = () => {
             />
           </div>
 
-          {/* Condition */}
           <div>
             <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
               Condition Managing
@@ -384,7 +394,6 @@ const ProfileCard = () => {
             </select>
           </div>
 
-          {/* Save Changes */}
           <Button
             onClick={handleSave}
             disabled={saving}
@@ -393,7 +402,6 @@ const ProfileCard = () => {
             {saving ? "Saving..." : "Save Changes"}
           </Button>
 
-          {/* Delete Account */}
           <button
             onClick={() => setShowDeleteConfirm(true)}
             disabled={saving}
@@ -404,7 +412,6 @@ const ProfileCard = () => {
         </CardContent>
       </Card>
 
-      {/* ── Reset Data Card ───────────────────────────────────────────────── */}
       <Card className="w-full mx-auto shadow-lg border-orange-200">
         <CardHeader className="flex items-center space-x-2 pb-2">
           <RotateCcw className="h-5 w-5 text-orange-600" />

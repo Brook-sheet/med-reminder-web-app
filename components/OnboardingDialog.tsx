@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { validateAge } from "@/lib/validations";
 
 interface OnboardingDialogProps {
   isOpen: boolean;
@@ -34,10 +35,19 @@ const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete 
   };
 
   const handleSubmit = async () => {
-    if (!age || isNaN(Number(age)) || Number(age) <= 0 || Number(age) > 120) {
-      setError("Please enter a valid age (1–120).");
+    // ── Validate age ──────────────────────────────────────────────────────
+    const ageError = validateAge(age || "");
+    // For onboarding, age is required (unlike profile where it's optional)
+    if (!age || !age.trim()) {
+      setError("Please enter your age.");
       return;
     }
+    if (ageError) {
+      setError(ageError);
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     setError("");
     setSaving(true);
 
@@ -66,10 +76,8 @@ const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Dialog */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8">
         {/* Step indicators */}
         <div className="flex items-center gap-2 mb-6">
