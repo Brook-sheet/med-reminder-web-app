@@ -1,11 +1,24 @@
 // middleware.ts  (project root)
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { jwtVerify } from 'jose';
+
+const SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'fallback-secret-change-this-in-production-min-32'
+);
 
 // Routes that DO NOT require authentication
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
 // API routes that are public (no JWT needed)
 const PUBLIC_API_ROUTES = ['/api/auth/login', '/api/auth/register', '/api/sensor'];
+
+async function verifyToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -47,12 +60,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

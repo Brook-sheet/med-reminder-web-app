@@ -13,3 +13,4 @@ export interface Medicine {
   createdAt?: Date;
   updatedAt?: Date;
 }
+ 
