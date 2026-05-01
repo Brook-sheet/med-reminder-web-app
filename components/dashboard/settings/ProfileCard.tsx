@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Toast from "@/components/ui/Toast";
 import { User, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -93,6 +94,11 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Toast state for condition updates
+  const [showConditionToast, setShowConditionToast] = useState(false);
+  const [conditionToastMessage, setConditionToastMessage] = useState("");
+  const [previousCondition, setPreviousCondition] = useState("");
+
   // Modal states
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -110,6 +116,7 @@ const ProfileCard = () => {
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
         setCondition(data.data.condition || "");
+        setPreviousCondition(data.data.condition || "");
         setAge(data.data.age != null ? String(data.data.age) : "");
       }
     } catch (err) {
@@ -144,6 +151,14 @@ const ProfileCard = () => {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: "success", text: "Profile updated successfully!" });
+        
+        // Show toast notification if condition (user type) was changed
+        if (condition !== previousCondition) {
+          const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+          setConditionToastMessage(`Your medical condition has been updated to: ${conditionLabel}`);
+          setShowConditionToast(true);
+          setPreviousCondition(condition);
+        }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
       }
@@ -221,6 +236,16 @@ const ProfileCard = () => {
 
   return (
     <>
+      {/* ── Toast Notification for Condition Updates ──────────────────────── */}
+      {showConditionToast && (
+        <Toast
+          type="success"
+          message={conditionToastMessage}
+          duration={5000}
+          onClose={() => setShowConditionToast(false)}
+        />
+      )}
+      
       {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showResetConfirm}
