@@ -140,8 +140,7 @@ export function isFoodMonitoringApplicable(condition: string): boolean {
  * @returns FoodRiskResult with risk level and breakdown
  */
 export function calculateFoodRisk(
-  entries: FoodLogEntry[],
-  condition: string
+  entries: FoodLogEntry[]
 ): FoodRiskResult {
   if (!entries || entries.length === 0) {
     return {
