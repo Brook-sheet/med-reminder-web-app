@@ -12,13 +12,6 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-function formatTime(time24: string): string {
-  const [h, m] = time24.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 || 12;
-  return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
-}
-
 function timeToMinutes(timeStr: string): number {
   const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return 0;

@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
-import User from '@/models/User';
 
 const SENSOR_API_KEY = process.env.SENSOR_API_KEY || 'dev-sensor-key-change-me';
 
@@ -28,9 +27,6 @@ export async function GET(request: NextRequest) {
     await connectDB();
 
     // The device_id should be mapped to a userId — for now use query param
-    const { searchParams } = new URL(request.url);
-    const deviceId = searchParams.get('device_id') || 'box_1';
-
     // In production: look up userId via DeviceMapping model
     // For now: return all active medicines for all users (demo mode)
     // or use a specific userId from env
