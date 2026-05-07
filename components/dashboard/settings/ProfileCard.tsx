@@ -16,7 +16,6 @@ const CONDITIONS = [
   { value: "None", label: "None" },
 ];
 
-// ── Reusable Confirmation Modal ───────────────────────────────────────────────
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
@@ -76,11 +75,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   );
 };
 
-// ── Main ProfileCard ──────────────────────────────────────────────────────────
+// ── ProfileCard ───────────────────────────────────────────────────────────────
 const ProfileCard = () => {
   const router = useRouter();
 
-  // Profile state
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -93,10 +91,7 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Modal states
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const fetchProfile = useCallback(async () => {
@@ -123,7 +118,6 @@ const ProfileCard = () => {
     fetchProfile();
   }, [fetchProfile]);
 
-  // ── Save Profile ────────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
@@ -155,7 +149,216 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Reset Data ──────────────────────────────────────────────────────────────
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/profile/delete-account", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setShowDeleteConfirm(false);
+        router.push("/sign-in");
+        router.refresh();
+      } else {
+        setShowDeleteConfirm(false);
+        setMessage({ type: "error", text: data.error || "Deletion failed. Please try again." });
+      }
+    } catch {
+      setShowDeleteConfirm(false);
+      setMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card className="w-full shadow-sm animate-pulse">
+        <CardContent className="space-y-4 pt-6">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="space-y-1">
+              <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-9 bg-gray-100 dark:bg-gray-800 rounded" />
+            </div>
+          ))}
+          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded mt-6" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete Account?"
+        message="Are you sure you want to delete your account? You will be logged out immediately and will no longer be able to log in. Your data is retained securely in our system."
+        confirmLabel="Delete"
+        confirmColor="red"
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setShowDeleteConfirm(false)}
+        loading={deleting}
+      />
+
+      <Card className="w-full shadow-sm">
+        <CardHeader className="flex items-center space-x-2 pb-4">
+          <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+          <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {message && (
+            <div
+              className={`text-sm rounded-lg px-4 py-3 border ${
+                message.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              First Name
+            </label>
+            <Input
+              id="firstName"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Enter your first name"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Middle Name{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="middleName"
+              type="text"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              placeholder="Enter your middle name"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Last Name
+            </label>
+            <Input
+              id="lastName"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Enter your last name"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Patient ID{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="patientId"
+              type="text"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              placeholder="Enter your patient ID"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="age" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Age{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="age"
+              type="number"
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              placeholder="Enter your age"
+              min="1"
+              max="120"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Condition Managing
+            </label>
+            <select
+              id="condition"
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+              disabled={saving}
+              className="w-full h-9 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+            >
+              {CONDITIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full mt-2 rounded-lg"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={saving}
+            className="w-full py-2.5 text-sm font-semibold text-red-600 border-2 border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+          >
+            Delete Account
+          </button>
+        </CardContent>
+      </Card>
+    </>
+  );
+};
+
+// ── ResetDataCard ─────────────────────────────────────────────────────────────
+export const ResetDataCard = () => {
+  const router = useRouter();
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const handleResetData = async () => {
     setResetting(true);
     try {
@@ -180,48 +383,8 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Delete Account ──────────────────────────────────────────────────────────
-  const handleDeleteAccount = async () => {
-    setDeleting(true);
-    try {
-      const res = await fetch("/api/profile/delete-account", { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        setShowDeleteConfirm(false);
-        router.push("/sign-in");
-        router.refresh();
-      } else {
-        setShowDeleteConfirm(false);
-        setMessage({ type: "error", text: data.error || "Deletion failed. Please try again." });
-      }
-    } catch {
-      setShowDeleteConfirm(false);
-      setMessage({ type: "error", text: "Network error. Please try again." });
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  // ── Loading Skeleton ────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <Card className="w-full mx-auto shadow-lg animate-pulse">
-        <CardContent className="space-y-4 pt-6">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="space-y-1">
-              <div className="h-3 w-20 bg-gray-200 rounded" />
-              <div className="h-9 bg-gray-100 rounded" />
-            </div>
-          ))}
-          <div className="h-10 bg-gray-200 rounded mt-6" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <>
-      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showResetConfirm}
         title="Reset All Data?"
@@ -232,185 +395,24 @@ const ProfileCard = () => {
         onCancel={() => setShowResetConfirm(false)}
         loading={resetting}
       />
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        title="Delete Account?"
-        message="Are you sure you want to delete your account? You will be logged out immediately and will no longer be able to log in. Your data is retained securely in our system."
-        confirmLabel="Delete"
-        confirmColor="red"
-        onConfirm={handleDeleteAccount}
-        onCancel={() => setShowDeleteConfirm(false)}
-        loading={deleting}
-      />
 
-      {/* ── Profile Information Card ──────────────────────────────────────── */}
-      <Card className="w-full mx-auto shadow-lg mb-6">
-        <CardHeader className="flex items-center space-x-2 pb-4">
-          <User className="h-5 w-5 text-gray-600" />
-          <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
+      <Card className="w-full shadow-sm border-orange-200 dark:border-orange-800">
+        <CardHeader className="flex items-center space-x-2 pb-2">
+          <RotateCcw className="h-5 w-5 text-orange-600" />
+          <CardTitle className="text-lg font-semibold text-orange-700 dark:text-orange-400">Reset Data</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Status message */}
+        <CardContent>
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border ${
+              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${
                 message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700"
-                  : "bg-red-50 border-red-200 text-red-700"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
               }`}
             >
               {message.text}
             </div>
           )}
-
-          {/* First Name */}
-          <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-              First Name
-            </label>
-            <Input
-              id="firstName"
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Enter your first name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Middle Name */}
-          <div>
-            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
-              Middle Name{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
-            </label>
-            <Input
-              id="middleName"
-              type="text"
-              value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-              placeholder="Enter your middle name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Last Name */}
-          <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-              Last Name
-            </label>
-            <Input
-              id="lastName"
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Enter your last name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Patient ID */}
-          <div>
-            <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
-              Patient ID{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
-            </label>
-            <Input
-              id="patientId"
-              type="text"
-              value={patientId}
-              onChange={(e) => setPatientId(e.target.value)}
-              placeholder="Enter your patient ID"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Age — number input only */}
-          <div>
-            <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
-              Age{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
-            </label>
-            <Input
-              id="age"
-              type="number"
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-              placeholder="Enter your age"
-              min="1"
-              max="120"
-              className="bg-gray-50 border-gray-300 rounded-lg"
-              disabled={saving}
-            />
-          </div>
-
-          {/* Condition */}
-          <div>
-            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
-              Condition Managing
-            </label>
-            <select
-              id="condition"
-              value={condition}
-              onChange={(e) => setCondition(e.target.value)}
-              disabled={saving}
-              className="w-full h-9 rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
-            >
-              {CONDITIONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Save Changes */}
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full mt-2 rounded-lg"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
-
-          {/* Delete Account */}
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={saving}
-            className="w-full py-2.5 text-sm font-semibold text-red-600 border-2 border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-          >
-            Delete Account
-          </button>
-        </CardContent>
-      </Card>
-
-      {/* ── Reset Data Card ───────────────────────────────────────────────── */}
-      <Card className="w-full mx-auto shadow-lg border-orange-200">
-        <CardHeader className="flex items-center space-x-2 pb-2">
-          <RotateCcw className="h-5 w-5 text-orange-600" />
-          <CardTitle className="text-lg font-semibold text-orange-700">Reset Data</CardTitle>
-        </CardHeader>
-        <CardContent>
           <button
             onClick={() => setShowResetConfirm(true)}
             className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
@@ -418,7 +420,7 @@ const ProfileCard = () => {
             <RotateCcw className="w-4 h-4" />
             Reset All Data
           </button>
-          <p className="text-xs text-gray-500 mt-3 text-center leading-relaxed">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center leading-relaxed">
             Clears all your medicines, medication history, and logs — giving you a clean
             fresh start. Your profile information will not be affected. Use this if you
             want to begin a completely new medication plan.
