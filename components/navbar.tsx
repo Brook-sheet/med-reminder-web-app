@@ -24,63 +24,63 @@ const Navbar = () => {
       <Disclosure as="nav">
         {({ open }) => (
           <>
-            <DisclosureButton className="absolute top-3 right-4 inline-flex items-center justify-center p-2 rounded-md text-gray-800 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white z-30">
+            <DisclosureButton className="absolute top-3 right-4 inline-flex items-center justify-center p-2 rounded-md text-gray-800 dark:text-gray-200 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white z-30">
               <GiHamburgerMenu className="block md:hidden h-6 w-6" aria-hidden="true" />
             </DisclosureButton>
 
             <div
-              className={`p-5 w-1/2 h-screen bg-gray-100 border-r border-gray-400 z-20 fixed top-0 transition-transform ease-out delay-150 duration-200 ${
+              className={`p-5 w-1/2 h-screen bg-gray-100 dark:bg-gray-800 border-r border-gray-400 dark:border-gray-600 z-20 fixed top-0 transition-transform ease-out delay-150 duration-200 ${
                 open ? "translate-x-0" : "-translate-x-full"
               } md:translate-x-0 md:w-64 md:left-0`}
             >
               <div className="flex flex-col justify-start items-center">
-                <h1 className="text-base text-center font-bold text-blue-900 border-b border-gray-300 pb-4 w-full">
+                <h1 className="text-base text-center font-bold text-blue-900 dark:text-blue-100 border-b border-gray-300 dark:border-gray-600 pb-4 w-full">
                   Med App Reminder
                 </h1>
 
-                <div className="my-4 border-b border-gray-300 pb-4 w-full">
+                <div className="my-4 border-b border-gray-300 dark:border-gray-600 pb-4 w-full">
                   <DisclosureButton as={Link} href="/">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <MdOutlineSpaceDashboard className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <MdOutlineSpaceDashboard className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
                         Dashboard
                       </h3>
                     </div>
                   </DisclosureButton>
                   <DisclosureButton as={Link} href="/medicines">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <CiPill className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <CiPill className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
                         Medicines
                       </h3>
                     </div>
                   </DisclosureButton>
                 </div>
 
-                <div className="my-4 border-b border-gray-300 pb-4 w-full">
+                <div className="my-4 border-b border-gray-300 dark:border-gray-600 pb-4 w-full">
                   <DisclosureButton as={Link} href="/history">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <GoHistory className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <GoHistory className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
                         History
                       </h3>
                     </div>
                   </DisclosureButton>
                   <DisclosureButton as={Link} href="/settings">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <CiSettings className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <CiSettings className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
                         Settings
                       </h3>
                     </div>
                   </DisclosureButton>
                 </div>
 
-                <div className="my-4 border-b border-gray-300 pb-4 w-full">
+                <div className="my-4 border-b border-gray-300 dark:border-gray-600 pb-4 w-full">
                   <button onClick={handleLogout} className="w-full">
-                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-red-600 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                      <CiLogout className="text-2xl text-gray-800 group-hover:text-white" />
-                      <h3 className="text-base font-semibold text-gray-800 group-hover:text-white">
+                    <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-red-600 dark:hover:bg-red-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
+                      <CiLogout className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
                         Logout
                       </h3>
                     </div>

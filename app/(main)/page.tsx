@@ -51,13 +51,13 @@ export default function Home() {
   const nextReminderMed = stats?.nextReminder?.medicineName ?? "All done for today!";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             Welcome Back, {userName}!
           </h1>
-          <p className="text-lg text-gray-600 mt-2">
+          <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
             Here&apos;s your medication status for today
           </p>
         </div>
@@ -78,12 +78,12 @@ export default function Home() {
             title="Next Reminder"
             value={nextReminderTime}
             subtitle={nextReminderMed}
-            className="bg-orange-50 border-orange-200"
+            className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800"
           />
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             Today&apos;s Schedule
           </h2>
           <ScheduleList
@@ -93,8 +93,8 @@ export default function Home() {
           />
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Upcoming</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Upcoming</h2>
           <UpcomingList />
         </div>
       </div>

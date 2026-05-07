@@ -43,19 +43,19 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h3>
         </div>
-        <p className="text-gray-600 text-sm mb-6 leading-relaxed">{message}</p>
+        <p className="text-gray-600 dark:text-gray-300 text-sm mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 border-2 border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex-1 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2.5 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
             No, Cancel
           </button>
@@ -64,8 +64,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             disabled={loading}
             className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${
               confirmColor === "red"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-orange-500 hover:bg-orange-600"
+                ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
             }`}
           >
             {loading ? "Processing..." : `Yes, ${confirmLabel}`}
