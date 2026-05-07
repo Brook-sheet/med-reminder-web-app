@@ -65,20 +65,21 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Adherence Rate"
-            value={<span className="text-blue-600">{adherenceValue}</span>}
+            value={<span className="text-white dark:text-white">{adherenceValue}</span>}
             subtitle="This month"
-            className="border-l-4 border-blue-500"
+            className="border-l-4 border-blue-500 bg-blue-600 dark:bg-blue-700 text-white"
           />
           <StatCard
             title="Today's Progress"
-            value={progressValue}
+            value={<span className="text-white dark:text-white">{progressValue}</span>}
             subtitle="medicines taken"
+            className="bg-gray-700 dark:bg-gray-700 text-white"
           />
           <StatCard
             title="Next Reminder"
-            value={nextReminderTime}
-            subtitle={nextReminderMed}
-            className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800"
+            value={<span className="text-white dark:text-white">{nextReminderTime}</span>}
+            subtitle={<span className="text-white dark:text-white">{nextReminderMed}</span>}
+            className="bg-gray-700 dark:bg-gray-700 text-white"
           />
         </div>
 
