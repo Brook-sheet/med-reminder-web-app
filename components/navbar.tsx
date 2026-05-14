@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
