@@ -21,27 +21,26 @@ const Toast: React.FC<ToastProps> = ({
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
-  const bgColor =
-    type === "success"
-      ? "bg-green-500"
-      : "bg-red-500";
+  // Mobbin / Radix style: dark background with bright icons
+  const bgColor = type === "success" ? "bg-gray-900" : "bg-red-600";
+  const iconColor = type === "success" ? "text-green-400" : "text-white";
 
   const icon =
     type === "success" ? (
-      <CheckCircle className="w-5 h-5 text-white" />
+      <CheckCircle className={`w-5 h-5 ${iconColor}`} />
     ) : (
-      <AlertCircle className="w-5 h-5 text-white" />
+      <AlertCircle className={`w-5 h-5 ${iconColor}`} />
     );
 
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-right-10 duration-300`}
+      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 ${bgColor} text-white px-5 py-3 rounded-full shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-300`}
     >
       {icon}
       <span className="text-sm font-medium">{message}</span>
       <button
         onClick={onClose}
-        className="ml-2 hover:opacity-80 transition-opacity"
+        className="ml-2 text-gray-400 hover:text-white transition-colors"
       >
         <X className="w-4 h-4" />
       </button>

@@ -94,9 +94,6 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Toast state for condition updates
-  const [showConditionToast, setShowConditionToast] = useState(false);
-  const [conditionToastMessage, setConditionToastMessage] = useState("");
   const [previousCondition, setPreviousCondition] = useState("");
 
   // Modal states
@@ -150,14 +147,13 @@ const ProfileCard = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: "success", text: "Profile updated successfully!" });
-        
         // Show toast notification if condition (user type) was changed
         if (condition !== previousCondition) {
           const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
-          setConditionToastMessage(`Your medical condition has been updated to: ${conditionLabel}`);
-          setShowConditionToast(true);
+          setMessage({ type: "success", text: `Profile updated successfully! Condition set to: ${conditionLabel}` });
           setPreviousCondition(condition);
+        } else {
+          setMessage({ type: "success", text: "Profile updated successfully!" });
         }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
@@ -166,7 +162,6 @@ const ProfileCard = () => {
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
       setSaving(false);
-      setTimeout(() => setMessage(null), 4000);
     }
   };
 
@@ -236,13 +231,13 @@ const ProfileCard = () => {
 
   return (
     <>
-      {/* ── Toast Notification for Condition Updates ──────────────────────── */}
-      {showConditionToast && (
+      {/* ── Global Toast Notification ──────────────────────── */}
+      {message && (
         <Toast
-          type="success"
-          message={conditionToastMessage}
+          type={message.type}
+          message={message.text}
           duration={5000}
-          onClose={() => setShowConditionToast(false)}
+          onClose={() => setMessage(null)}
         />
       )}
       
@@ -275,19 +270,6 @@ const ProfileCard = () => {
           <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Status message */}
-          {message && (
-            <div
-              className={`text-sm rounded-lg px-4 py-3 border ${
-                message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700"
-                  : "bg-red-50 border-red-200 text-red-700"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
-
           {/* First Name */}
           <div>
             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
