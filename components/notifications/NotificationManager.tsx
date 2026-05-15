@@ -297,6 +297,13 @@ const NotificationManager: React.FC = () => {
           if (alarmStopRef.current) alarmStopRef.current();
           alarmStopRef.current = playAlarm();
 
+          // Trigger hardware buzzer + LED on ESP32
+          void fetch('/api/hardware/alarm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alarmIndex: schedule.indexOf(item) }),
+          });
+
           setActiveNotification({
             type:          'due',
             medicineName:  item.name,
@@ -321,11 +328,12 @@ const NotificationManager: React.FC = () => {
         if (item.status === 'Taken' && !firedIntake.current.has(key)) {
           firedIntake.current.add(key);
 
-          // Stop the alarm if it's still ringing
+          // Stop the browser alarm and silence the hardware
           if (alarmStopRef.current) {
             alarmStopRef.current();
             alarmStopRef.current = null;
           }
+          void fetch('/api/hardware/alarm', { method: 'DELETE' });
 
           const rate = adherence?.adherenceRate ?? 0;
           const risk = adherence?.riskLevel     ?? 'Low';

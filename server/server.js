@@ -167,6 +167,32 @@ function sendJSON(res, statusCode, obj) {
   res.end(body);
 }
 
+// ── Alarm flag state (in-memory, shared between web app and ESP32) ─────────
+let pendingAlarm = { active: false, alarmIndex: -1 };
+
+// GET /alarm  — ESP32 polls this; resets flag after read
+function handleGetAlarm(req, res) {
+  const result = { active: pendingAlarm.active, alarmIndex: pendingAlarm.alarmIndex };
+  pendingAlarm.active = false;
+  sendJSON(res, 200, result);
+}
+
+// POST /alarm/on  — Web app calls this when a due notification fires
+async function handleAlarmOn(req, res) {
+  let body = {};
+  try { body = await readBody(req); } catch {}
+  pendingAlarm = { active: true, alarmIndex: body.alarmIndex ?? -1 };
+  console.log(`[POST /alarm/on] Hardware alarm set (alarmIndex=${pendingAlarm.alarmIndex})`);
+  sendJSON(res, 200, { success: true });
+}
+
+// POST /alarm/off  — Web app calls this to silence hardware (e.g. pill taken via web)
+async function handleAlarmOff(req, res) {
+  pendingAlarm = { active: false, alarmIndex: -1 };
+  console.log('[POST /alarm/off] Hardware alarm cleared');
+  sendJSON(res, 200, { success: true });
+}
+
 // ── Route: GET /sched ──────────────────────────────────────────────────────
 // ESP32 fetchSchedule() reads: obj["hour"] and obj["minute"]
 async function handleGetSched(req, res) {
@@ -381,6 +407,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && urlPath === '/sched') {
     return handleGetSched(req, res);
   }
+
+  // Routes: hardware alarm flag (web app ↔ ESP32 bridge)
+  if (req.method === 'GET'  && urlPath === '/alarm')     return handleGetAlarm(req, res);
+  if (req.method === 'POST' && urlPath === '/alarm/on')  return handleAlarmOn(req, res);
+  if (req.method === 'POST' && urlPath === '/alarm/off') return handleAlarmOff(req, res);
 
   // Route: GET / (health check)
   if (req.method === 'GET' && urlPath === '/') {
