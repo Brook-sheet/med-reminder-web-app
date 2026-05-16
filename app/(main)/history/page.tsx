@@ -67,10 +67,10 @@ const History = () => {
   };
 
   const renderSection = (title: string, logs: LogEntry[]) => (
-    <div className="bg-white rounded-lg shadow-sm border p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-4">{title}</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6">
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{title}</h2>
       {logs.length === 0 ? (
-        <p className="text-gray-400 text-sm">No records for this period.</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm">No records for this period.</p>
       ) : (
         <div className="space-y-4">
           {logs.map((log) => (
@@ -84,7 +84,7 @@ const History = () => {
               {log.status === "pending" && (
                 <button
                   onClick={() => handleMarkTaken(log._id)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs bg-green-600 text-white px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-700"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs bg-green-600 text-white px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
                 >
                   Mark Taken
                 </button>
@@ -97,11 +97,11 @@ const History = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">History</h1>
-          <p className="text-gray-600 mt-2">View your medication intake history</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">History</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">View your medication intake history</p>
         </div>
 
         {/* Summary Stats */}
@@ -110,30 +110,30 @@ const History = () => {
             title="Total Taken"
             value={loading ? "—" : String(data?.summary.totalTaken ?? 0)}
             subtitle="Medicines taken this month"
-            className="bg-green-50 border border-green-200 rounded-lg"
+            className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg"
           />
           <StatCard
             title="Total Missed"
             value={loading ? "—" : String(data?.summary.totalMissed ?? 0)}
             subtitle="Medicines missed this month"
-            className="bg-red-50 border border-red-200 rounded-lg"
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
           />
           <StatCard
             title="Success Rate"
             value={loading ? "—" : `${data?.summary.successRate ?? 0}%`}
             subtitle="Medication adherence rate"
-            className="bg-blue-50 border border-blue-200 rounded-lg"
+            className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
           />
         </div>
 
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-lg border p-6 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-1/4 mb-4" />
+              <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4" />
                 <div className="space-y-3">
-                  <div className="h-16 bg-gray-100 rounded" />
-                  <div className="h-16 bg-gray-100 rounded" />
+                  <div className="h-16 bg-gray-100 dark:bg-gray-700 rounded" />
+                  <div className="h-16 bg-gray-100 dark:bg-gray-700 rounded" />
                 </div>
               </div>
             ))}
