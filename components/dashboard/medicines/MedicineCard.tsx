@@ -49,7 +49,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow ${
+      className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow ${
         isDeleting ? "opacity-50 pointer-events-none" : ""
       }`}
     >
@@ -61,49 +61,49 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
             {firstLetter}
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">{name}</h3>
-            <p className="text-sm text-gray-500">{dosage}</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{name}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{dosage}</p>
           </div>
         </div>
 
         <div className="flex gap-2 ml-4">
           <button
             onClick={onEdit}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             aria-label="Edit medicine"
           >
-            <Edit2 className="w-5 h-5 text-gray-600 hover:text-gray-900" />
+            <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" />
           </button>
           <button
             onClick={onDelete}
             disabled={isDeleting}
-            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
             aria-label="Delete medicine"
           >
-            <Trash2 className="w-5 h-5 text-gray-600 hover:text-red-600" />
+            <Trash2 className="w-5 h-5 text-gray-600 dark:text-gray-400 hover:text-red-600" />
           </button>
         </div>
       </div>
 
-      <div className="h-px bg-gray-100 mb-4" />
+      <div className="h-px bg-gray-100 dark:bg-gray-700 mb-4" />
 
       <div className="space-y-3">
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
             Frequency
           </p>
-          <p className="text-sm text-gray-700">{frequency}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{frequency}</p>
         </div>
 
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
             Scheduled Times
           </p>
           <div className="flex flex-wrap gap-2">
             {scheduledTimes.map((time, index) => (
               <div
                 key={index}
-                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border border-blue-100"
+                className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 dark:border-blue-800"
               >
                 <Clock className="w-3.5 h-3.5" />
                 {time}
@@ -115,11 +115,11 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
         {/* Date range */}
         {(startDate || endDate) && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
               Duration
             </p>
-            <div className="flex items-center gap-1.5 text-sm text-gray-600">
-              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+            <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+              <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
               <span>
                 {startDate ? formatDate(startDate) : "—"}{" "}
                 {endDate ? `→ ${formatDate(endDate)}` : "(no end date)"}

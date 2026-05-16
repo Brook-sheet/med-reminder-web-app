@@ -63,13 +63,32 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     // Parse body sent by the ESP32
-    const body = (await req.json()) as {
+    let body: {
       device_id?: string;
       status?: string;
       time?: string;
       snooze?: number;
       alarmIndex?: number;
     };
+
+    try {
+      body = (await req.json()) as {
+        device_id?: string;
+        status?: string;
+        time?: string;
+        snooze?: number;
+        alarmIndex?: number;
+      };
+    } catch (err) {
+      console.error('[ESP32 Event] Invalid JSON body', err);
+      return NextResponse.json(
+        {
+          error: 'Invalid JSON body',
+          details: err instanceof Error ? err.message : String(err),
+        },
+        { status: 400 }
+      );
+    }
 
     const { device_id, status, time, snooze, alarmIndex } = body;
 

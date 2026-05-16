@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
 
@@ -54,7 +55,13 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId') ?? process.env.DEFAULT_DEVICE_USER_ID ?? null;
+    const rawUserId = searchParams.get('userId') ?? process.env.DEFAULT_DEVICE_USER_ID ?? null;
+    const userId = rawUserId && mongoose.isValidObjectId(rawUserId) ? rawUserId : null;
+    if (rawUserId && !userId) {
+      console.warn(
+        `[ESP32 Sched] Ignoring invalid userId: ${rawUserId}`
+      );
+    }
     const today = new Date().toISOString().split('T')[0];
 
     // Build query
@@ -115,6 +122,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(deduplicated);
   } catch (err) {
     console.error('[GET /api/esp32/sched]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Internal server error',
+        details: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    );
   }
 }
