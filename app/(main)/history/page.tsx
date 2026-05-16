@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import HistoryItem from "@/components/dashboard/history/HistoryItems";
 
