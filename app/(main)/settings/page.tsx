@@ -1,7 +1,6 @@
 "use client";
 // app/(main)/settings/page.tsx
 
-import React from "react";
 import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 
