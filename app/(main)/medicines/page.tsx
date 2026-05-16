@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus } from "lucide-react";
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
+import Toast from "@/components/ui/Toast";
 import type { Medicine } from "@/lib/interfaces/data/Medicine";
+import type { ToastProps } from "@/components/ui/Toast";
 
 const Medicines = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -12,6 +14,7 @@ const Medicines = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<Omit<ToastProps, "onClose"> | null>(null);
 
   const fetchMedicines = useCallback(async () => {
     try {
@@ -47,11 +50,12 @@ const Medicines = () => {
       const data = await res.json();
       if (data.success) {
         setMedicines((prev) => prev.filter((m) => m._id !== id));
+        setToast({ type: "success", message: "Medicine deleted successfully" });
       } else {
-        alert(data.error || "Failed to delete medicine.");
+        setToast({ type: "error", message: data.error || "Failed to delete medicine." });
       }
     } catch {
-      alert("Network error. Please try again.");
+      setToast({ type: "error", message: "Network error. Please try again." });
     } finally {
       setDeletingId(null);
     }
@@ -80,6 +84,10 @@ const Medicines = () => {
 
     await fetchMedicines();
     handleModalClose();
+    setToast({
+      type: "success",
+      message: isEdit ? "Medicine updated successfully" : "Medicine created successfully",
+    });
   };
 
   return (
@@ -151,6 +159,14 @@ const Medicines = () => {
         onSave={handleModalSave}
         initialData={editingMedicine}
       />
+
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };
