@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
-import User from '@/models/User';
 
 const SENSOR_API_KEY = process.env.SENSOR_API_KEY || 'dev-sensor-key-change-me';
 

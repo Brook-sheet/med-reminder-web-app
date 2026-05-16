@@ -1,6 +1,6 @@
 // components/dashboard/AdherenceCard.tsx
 'use client';
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface AdherenceData {
   riskLevel: 'Low' | 'Moderate' | 'High';

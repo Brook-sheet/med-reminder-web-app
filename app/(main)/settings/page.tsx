@@ -1,7 +1,6 @@
 "use client";
 // app/(main)/settings/page.tsx
 
-import React from "react";
 import ProfileCard, { ResetDataCard } from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import { ThemeToggle } from "@/components/theme-toggle";

@@ -142,12 +142,12 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 });
 
 // ── Service worker lifecycle ─────────────────────────────────────────────────
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   console.log('[SW] Installing...');
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', () => {
   console.log('[SW] Activating...');
   event.waitUntil(clients.claim());
 });

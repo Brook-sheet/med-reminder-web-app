@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus } from "lucide-react";
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
