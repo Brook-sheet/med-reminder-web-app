@@ -2,7 +2,7 @@
 // components/notifications/FoodMonitoringModal.tsx
 import React, { useState } from 'react';
 import { X, ChevronRight, CheckCircle } from 'lucide-react';
-import { FOOD_QUESTIONS, getQuestionsForCondition } from '@/lib/foodMonitoring';
+import { getQuestionsForCondition } from '@/lib/foodMonitoring';
 import type { FoodQuestion } from '@/lib/foodMonitoring';
 
 interface FoodMonitoringModalProps {
@@ -77,8 +77,8 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
   const riskColor = result?.riskLevel === 'High'
     ? 'text-red-600 bg-red-50 border-red-200'
     : result?.riskLevel === 'Moderate'
-    ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
-    : 'text-green-700 bg-green-50 border-green-200';
+      ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
+      : 'text-green-700 bg-green-50 border-green-200';
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center px-4">
@@ -126,13 +126,12 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                 {questions.map((_, i) => (
                   <div
                     key={i}
-                    className={`flex-1 h-1.5 rounded-full transition-colors ${
-                      i < currentIndex
+                    className={`flex-1 h-1.5 rounded-full transition-colors ${i < currentIndex
                         ? 'bg-teal-500'
                         : i === currentIndex
-                        ? 'bg-teal-400'
-                        : 'bg-gray-200'
-                    }`}
+                          ? 'bg-teal-400'
+                          : 'bg-gray-200'
+                      }`}
                   />
                 ))}
               </div>
@@ -151,19 +150,17 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                   <button
                     key={opt.value}
                     onClick={() => handleSelect(opt.value, opt.score)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm transition-all leading-snug ${
-                      selectedAnswer?.answer === opt.value
+                    className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm transition-all leading-snug ${selectedAnswer?.answer === opt.value
                         ? 'border-teal-500 bg-teal-50 text-teal-800 font-medium'
                         : 'border-gray-200 text-gray-700 hover:border-teal-300 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-2">
                       <span
-                        className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
-                          selectedAnswer?.answer === opt.value
+                        className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 ${selectedAnswer?.answer === opt.value
                             ? 'border-teal-500 bg-teal-500'
                             : 'border-gray-400'
-                        }`}
+                          }`}
                       />
                       {opt.label}
                     </div>

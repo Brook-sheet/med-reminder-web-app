@@ -9,7 +9,7 @@ export interface IMedicineDocument extends Document {
   scheduledTimes: string[];
   notes: string;
   startDate: string;
-  endDate?: string;
+  endDate?: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -72,4 +72,3 @@ const Medicine: Model<IMedicineDocument> =
   mongoose.models.Medicine || mongoose.model<IMedicineDocument>('Medicine', MedicineSchema);
 
 export default Medicine;
-

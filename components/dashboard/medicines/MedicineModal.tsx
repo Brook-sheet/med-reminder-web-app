@@ -101,25 +101,25 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-bold text-gray-900">
+      <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             {initialData ? "Edit Medicine" : "Add New Medicine"}
           </h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded-lg px-4 py-3">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Medicine Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -128,12 +128,12 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Aspirin"
               disabled={saving}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Dosage <span className="text-red-500">*</span>
             </label>
             <input
@@ -142,12 +142,12 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               onChange={(e) => setDosage(e.target.value)}
               placeholder="e.g. 100mg"
               disabled={saving}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Start Date <span className="text-red-500">*</span>
             </label>
             <input
@@ -155,13 +155,13 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               disabled={saving}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
-            <p className="text-xs text-gray-500 mt-1">Reminders will begin from this date</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Reminders will begin from this date</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               End Date <span className="text-gray-400 text-xs font-normal">(optional)</span>
             </label>
             <input
@@ -170,18 +170,18 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
               disabled={saving}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
-            <p className="text-xs text-gray-500 mt-1">Leave blank if the medicine has no end date</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Leave blank if the medicine has no end date</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
               disabled={saving}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
               {FREQUENCY_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>{opt}</option>
@@ -190,7 +190,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Scheduled Times <span className="text-red-500">*</span>
             </label>
             <div className="space-y-2">
@@ -205,7 +205,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
                     <button
                       type="button"
                       onClick={() => removeTime(index)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                      className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                       disabled={saving}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -218,14 +218,14 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="button"
               onClick={addTime}
               disabled={saving}
-              className="mt-2 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="mt-2 flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
             >
               <Plus className="w-4 h-4" /> Add another time
             </button>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Notes (optional)
             </label>
             <textarea
@@ -234,7 +234,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               placeholder="e.g. Take with food"
               disabled={saving}
               rows={2}
-              className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 resize-none disabled:opacity-50"
+              className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 resize-none disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
@@ -243,7 +243,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm"
+              className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-sm"
             >
               Cancel
             </button>

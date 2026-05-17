@@ -1,0 +1,17 @@
+{
+  "name": "esp32-pill-server",
+  "version": "1.0.0",
+  "description": "Standalone HTTP server for ESP32 pill-box hardware",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mongoose": "^9.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,21 +1,43 @@
-// middleware.ts  (project root)
+// middleware.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { jwtVerify } from 'jose';
 
-// Routes that DO NOT require authentication
+export const runtime = 'edge';
+
+const SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET ||
+    'fallback-secret-change-this-in-production-min-32'
+);
+
+// Pages that do NOT require login
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
-// API routes that are public (no JWT needed)
-const PUBLIC_API_ROUTES = ['/api/auth/login', '/api/auth/register', '/api/sensor'];
+// ✅ Public API routes (ESP32 INCLUDED)
+const PUBLIC_API_ROUTES = [
+  '/api/auth',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/sensor',
+  '/api/esp32',
+  '/api/hardware',
+];
+
+function isPublicApi(pathname: string) {
+  return PUBLIC_API_ROUTES.some((p) => pathname.startsWith(p));
+}
+
+async function verifyToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Allow public API routes ────────────────────────────────────────────────
-  if (PUBLIC_API_ROUTES.some((r) => pathname.startsWith(r))) {
-    return NextResponse.next();
-  }
-
-  // ── Allow Next.js internals & static files ─────────────────────────────────
+  // ── Skip Next internals & static files ───────────────────────────────
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
@@ -24,18 +46,25 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Get token from cookie ──────────────────────────────────────────────────
+  // ── ✅ Allow ALL ESP32 / sensor API routes (NO AUTH) ────────────────
+  if (isPublicApi(pathname)) {
+    return NextResponse.next();
+  }
+
+  // ── Check auth token ────────────────────────────────────────────────
   const token = request.cookies.get('med_auth_token')?.value;
   const user = token ? await verifyToken(token) : null;
 
-  const isPublicPage = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublicPage = PUBLIC_ROUTES.some((r) =>
+    pathname.startsWith(r)
+  );
 
-  // ── Redirect authenticated users away from auth pages ─────────────────────
+  // ── If logged in → block auth pages ────────────────────────────────
   if (user && isPublicPage) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // ── Redirect unauthenticated users to sign-in ─────────────────────────────
+  // ── If NOT logged in → redirect only NON-public pages ──────────────
   if (!user && !isPublicPage) {
     const signInUrl = new URL('/sign-in', request.url);
     signInUrl.searchParams.set('from', pathname);
@@ -46,13 +75,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
