@@ -10,10 +10,10 @@ const DayBar: React.FC<DayBarProps> = ({ day, taken, total }) => {
   const percentage = total > 0 ? (taken / total) * 100 : 0;
 
   const getBarColor = () => {
-    if (total === 0) return 'bg-gray-300';
-    if (taken === total) return 'bg-green-500';
-    if (taken > 0) return 'bg-blue-500';
-    return 'bg-gray-300';
+    if (total === 0) return 'bg-gray-300 dark:bg-gray-600';
+    if (taken === total) return 'bg-green-500 dark:bg-green-400';
+    if (taken > 0) return 'bg-blue-500 dark:bg-blue-400';
+    return 'bg-gray-300 dark:bg-gray-600';
   };
 
   return (
@@ -21,7 +21,7 @@ const DayBar: React.FC<DayBarProps> = ({ day, taken, total }) => {
       {/* Bar Container */}
       <div className="w-full flex items-end justify-center flex-1">
         {/* Bar Background */}
-        <div className="w-3/4 bg-gray-200 rounded-t-lg overflow-hidden h-full flex items-end justify-center">
+        <div className="w-3/4 bg-gray-200 dark:bg-gray-700 rounded-t-lg overflow-hidden h-full flex items-end justify-center">
           {/* Colored Bar */}
           <div
             className={`w-full rounded-t-lg transition-all duration-300 ease-out ${getBarColor()}`}
@@ -32,14 +32,14 @@ const DayBar: React.FC<DayBarProps> = ({ day, taken, total }) => {
 
       {/* Value Label */}
       <div className="text-center">
-        <p className="text-sm font-semibold text-gray-900">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">
           {taken}/{total}
         </p>
       </div>
 
       {/* Day Label */}
       <div className="text-center">
-        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
           {day}
         </p>
       </div>

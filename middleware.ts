@@ -11,16 +11,18 @@ const SECRET = new TextEncoder().encode(
 
 // Pages that do NOT require login
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
-
 // ✅ Public API routes (ESP32 INCLUDED)
-const PUBLIC_API_PREFIXES = [
+const PUBLIC_API_ROUTES = [
   '/api/auth',
+  '/api/auth/login',
+  '/api/auth/register',
   '/api/sensor',
-  '/api/esp32', // 👈 IMPORTANT FIX
+  '/api/esp32',
+  '/api/hardware',
 ];
 
 function isPublicApi(pathname: string) {
-  return PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
+  return PUBLIC_API_ROUTES.some((p) => pathname.startsWith(p));
 }
 
 async function verifyToken(token: string) {

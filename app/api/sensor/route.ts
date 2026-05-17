@@ -13,7 +13,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import SensorData from '@/models/SensorData';
 import MedicationLog from '@/models/MedicationLog';
-import Medicine from '@/models/Medicine';
 import type { ApiResponse } from '@/types';
 
 const SENSOR_API_KEY = process.env.SENSOR_API_KEY || 'dev-sensor-key-change-me';
