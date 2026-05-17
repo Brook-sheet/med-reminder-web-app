@@ -62,11 +62,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${
-              confirmColor === "red"
+            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor === "red"
                 ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
                 : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
-            }`}
+              }`}
           >
             {loading ? "Processing..." : `Yes, ${confirmLabel}`}
           </button>
@@ -95,7 +94,6 @@ const ProfileCard = () => {
   const [previousCondition, setPreviousCondition] = useState("");
 
   // Modal states
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -209,18 +207,8 @@ const ProfileCard = () => {
           onClose={() => setMessage(null)}
         />
       )}
-      
+
       {/* ── Confirmation Modals ───────────────────────────────────────────── */}
-      <ConfirmModal
-        isOpen={showResetConfirm}
-        title="Reset All Data?"
-        message="This will clear all your medicines, medication logs, and history so you can start fresh. Your profile information (name, email, etc.) will remain. This cannot be undone from the app."
-        confirmLabel="Reset"
-        confirmColor="orange"
-        onConfirm={handleResetData}
-        onCancel={() => setShowResetConfirm(false)}
-        loading={resetting}
-      />
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Account?"
@@ -240,11 +228,10 @@ const ProfileCard = () => {
         <CardContent className="space-y-4">
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border ${
-                message.type === "success"
+              className={`text-sm rounded-lg px-4 py-3 border ${message.type === "success"
                   ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-              }`}
+                }`}
             >
               {message.text}
             </div>
@@ -437,11 +424,10 @@ export const ResetDataCard = () => {
         <CardContent>
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${
-                message.type === "success"
+              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
                   ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-              }`}
+                }`}
             >
               {message.text}
             </div>
