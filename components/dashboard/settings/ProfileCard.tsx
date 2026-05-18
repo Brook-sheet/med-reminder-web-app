@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { User, RotateCcw, AlertTriangle } from "lucide-react";
+import { User, RotateCcw, AlertTriangle, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
 
 const CONDITIONS = [
   { value: "", label: "Not specified" },
@@ -94,6 +95,8 @@ const ProfileCard = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
   const fetchProfile = useCallback(async () => {
     try {
       const res = await fetch("/api/profile");
@@ -137,7 +140,7 @@ const ProfileCard = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: "success", text: "Profile updated successfully!" });
+        setMessage({ type: "success", text: "Profile updated successfully." });
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
       }
@@ -197,6 +200,11 @@ const ProfileCard = () => {
         onConfirm={handleDeleteAccount}
         onCancel={() => setShowDeleteConfirm(false)}
         loading={deleting}
+      />
+
+      <UpdatePasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
       />
 
       <Card className="w-full shadow-sm">
@@ -339,6 +347,29 @@ const ProfileCard = () => {
             {saving ? "Saving..." : "Save Changes"}
           </Button>
 
+          {/* Divider */}
+          <div className="relative my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white dark:bg-gray-800 px-2 text-gray-400 dark:text-gray-500">
+                Security
+              </span>
+            </div>
+          </div>
+
+          {/* Update Password button */}
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            disabled={saving}
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-blue-600 dark:text-blue-400 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+          >
+            <Lock className="w-4 h-4" />
+            Update Password
+          </button>
+
+          {/* Delete Account button */}
           <button
             onClick={() => setShowDeleteConfirm(true)}
             disabled={saving}
@@ -366,7 +397,7 @@ export const ResetDataCard = () => {
       const data = await res.json();
       if (data.success) {
         setShowResetConfirm(false);
-        setMessage({ type: "success", text: "All your data has been reset. Starting fresh!" });
+        setMessage({ type: "success", text: "All your data has been reset. Starting fresh." });
         setTimeout(() => {
           setMessage(null);
           router.refresh();
@@ -421,7 +452,7 @@ export const ResetDataCard = () => {
             Reset All Data
           </button>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center leading-relaxed">
-            Clears all your medicines, medication history, and logs — giving you a clean
+            Clears all your medicines, medication history, and logs, giving you a clean
             fresh start. Your profile information will not be affected. Use this if you
             want to begin a completely new medication plan.
           </p>
