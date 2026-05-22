@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { User, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validateAge,
+  collectErrors,
+} from "@/lib/validations";
 
 const CONDITIONS = [
   { value: "", label: "Not specified" },
@@ -119,8 +126,24 @@ const ProfileCard = () => {
   }, [fetchProfile]);
 
   const handleSave = async () => {
-    setSaving(true);
     setMessage(null);
+
+    // ── Client-side validation ─────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      age: validateAge(age),
+    });
+
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    setSaving(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -383,7 +406,7 @@ export const ResetDataCard = () => {
     }
   };
 
-  return (
+   return (
     <>
       <ConfirmModal
         isOpen={showResetConfirm}

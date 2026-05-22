@@ -9,6 +9,14 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import OnboardingDialog from "@/components/OnboardingDialog";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validatePassword,
+  validateConfirmPassword,
+  collectErrors,
+} from "@/lib/validations";
 
 const Signup = () => {
   const router = useRouter();
@@ -26,14 +34,21 @@ const Signup = () => {
     e.preventDefault();
     setError("");
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+    // ── Client-side validation ──────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      password: validatePassword(password),
+      confirmPassword: validateConfirmPassword(password, confirmPassword),
+    });
+
+    if (validationError) {
+      setError(validationError);
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
+    // ───────────────────────────────────────────────────────────────────────
 
     setLoading(true);
     try {
@@ -57,7 +72,6 @@ const Signup = () => {
         return;
       }
 
-      // Show onboarding dialog before going to dashboard
       setShowOnboarding(true);
     } catch {
       setError("Network error. Please check your connection.");
@@ -90,12 +104,53 @@ const Signup = () => {
                 {error}
               </div>
             )}
-            <Input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required placeholder="First Name" disabled={loading} />
-            <Input type="text" value={middleName} onChange={(e) => setMiddleName(e.target.value)} placeholder="Middle Name (optional)" disabled={loading} />
-            <Input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required placeholder="Last Name" disabled={loading} />
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="Email" disabled={loading} />
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Password" disabled={loading} />
-            <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="Confirm Password" disabled={loading} />
+            <Input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              placeholder="First Name"
+              disabled={loading}
+            />
+            <Input
+              type="text"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              placeholder="Middle Name (optional)"
+              disabled={loading}
+            />
+            <Input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              placeholder="Last Name"
+              disabled={loading}
+            />
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="Email"
+              disabled={loading}
+            />
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Password"
+              disabled={loading}
+            />
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="Confirm Password"
+              disabled={loading}
+            />
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Sign Up"}
             </Button>
