@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Toast from "@/components/ui/Toast";
 import { User, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -68,11 +69,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${
-              confirmColor === "red"
+            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor === "red"
                 ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
                 : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
-            }`}
+              }`}
           >
             {loading ? "Processing..." : `Yes, ${confirmLabel}`}
           </button>
@@ -98,6 +98,9 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [previousCondition, setPreviousCondition] = useState("");
+
+  // Modal states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -112,6 +115,7 @@ const ProfileCard = () => {
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
         setCondition(data.data.condition || "");
+        setPreviousCondition(data.data.condition || "");
         setAge(data.data.age != null ? String(data.data.age) : "");
       }
     } catch (err) {
@@ -160,7 +164,14 @@ const ProfileCard = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: "success", text: "Profile updated successfully!" });
+        // Show toast notification if condition (user type) was changed
+        if (condition !== previousCondition) {
+          const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+          setMessage({ type: "success", text: `Profile updated successfully! Condition set to: ${conditionLabel}` });
+          setPreviousCondition(condition);
+        } else {
+          setMessage({ type: "success", text: "Profile updated successfully!" });
+        }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
       }
@@ -168,7 +179,6 @@ const ProfileCard = () => {
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
       setSaving(false);
-      setTimeout(() => setMessage(null), 4000);
     }
   };
 
@@ -211,6 +221,17 @@ const ProfileCard = () => {
 
   return (
     <>
+      {/* ── Global Toast Notification ──────────────────────── */}
+      {message && (
+        <Toast
+          type={message.type}
+          message={message.text}
+          duration={5000}
+          onClose={() => setMessage(null)}
+        />
+      )}
+
+      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Account?"
@@ -230,11 +251,10 @@ const ProfileCard = () => {
         <CardContent className="space-y-4">
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border ${
-                message.type === "success"
+              className={`text-sm rounded-lg px-4 py-3 border ${message.type === "success"
                   ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-              }`}
+                }`}
             >
               {message.text}
             </div>
@@ -427,11 +447,10 @@ export const ResetDataCard = () => {
         <CardContent>
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${
-                message.type === "success"
+              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
                   ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-              }`}
+                }`}
             >
               {message.text}
             </div>

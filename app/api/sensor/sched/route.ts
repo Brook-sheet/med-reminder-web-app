@@ -26,6 +26,10 @@ export async function GET(req: NextRequest) {
       req.nextUrl.searchParams.get('key') ||
       req.headers.get('x-api-key');
 
+    // The device_id should be mapped to a userId — for now use query param
+    // In production: look up userId via DeviceMapping model
+    // For now: return all active medicines for all users (demo mode)
+    // or use a specific userId from env
     if (process.env.NODE_ENV === 'production') {
       if (key !== SENSOR_API_KEY) {
         return NextResponse.json(
