@@ -4,8 +4,16 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Toast from "@/components/ui/Toast";
 import { User, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validateAge,
+  collectErrors,
+} from "@/lib/validations";
 
 const CONDITIONS = [
   { value: "", label: "Not specified" },
@@ -62,11 +70,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${
-              confirmColor === "red"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-orange-500 hover:bg-orange-600"
-            }`}
+            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor === "red"
+                ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
+              }`}
           >
             {loading ? "Processing..." : `Yes, ${confirmLabel}`}
           </button>
@@ -93,6 +100,8 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [previousCondition, setPreviousCondition] = useState("");
+
   // Modal states
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -110,6 +119,7 @@ const ProfileCard = () => {
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
         setCondition(data.data.condition || "");
+        setPreviousCondition(data.data.condition || "");
         setAge(data.data.age != null ? String(data.data.age) : "");
       }
     } catch (err) {
@@ -125,8 +135,24 @@ const ProfileCard = () => {
 
   // ── Save Profile ────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    setSaving(true);
     setMessage(null);
+
+    // ── Client-side validation ─────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      age: validateAge(age),
+    });
+
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    setSaving(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -143,7 +169,14 @@ const ProfileCard = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage({ type: "success", text: "Profile updated successfully!" });
+        // Show toast notification if condition (user type) was changed
+        if (condition !== previousCondition) {
+          const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+          setMessage({ type: "success", text: `Profile updated successfully! Condition set to: ${conditionLabel}` });
+          setPreviousCondition(condition);
+        } else {
+          setMessage({ type: "success", text: "Profile updated successfully!" });
+        }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
       }
@@ -232,6 +265,17 @@ const ProfileCard = () => {
         onCancel={() => setShowResetConfirm(false)}
         loading={resetting}
       />
+      {/* ── Global Toast Notification ──────────────────────── */}
+      {message && (
+        <Toast
+          type={message.type}
+          message={message.text}
+          duration={5000}
+          onClose={() => setMessage(null)}
+        />
+      )}
+
+      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Account and Data?"
@@ -253,11 +297,10 @@ const ProfileCard = () => {
           {/* Status message */}
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border ${
-                message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700"
-                  : "bg-red-50 border-red-200 text-red-700"
-              }`}
+              className={`text-sm rounded-lg px-4 py-3 border ${message.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
+                }`}
             >
               {message.text}
             </div>
@@ -411,6 +454,16 @@ const ProfileCard = () => {
           <CardTitle className="text-lg font-semibold text-orange-700">Reset Data</CardTitle>
         </CardHeader>
         <CardContent>
+          {message && (
+            <div
+              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
+                }`}
+            >
+              {message.text}
+            </div>
+          )}
           <button
             onClick={() => setShowResetConfirm(true)}
             className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
