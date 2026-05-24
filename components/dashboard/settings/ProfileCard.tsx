@@ -246,7 +246,7 @@ const ProfileCard = () => {
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Account and Data?"
-        message="Are you sure you want to delete your account? This action will permanently remove your account and all associated data, including medicines, medication logs, notifications, food logs, subscriptions, and profile information. You will be logged out immediately, and your data cannot be recovered."
+        message="Are you sure you want to delete your account? This action will permanently remove your account and all associated data. You will be logged out immediately, and your data cannot be recovered."
         confirmLabel="Delete Account"
         confirmColor="red"
         onConfirm={handleDeleteAccount}

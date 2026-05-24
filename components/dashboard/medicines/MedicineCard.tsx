@@ -9,6 +9,7 @@ interface MedicineCardProps {
   scheduledTimes: string[];
   startDate?: string;
   endDate?: string;
+  notes?: string;
   onEdit?: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
@@ -21,6 +22,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
   scheduledTimes,
   startDate,
   endDate,
+  notes,
   onEdit,
   onDelete,
   isDeleting = false,
@@ -100,9 +102,9 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
             Scheduled Times
           </p>
           <div className="flex flex-wrap gap-2">
-            {scheduledTimes.map((time, index) => (
+            {scheduledTimes.map((time) => (
               <div
-                key={index}
+                key={time}
                 className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 dark:border-blue-800"
               >
                 <Clock className="w-3.5 h-3.5" />
@@ -111,6 +113,17 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
             ))}
           </div>
         </div>
+
+        {notes && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              Notes
+            </p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+              {notes}
+            </p>
+          </div>
+        )}
 
         {/* Date range */}
         {(startDate || endDate) && (

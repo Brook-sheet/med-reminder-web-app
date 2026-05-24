@@ -142,6 +142,7 @@ const Medicines = () => {
                 dosage={medicine.dosage}
                 frequency={medicine.frequency}
                 scheduledTimes={medicine.scheduledTimes}
+                notes={medicine.notes}
                 startDate={medicine.startDate}
                 endDate={medicine.endDate}
                 onEdit={() => handleEdit(medicine)}
