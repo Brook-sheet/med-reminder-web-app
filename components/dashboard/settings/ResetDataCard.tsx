@@ -95,18 +95,18 @@ const ResetDataCard: React.FC = () => {
       <ConfirmModal
         isOpen={showConfirm}
         title="Reset All Data?"
-        message="This will clear all your medicines, medication logs, and history so you can start fresh. Your profile information (name, email, etc.) will remain. This cannot be undone from the app."
+        message="This will permanently delete all your medicines, medication logs, dashboard stats, and history. Everything will be cleared except your profile information (name, email, etc.). This cannot be undone."
         confirmLabel="Reset"
-        confirmColor="orange"
+        confirmColor="red"
         onConfirm={handleReset}
         onCancel={() => setShowConfirm(false)}
         loading={resetting}
       />
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex items-center space-x-2 pb-4 mb-4 border-b border-orange-200 dark:border-orange-700/50">
-          <RotateCcw className="h-5 w-5 text-orange-600 dark:text-orange-500" />
-          <h2 className="text-lg font-semibold text-orange-700 dark:text-orange-400">Reset Data</h2>
+        <div className="flex items-center space-x-2 pb-4 mb-4 border-b border-red-200 dark:border-red-700/50">
+          <RotateCcw className="h-5 w-5 text-red-600 dark:text-red-500" />
+          <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">Reset Data</h2>
         </div>
         <div>
           {message && (
@@ -121,15 +121,13 @@ const ResetDataCard: React.FC = () => {
           )}
           <button
             onClick={() => setShowConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
             Reset All Data
           </button>
-          <p className="text-xs text-gray-500 mt-3 text-center leading-relaxed">
-            Clears all your medicines, medication history, and logs — giving you a clean
-            fresh start. Your profile information will not be affected. Use this if you
-            want to begin a completely new medication plan.
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center leading-relaxed">
+            Permanently deletes all your medicines, medication history, dashboard logs, and statistics. Everything will be cleared — giving you a completely fresh start. Only your profile information will be retained.
           </p>
         </div>
       </div>

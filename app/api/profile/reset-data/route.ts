@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 import Medicine from '@/models/Medicine';
+import MedicationLog from '@/models/MedicationLog';
+import Notification from '@/models/Notification';
+import SensorData from '@/models/SensorData';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -23,19 +26,13 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    const resetTimestamp = new Date();
-
-    // Soft delete all medicines by setting isActive to false
-    await Medicine.updateMany(
-      { userId: user.userId },
-      { isActive: false }
-    );
-
-    // Save the reset timestamp on the user record.
-    // The history and dashboard APIs filter out logs created before this date.
-    await User.findByIdAndUpdate(user.userId, {
-      dataResetAt: resetTimestamp,
-    });
+    // Permanently delete all user data except profile information
+    await Promise.all([
+      Medicine.deleteMany({ userId: user.userId }),
+      MedicationLog.deleteMany({ userId: user.userId }),
+      Notification.deleteMany({ userId: user.userId }),
+      SensorData.deleteMany({ userId: user.userId }),
+    ]);
 
     return NextResponse.json<ApiResponse>({
       success: true,
