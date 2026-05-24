@@ -51,7 +51,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 
   return (
     <div
-      className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow ${
+      className={`rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 transition-all duration-200 ${
         isDeleting ? "opacity-50 pointer-events-none" : ""
       }`}
     >

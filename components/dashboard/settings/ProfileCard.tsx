@@ -50,7 +50,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <button
+        type="button"
+        aria-label="Close confirmation dialog"
+        onClick={onCancel}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
@@ -120,7 +125,7 @@ const ProfileCard = () => {
         setEmail(data.data.email || "");
         setCondition(data.data.condition || "");
         setPreviousCondition(data.data.condition || "");
-        setAge(data.data.age != null ? String(data.data.age) : "");
+        setAge(data.data.age == null ? "" : String(data.data.age));
       }
     } catch (err) {
       console.error("Failed to fetch profile:", err);
@@ -164,18 +169,17 @@ const ProfileCard = () => {
           patientId,
           email,
           condition,
-          age: age !== "" ? Number(age) : null,
+          age: age === "" ? null : Number(age),
         }),
       });
       const data = await res.json();
       if (data.success) {
-        // Show toast notification if condition (user type) was changed
-        if (condition !== previousCondition) {
-          const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+        const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+        if (condition === previousCondition) {
+          setMessage({ type: "success", text: "Profile updated successfully!" });
+        } else {
           setMessage({ type: "success", text: `Profile updated successfully! Condition set to: ${conditionLabel}` });
           setPreviousCondition(condition);
-        } else {
-          setMessage({ type: "success", text: "Profile updated successfully!" });
         }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });

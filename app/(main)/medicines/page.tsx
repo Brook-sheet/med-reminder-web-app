@@ -90,8 +90,60 @@ const Medicines = () => {
     });
   };
 
+  let medicineContent;
+  if (loading) {
+    medicineContent = (
+      <div className="space-y-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="bg-card border border-border/80 rounded-[28px] p-6 shadow-sm shadow-slate-900/10 animate-pulse">
+            <div className="flex gap-4">
+              <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  } else if (medicines.length === 0) {
+    medicineContent = (
+      <div className="bg-card border border-border/80 rounded-[28px] p-12 text-center shadow-sm shadow-slate-900/10">
+        <p className="text-gray-500 dark:text-gray-400 text-lg mb-4">No medicines added yet.</p>
+        <button
+          onClick={handleAdd}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors font-medium mx-auto"
+        >
+          <Plus className="w-5 h-5" />
+          Add Your First Medicine
+        </button>
+      </div>
+    );
+  } else {
+    medicineContent = (
+      <div className="space-y-4">
+        {medicines.map((medicine) => (
+          <MedicineCard
+            key={medicine._id}
+            name={medicine.name}
+            dosage={medicine.dosage}
+            frequency={medicine.frequency}
+            scheduledTimes={medicine.scheduledTimes}
+            notes={medicine.notes}
+            startDate={medicine.startDate}
+            endDate={medicine.endDate}
+            onEdit={() => handleEdit(medicine)}
+            onDelete={() => handleDelete(medicine._id!)}
+            isDeleting={deletingId === medicine._id}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Medicines</h1>
@@ -108,50 +160,7 @@ const Medicines = () => {
           </button>
         </div>
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border p-6 animate-pulse">
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
-                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : medicines.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border p-12 text-center">
-            <p className="text-gray-500 dark:text-gray-400 text-lg mb-4">No medicines added yet.</p>
-            <button
-              onClick={handleAdd}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors font-medium mx-auto"
-            >
-              <Plus className="w-5 h-5" />
-              Add Your First Medicine
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {medicines.map((medicine) => (
-              <MedicineCard
-                key={medicine._id}
-                name={medicine.name}
-                dosage={medicine.dosage}
-                frequency={medicine.frequency}
-                scheduledTimes={medicine.scheduledTimes}
-                notes={medicine.notes}
-                startDate={medicine.startDate}
-                endDate={medicine.endDate}
-                onEdit={() => handleEdit(medicine)}
-                onDelete={() => handleDelete(medicine._id!)}
-                isDeleting={deletingId === medicine._id}
-              />
-            ))}
-          </div>
-        )}
+        {medicineContent}
       </div>
 
       <MedicineModal

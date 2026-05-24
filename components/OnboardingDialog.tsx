@@ -75,120 +75,115 @@ const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-10">
+      <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-sm" />
 
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8">
-        {/* Step indicators */}
-        <div className="flex items-center gap-2 mb-6">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-              step >= 1 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"
-            }`}
-          >
-            1
-          </div>
-          <div className={`flex-1 h-1 rounded transition-colors ${step >= 2 ? "bg-blue-600" : "bg-gray-200"}`} />
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-              step >= 2 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"
-            }`}
-          >
-            2
+      <div className="relative w-full max-w-md overflow-hidden rounded-[32px] border border-slate-200/90 bg-white shadow-[0_30px_70px_rgba(15,23,42,0.16)]">
+        <div className="border-b border-slate-200 px-8 py-7 bg-slate-50">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Onboarding</p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-900">Set up your profile</h2>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-sky-100 text-sky-700 font-semibold">
+              {step}
+            </div>
           </div>
         </div>
 
-        {/* ── Step 1: Condition ── */}
-        {step === 1 && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome! 👋</h2>
-            <p className="text-gray-500 mb-6 text-sm">
-              Let us personalize your experience. What condition are you managing?
-            </p>
+        <div className="p-8">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="h-2.5 w-full rounded-full bg-slate-200">
+              <div className={`h-2.5 rounded-full bg-sky-500 transition-all ${step === 1 ? 'w-1/2' : 'w-full'}`} />
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Step {step} of 2</span>
+          </div>
 
-            <div className="space-y-3 mb-6">
-              {CONDITIONS.map((c) => (
-                <label
-                  key={c.value}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    condition === c.value
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="condition"
-                    value={c.value}
-                    checked={condition === c.value}
-                    onChange={(e) => setCondition(e.target.value)}
-                    className="accent-blue-600 w-4 h-4"
-                  />
-                  <span
-                    className={`font-medium ${
-                      condition === c.value ? "text-blue-700" : "text-gray-700"
+          {step === 1 && (
+            <>
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">Personalize your reminders</h3>
+              <p className="text-sm leading-6 text-slate-500 mb-6">
+                Select your primary condition so reminders and guidance can be tailored to your needs.
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {CONDITIONS.map((c) => (
+                  <label
+                    key={c.value}
+                    className={`flex items-center gap-3 rounded-3xl border p-4 transition-shadow ${
+                      condition === c.value
+                        ? 'border-sky-400 bg-sky-50 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
                     }`}
                   >
-                    {c.label}
-                  </span>
-                </label>
-              ))}
-            </div>
+                    <input
+                      type="radio"
+                      name="condition"
+                      value={c.value}
+                      checked={condition === c.value}
+                      onChange={(e) => setCondition(e.target.value)}
+                      className="accent-sky-600 h-4 w-4"
+                    />
+                    <span className={`text-sm font-medium ${condition === c.value ? 'text-slate-900' : 'text-slate-700'}`}>
+                      {c.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
 
-            {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+              {error && <p className="text-sm text-rose-600 mb-4">{error}</p>}
 
-            <button
-              onClick={handleNext}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-            >
-              Next →
-            </button>
-          </>
-        )}
-
-        {/* ── Step 2: Age ── */}
-        {step === 2 && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Almost done! 🎉</h2>
-            <p className="text-gray-500 mb-6 text-sm">
-              How old are you? This helps us tailor your medication reminders.
-            </p>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Age
-              </label>
-              <input
-                type="number"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                placeholder="Enter your age"
-                min="1"
-                max="120"
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-semibold text-gray-900 outline-none focus:border-blue-600 transition-colors"
-              />
-            </div>
-
-            {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-            <div className="flex gap-3">
               <button
-                onClick={() => { setStep(1); setError(""); }}
-                disabled={saving}
-                className="flex-1 border-2 border-gray-300 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+                onClick={handleNext}
+                className="w-full rounded-3xl bg-sky-600 py-3 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition-colors hover:bg-sky-700"
               >
-                ← Back
+                Continue
               </button>
-              <button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {saving ? "Saving..." : "Let's Go! 🚀"}
-              </button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">Add your age</h3>
+              <p className="text-sm leading-6 text-slate-500 mb-6">
+                Enter your age to help the app tailor reminder timing and guidance.
+              </p>
+
+              <div className="mb-6">
+                <label htmlFor="onboarding-age" className="mb-2 block text-sm font-medium text-slate-700">Your Age</label>
+                <input
+                  id="onboarding-age"
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  placeholder="Enter your age"
+                  min="1"
+                  max="120"
+                  className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-semibold text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                />
+              </div>
+
+              {error && <p className="text-sm text-rose-600 mb-4">{error}</p>}
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={() => { setStep(1); setError(""); }}
+                  disabled={saving}
+                  className="flex-1 rounded-3xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={saving}
+                  className="flex-1 rounded-3xl bg-sky-600 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Complete setup"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

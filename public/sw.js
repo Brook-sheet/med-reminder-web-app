@@ -27,7 +27,7 @@ self.addEventListener('push', (event) => {
       requireInteraction = false;
       vibrate = [200, 100];
       actions = [
-        { action: 'view', title: '📋 View Schedule' },
+        { action: 'view', title: 'View Schedule' },
         { action: 'dismiss', title: 'Dismiss' },
       ];
       break;
@@ -36,7 +36,7 @@ self.addEventListener('push', (event) => {
       requireInteraction = true; // stays until dismissed
       vibrate = [300, 100, 300, 100, 300, 100, 300];
       actions = [
-        { action: 'view', title: '💊 Open App' },
+        { action: 'view', title: 'Open App' },
         { action: 'dismiss', title: 'Snooze' },
       ];
       break;
@@ -45,7 +45,7 @@ self.addEventListener('push', (event) => {
       requireInteraction = false;
       vibrate = [100, 50, 100];
       actions = [
-        { action: 'view', title: '📊 View Stats' },
+        { action: 'view', title: 'View Stats' },
         { action: 'dismiss', title: 'OK' },
       ];
       break;
@@ -54,7 +54,7 @@ self.addEventListener('push', (event) => {
       requireInteraction = riskLevel === 'High';
       vibrate = riskLevel === 'High' ? [200, 100, 200, 100, 200] : [200];
       actions = [
-        { action: 'view', title: '📈 View Dashboard' },
+        { action: 'view', title: 'View Dashboard' },
         { action: 'dismiss', title: 'Dismiss' },
       ];
       break;
@@ -67,12 +67,7 @@ self.addEventListener('push', (event) => {
       ];
   }
 
-  // Add risk emoji prefix to body for adherence alerts
   let displayBody = body || 'You have a medication reminder.';
-  if (riskLevel) {
-    const emoji = riskLevel === 'High' ? '🔴' : riskLevel === 'Moderate' ? '🟡' : '🟢';
-    displayBody = `${emoji} ${displayBody}`;
-  }
 
   const options = {
     body: displayBody,

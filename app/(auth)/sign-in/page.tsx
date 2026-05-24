@@ -72,20 +72,20 @@ const Signin = () => {
   };
 
   return (
-    <div className="h-full flex items-center justify-center bg-gray-800">
+    <div className="relative w-full">
       <OnboardingDialog isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
 
-      <Card className="md:h-auto w-[80%] sm:w-[420px] p-4 sm:p-8">
-        <CardHeader>
-          <CardTitle className="text-center">Login</CardTitle>
-          <CardDescription className="text-sm text-center text-accent-foreground">
-            Enter your credentials to access your account
+      <Card className="w-full overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/95 shadow-[0_28px_56px_rgba(15,23,42,0.08)]">
+        <CardHeader className="px-6 pt-8">
+          <CardTitle className="text-center text-2xl font-semibold text-slate-900">Welcome back</CardTitle>
+          <CardDescription className="mx-auto mt-2 max-w-xs text-center text-sm leading-6 text-slate-500">
+            Sign in to manage your medication reminders and stay on track with your daily schedule.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-2 sm:px-6">
-          <form onSubmit={handleSubmit} className="space-y-3">
+        <CardContent className="px-6 pb-8 pt-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2">
+              <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
@@ -96,6 +96,7 @@ const Signin = () => {
               required
               placeholder="Email"
               disabled={loading}
+              className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
             <Input
               type="password"
@@ -104,17 +105,18 @@ const Signin = () => {
               required
               placeholder="Password"
               disabled={loading}
+              className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
-            <Button className="w-full" type="submit" disabled={loading}>
+            <Button className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200" type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
-          <Separator className="my-4" />
+          <Separator className="my-6" />
 
-          <p className="text-sm text-center text-muted-foreground mt-2">
-            Create new account?{" "}
-            <a href="/sign-up" className="text-blue-500 hover:underline cursor-pointer">Sign Up</a>
+          <p className="text-sm text-center text-slate-500">
+            New to Med App Reminder?{" "}
+            <a href="/sign-up" className="font-semibold text-sky-600 hover:text-sky-700">Create an account</a>
           </p>
         </CardContent>
       </Card>

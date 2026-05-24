@@ -84,11 +84,11 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
     <div className="fixed inset-0 z-[200] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-t-2xl">
           <div>
-            <h2 className="font-bold text-base">🥗 Food Intake Check</h2>
+            <h2 className="font-bold text-base">Food Intake Check</h2>
             <p className="text-xs opacity-80 mt-0.5">Help us assess your dietary habits</p>
           </div>
           <button onClick={onClose} className="hover:text-teal-200">
@@ -101,14 +101,14 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
             // ── Result view ──
             <div className="text-center py-4">
               <CheckCircle className="w-14 h-14 text-teal-500 mx-auto mb-3" />
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Thank you!</h3>
-              <p className="text-gray-500 text-sm mb-4">Your food intake has been recorded.</p>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Thank you!</h3>
+              <p className="text-gray-500 dark:text-gray-300 text-sm mb-4">Your food intake has been recorded.</p>
               <div className={`rounded-xl border p-4 mb-4 ${riskColor}`}>
                 <p className="text-sm font-medium mb-1">Current Dietary Risk Level</p>
                 <p className="text-2xl font-bold">{result.riskLevel} Risk</p>
                 <p className="text-sm mt-1">Score: {result.normalizedScore}/100</p>
               </div>
-              <p className="text-xs text-gray-400 mb-4">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
                 Based on WHO nutrition guidelines and your recent dietary behavior.
               </p>
               <button
@@ -130,17 +130,17 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                         ? 'bg-teal-500'
                         : i === currentIndex
                           ? 'bg-teal-400'
-                          : 'bg-gray-200'
+                          : 'bg-gray-200 dark:bg-gray-700'
                       }`}
                   />
                 ))}
               </div>
-              <p className="text-xs text-gray-400 mb-1">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
                 Question {currentIndex + 1} of {questions.length}
               </p>
 
               {/* Question */}
-              <p className="text-sm font-semibold text-gray-800 mb-4 leading-relaxed">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-4 leading-relaxed">
                 {currentQ.question}
               </p>
 
@@ -151,8 +151,8 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                     key={opt.value}
                     onClick={() => handleSelect(opt.value, opt.score)}
                     className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm transition-all leading-snug ${selectedAnswer?.answer === opt.value
-                        ? 'border-teal-500 bg-teal-50 text-teal-800 font-medium'
-                        : 'border-gray-200 text-gray-700 hover:border-teal-300 hover:bg-gray-50'
+                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-500/10 text-teal-800 dark:text-teal-200 font-medium'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-teal-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                   >
                     <div className="flex items-start gap-2">

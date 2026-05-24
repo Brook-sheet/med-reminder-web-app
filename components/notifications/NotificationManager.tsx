@@ -267,13 +267,13 @@ const NotificationManager: React.FC = () => {
 
           void saveNotificationToDB({
             type:         'upcoming_reminder',
-            title:        '⏰ Upcoming Medication Reminder',
+            title:        'Upcoming Medication Reminder',
             message:      `${item.name} is scheduled at ${item.time} — 30 minutes from now!`,
             medicineName: item.name,
           });
 
           void sendBrowserPush(
-            '⏰ Upcoming Medication Reminder',
+            'Upcoming Medication Reminder',
             `${item.name} is due at ${item.time} — 30 minutes away! Consider eating something first.`
           );
 
@@ -313,13 +313,13 @@ const NotificationManager: React.FC = () => {
 
           void saveNotificationToDB({
             type:         'due_alarm',
-            title:        '🚨 Time to Take Your Medication!',
+            title:        'Time to Take Your Medication',
             message:      `It's time to take ${item.name}. Open your pillbox now.`,
             medicineName: item.name,
           });
 
           void sendBrowserPush(
-            '🚨 Medication Due Now!',
+            'Medication Due Now',
             `Time to take your ${item.name}. Open your pillbox to confirm intake.`
           );
         }
@@ -350,7 +350,7 @@ const NotificationManager: React.FC = () => {
 
           void saveNotificationToDB({
             type:          'intake_confirmed',
-            title:         '✅ Medication Intake Confirmed',
+            title:         'Medication Intake Confirmed',
             message:       `${item.name} intake confirmed by sensor. Adherence: ${rate}%.`,
             medicineName:  item.name,
             riskLevel:     risk,
@@ -358,7 +358,7 @@ const NotificationManager: React.FC = () => {
           });
 
           void sendBrowserPush(
-            '✅ Medication Confirmed!',
+            'Medication Confirmed',
             `${item.name} intake recorded. Adherence: ${rate}% — ${risk} Risk.`
           );
         }
@@ -417,23 +417,22 @@ const NotificationManager: React.FC = () => {
 
       {/* ── Due alarm popup ── */}
       {activeNotification?.type === 'due' && (
-        <div className="fixed top-4 right-4 z-[150] w-80 bg-white rounded-2xl shadow-2xl border border-red-200 overflow-hidden animate-in slide-in-from-right duration-300">
-          <div className="bg-gradient-to-r from-red-500 to-red-600 px-4 py-3 flex items-center gap-2">
-            <span className="text-xl animate-pulse">🚨</span>
-            <span className="text-white font-bold text-sm">Medication Due Now!</span>
+        <div className="fixed top-4 right-4 z-150 w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-200 dark:border-red-700 overflow-hidden animate-in slide-in-from-right duration-300">
+          <div className="bg-linear-to-r from-red-500 to-red-600 px-4 py-3">
+            <span className="text-white font-bold text-sm">Medication Due Now</span>
           </div>
-          <div className="p-4">
-            <p className="text-gray-800 font-semibold text-sm mb-1">
-              Take your medication now! ⏰
+          <div className="p-4 space-y-3">
+            <p className="text-gray-800 dark:text-gray-100 font-semibold text-sm">
+              Take your medication now.
             </p>
-            <p className="text-gray-500 text-sm mb-3">
+            <p className="text-gray-500 dark:text-gray-300 text-sm">
               It&apos;s time for{' '}
-              <span className="font-semibold text-red-600">
+              <span className="font-semibold text-red-600 dark:text-red-300">
                 {activeNotification.medicineName}
               </span>{' '}
               ({activeNotification.scheduledTime}). Please open your pillbox to confirm.
             </p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 dark:text-gray-500">
               This notification will stop once the sensor detects your pillbox is opened.
             </p>
           </div>

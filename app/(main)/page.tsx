@@ -51,7 +51,7 @@ export default function Home() {
   const nextReminderMed = stats?.nextReminder?.medicineName ?? "All done for today!";
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -83,7 +83,7 @@ export default function Home() {
           />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6 mb-6">
+        <div className="bg-card border border-border/80 shadow-sm shadow-slate-900/10 rounded-[28px] p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             Today&apos;s Schedule
           </h2>
@@ -94,7 +94,7 @@ export default function Home() {
           />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6 mb-6">
+        <div className="bg-card border border-border/80 shadow-sm shadow-slate-900/10 rounded-[28px] p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Upcoming</h2>
           <UpcomingList />
         </div>

@@ -17,18 +17,15 @@ interface IntakeConfirmedNotificationProps {
 
 const RISK_STYLES = {
   Low: {
-    badge: 'bg-green-100 text-green-800 border-green-200',
-    icon: '🟢',
-    desc: 'Great job! Keep up the healthy habits.',
+    badge: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300',
+    desc: 'Great job. Keep up the healthy habits.',
   },
   Moderate: {
-    badge: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    icon: '🟡',
+    badge: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700 dark:text-yellow-300',
     desc: 'Consider improving your medication adherence.',
   },
   High: {
-    badge: 'bg-red-100 text-red-800 border-red-200',
-    icon: '🔴',
+    badge: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:border-red-700 dark:text-red-300',
     desc: 'Please consult your doctor about your medication schedule.',
   },
 };
@@ -44,35 +41,34 @@ const IntakeConfirmedNotification: React.FC<IntakeConfirmedNotificationProps> = 
   const style = RISK_STYLES[riskLevel];
 
   return (
-    <div className="fixed top-4 right-4 z-[150] w-80 bg-white rounded-2xl shadow-2xl border border-green-100 overflow-hidden animate-in slide-in-from-right duration-300">
+    <div className="fixed top-4 right-4 z-150 w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-100 dark:border-green-900/30 overflow-hidden animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">✅</span>
-          <span className="text-white font-semibold text-sm">Medication Taken!</span>
+      <div className="bg-linear-to-r from-green-500 to-green-600 px-4 py-3 flex items-center justify-between">
+        <div>
+          <span className="text-white font-semibold text-sm">Medication Taken</span>
         </div>
         <button onClick={onClose} className="text-white/80 hover:text-white">
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 space-y-4">
         {/* Confirmation message */}
-        <p className="text-gray-800 font-medium text-sm mb-1">
-          Excellent! 🎉 Intake confirmed by sensor.
+        <p className="text-gray-800 dark:text-gray-100 font-medium text-sm mb-1">
+          Intake confirmed by sensor.
         </p>
-        <p className="text-gray-500 text-sm mb-4">
-          <span className="font-semibold text-gray-700">{medicineName}</span> has been successfully recorded.
+        <p className="text-gray-500 dark:text-gray-300 text-sm mb-4">
+          <span className="font-semibold text-gray-700 dark:text-gray-100">{medicineName}</span> has been successfully recorded.
         </p>
 
         {/* Adherence stats */}
-        <div className="bg-gray-50 rounded-xl p-3 mb-3 border border-gray-100">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 mb-3 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 font-medium">Current Adherence Rate</span>
-            <span className="text-lg font-bold text-gray-900">{adherenceRate}%</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Current Adherence Rate</span>
+            <span className="text-lg font-bold text-gray-900 dark:text-white">{adherenceRate}%</span>
           </div>
           {/* Progress bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
             <div
               className={`h-2 rounded-full transition-all ${
                 riskLevel === 'Low' ? 'bg-green-500' : riskLevel === 'Moderate' ? 'bg-yellow-500' : 'bg-red-500'
@@ -81,21 +77,21 @@ const IntakeConfirmedNotification: React.FC<IntakeConfirmedNotificationProps> = 
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">Risk Level</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Risk Level</span>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${style.badge}`}>
-              {style.icon} {riskLevel} Risk
+              {riskLevel} Risk
             </span>
           </div>
-          <p className="text-xs text-gray-400 mt-2">{style.desc}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{style.desc}</p>
         </div>
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors font-medium"
+            className="flex-1 py-2 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-200 rounded-lg transition-colors font-medium"
           >
-            Close ✕
+            Close
           </button>
           {showFoodMonitoring && (
             <button

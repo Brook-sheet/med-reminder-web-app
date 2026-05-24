@@ -34,7 +34,7 @@ const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status })
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+    <div className="rounded-[28px] border border-border/70 bg-card p-4 shadow-lg shadow-slate-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl">
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">{name}</h3>

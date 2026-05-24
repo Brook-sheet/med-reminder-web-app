@@ -43,11 +43,32 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
     onClose();
   };
 
+  const getPasswordValidation = (password: string) => {
+    const len = password.length;
+    return {
+      len,
+      hasLetter: /[a-zA-Z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasSymbol: /[^a-zA-Z0-9]/.test(password),
+    };
+  };
+
+  const getPasswordError = (password: string): string | undefined => {
+    const { len, hasLetter, hasNumber } = getPasswordValidation(password);
+    if (len < 6) return "Password must be at least 6 characters.";
+    if (!hasLetter || !hasNumber) return "Password must contain at least one letter and one number.";
+    if (len < 10) return "Password is too weak. Make sure it has letters and numbers and is at least 6 characters.";
+    return undefined;
+  };
+
   const validateFields = (): boolean => {
     const errors: FieldErrors = {};
 
     if (!newPassword) {
       errors.newPassword = "New password is required.";
+    } else {
+      const passwordError = getPasswordError(newPassword);
+      if (passwordError) errors.newPassword = passwordError;
     }
 
     if (!confirmPassword) {
@@ -56,36 +77,11 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
       errors.confirmPassword = "Passwords do not match.";
     }
 
-    // Additional strength validation
-    const hasLetter = /[a-zA-Z]/.test(newPassword);
-    const hasNumber = /[0-9]/.test(newPassword);
-    const hasSymbol = /[^a-zA-Z0-9]/.test(newPassword);
-    const len = newPassword.length;
-
-    if (!errors.newPassword) {
-      if (len < 6) {
-        errors.newPassword = "Password must be at least 6 characters.";
-      } else if (!hasLetter || !hasNumber) {
-        errors.newPassword = "Password must contain at least one letter and one number.";
-      } else {
-        // Determine strength and reject Weak
-        if (len >= 12 && hasLetter && hasNumber && hasSymbol) {
-          // Strong - ok
-        } else if (len >= 10 && hasLetter && hasNumber) {
-          // Good - ok
-        } else if (len >= 6 && hasLetter && hasNumber) {
-          // Fair - ok
-        } else {
-          errors.newPassword = "Password is too weak. Make sure it has letters and numbers and is at least 6 characters.";
-        }
-      }
-    }
-
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
     setApiError("");
     setSuccessMessage("");
@@ -127,7 +123,7 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
     if (!newPassword) return null;
 
     const hasLetter = /[a-zA-Z]/.test(newPassword);
-    const hasNumber = /[0-9]/.test(newPassword);
+    const hasNumber = /\d/.test(newPassword);
     const hasSymbol = /[^a-zA-Z0-9]/.test(newPassword);
     const len = newPassword.length;
 
@@ -144,9 +140,11 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      <button
+        type="button"
+        aria-label="Close password modal"
         onClick={handleClose}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
       />
 
       {/* Modal */}
@@ -321,22 +319,28 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
               {[
                 { label: "At least 6 characters", met: newPassword.length >= 6 },
                 { label: "Contains a letter", met: /[a-zA-Z]/.test(newPassword) },
-                { label: "Contains a number", met: /[0-9]/.test(newPassword) },
-              ].map(({ label, met }) => (
-                <li
-                  key={label}
-                  className={`text-xs flex items-center gap-1.5 ${
-                    newPassword
-                      ? met
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-red-500 dark:text-red-400"
-                      : "text-gray-500 dark:text-gray-400"
-                  }`}
-                >
-                  <span className="font-bold">{newPassword ? (met ? "+" : "-") : "-"}</span>
-                  {label}
-                </li>
-              ))}
+                { label: "Contains a number", met: /\d/.test(newPassword) },
+              ].map(({ label, met }) => {
+                let statusClass = "text-gray-500 dark:text-gray-400";
+                let symbol = "-";
+
+                if (newPassword) {
+                  if (met) {
+                    statusClass = "text-green-600 dark:text-green-400";
+                    symbol = "+";
+                  } else {
+                    statusClass = "text-red-500 dark:text-red-400";
+                    symbol = "-";
+                  }
+                }
+
+                return (
+                  <li key={label} className={`text-xs flex items-center gap-1.5 ${statusClass}`}>
+                    <span className="font-bold">{symbol}</span>
+                    {label}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

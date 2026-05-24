@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const Settings = () => {
   return (
-    <div className="min-h-full bg-gray-50 dark:bg-gray-900 p-6 pb-12">
+    <div className="min-h-full bg-background p-6 pb-12">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
@@ -22,7 +22,7 @@ const Settings = () => {
           <ProfileCard />
 
           {/* 2. Appearance */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="bg-card p-6 rounded-[28px] shadow-sm border border-border/80">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Appearance</h2>
             <div className="flex items-center justify-between">
               <div>

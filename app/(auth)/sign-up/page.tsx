@@ -22,7 +22,7 @@ const getPasswordStrength = (password: string): { label: string; color: string; 
   if (!password) return null;
 
   const hasLetter = /[a-zA-Z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
+  const hasNumber = /\d/.test(password);
   const hasSymbol = /[^a-zA-Z0-9]/.test(password);
   const len = password.length;
 
@@ -54,7 +54,7 @@ const Signup = () => {
 
   const strength = getPasswordStrength(password);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -111,46 +111,51 @@ const Signup = () => {
   };
 
   return (
-    <div className="h-full flex items-center justify-center bg-gray-800">
+    <div className="relative w-full">
       <OnboardingDialog isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
 
-      <Card className="md:h-auto w-[80%] sm:w-[420px] p-4 sm:p-8">
-        <CardHeader>
-          <CardTitle className="text-center">Create Account</CardTitle>
-          <CardDescription className="text-sm text-center text-accent-foreground">
-            Enter your details to create your account
+      <Card className="w-full overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/95 shadow-[0_28px_56px_rgba(15,23,42,0.08)]">
+        <CardHeader className="px-6 pt-8">
+          <CardTitle className="text-center text-2xl font-semibold text-slate-900">Create your account</CardTitle>
+          <CardDescription className="mx-auto mt-2 max-w-xs text-center text-sm leading-6 text-slate-500">
+            Start using Med App Reminder to keep your medication routine on track.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-2 sm:px-6">
-          <form onSubmit={handleSubmit} className="space-y-3">
+        <CardContent className="px-6 pb-8 pt-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2">
+              <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
-            <Input
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-              placeholder="First Name"
-              disabled={loading}
-            />
-            <Input
-              type="text"
-              value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-              placeholder="Middle Name (optional)"
-              disabled={loading}
-            />
-            <Input
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-              placeholder="Last Name"
-              disabled={loading}
-            />
+            <div className="grid gap-3">
+              <Input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                placeholder="First Name"
+                disabled={loading}
+                className="rounded-3xl border-slate-200 bg-slate-50/80"
+              />
+              <Input
+                type="text"
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
+                placeholder="Middle Name (optional)"
+                disabled={loading}
+                className="rounded-3xl border-slate-200 bg-slate-50/80"
+              />
+              <Input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                placeholder="Last Name"
+                disabled={loading}
+                className="rounded-3xl border-slate-200 bg-slate-50/80"
+              />
+            </div>
             <Input
               type="email"
               value={email}
@@ -158,6 +163,7 @@ const Signup = () => {
               required
               placeholder="Email"
               disabled={loading}
+              className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
             <Input
               type="password"
@@ -168,23 +174,24 @@ const Signup = () => {
               required
               placeholder="Password"
               disabled={loading}
+              className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
             {strength && (
               <div className="space-y-2">
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
                   <div
                     className={`h-1.5 rounded-full transition-all duration-300 ${strength.color} ${strength.width}`}
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Strength: <span className="font-medium">{strength.label}</span>
+                <p className="text-xs text-slate-500">
+                  Strength: <span className="font-semibold text-slate-900">{strength.label}</span>
                 </p>
               </div>
             )}
             {(showPasswordReq || password) && (
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-3 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300">
-              <p className="font-medium mb-1">Password requirements:</p>
-              <ul className="space-y-0.5">
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-600">
+              <p className="font-medium text-slate-900 mb-3">Password requirements</p>
+              <ul className="space-y-2">
                 {[
                   { label: "At least 6 characters", met: password.length >= 6 },
                   { label: "Contains a letter", met: /[a-zA-Z]/.test(password) },
@@ -192,15 +199,24 @@ const Signup = () => {
                 ].map(({ label, met }) => (
                   <li
                     key={label}
-                    className={`flex items-center gap-2 ${password
+                    className={`flex items-center gap-3 ${password
                       ? met
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-red-500 dark:text-red-400"
-                      : "text-gray-500 dark:text-gray-400"
+                        ? "text-emerald-700"
+                        : "text-rose-600"
+                      : "text-slate-500"
                     }`}
                   >
-                    <span className="font-semibold">{password ? (met ? "✓" : "✕") : "•"}</span>
-                    {label}
+                    <span
+                      className={
+                        `inline-flex h-3.5 w-3.5 rounded-full ${password
+                          ? met
+                            ? 'bg-emerald-600'
+                            : 'bg-rose-600'
+                          : 'bg-slate-300'
+                        }`
+                      }
+                    />
+                    <span>{label}</span>
                   </li>
                 ))}
               </ul>
@@ -213,22 +229,23 @@ const Signup = () => {
               required
               placeholder="Confirm Password"
               disabled={loading}
+              className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
             {confirmPassword && password && (
-              <p className={`text-xs ${confirmPassword === password ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+              <p className={`text-xs ${confirmPassword === password ? "text-emerald-700" : "text-rose-600"}`}>
                 {confirmPassword === password ? "Passwords match." : "Passwords do not match."}
               </p>
             )}
-            <Button className="w-full" type="submit" disabled={loading}>
+            <Button className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Sign Up"}
             </Button>
           </form>
 
-          <Separator className="my-4" />
+          <Separator className="my-6" />
 
-          <p className="text-sm text-center text-muted-foreground mt-2">
+          <p className="text-sm text-center text-slate-500">
             Already have an account?{" "}
-            <a href="/sign-in" className="text-blue-500 hover:underline cursor-pointer">Sign In</a>
+            <a href="/sign-in" className="font-semibold text-sky-600 hover:text-sky-700">Sign In</a>
           </p>
         </CardContent>
       </Card>

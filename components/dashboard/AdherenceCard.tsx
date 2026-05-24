@@ -14,12 +14,6 @@ interface AdherenceData {
   aiInsight: string;
 }
 
-const riskColors = {
-  Low:      'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300',
-  Moderate: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300',
-  High:     'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300',
-};
-
 const riskBadge = {
   Low:      'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
   Moderate: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
@@ -73,9 +67,9 @@ export default function AdherenceCard() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-        <div className="h-20 bg-gray-100 dark:bg-gray-700 rounded" />
+      <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 animate-pulse">
+        <div className="h-4 bg-muted rounded w-1/3 mb-4" />
+        <div className="h-20 bg-muted/70 rounded" />
       </div>
     );
   }
@@ -90,7 +84,7 @@ export default function AdherenceCard() {
     data.weeklyTrend === 'declining' ? 'text-red-600 dark:text-red-400'   : 'text-gray-500 dark:text-gray-400';
 
   return (
-    <div className={`rounded-lg border p-6 ${riskColors[data.riskLevel]}`}>
+    <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">AI Adherence Analysis</h2>
         <span className={`px-3 py-1 rounded-full text-sm font-semibold ${riskBadge[data.riskLevel]}`}>

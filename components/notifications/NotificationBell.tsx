@@ -16,10 +16,10 @@ interface NotificationItem {
 }
 
 const TYPE_ICON: Record<string, string> = {
-  upcoming_reminder: '🔔',
-  due_alarm: '🚨',
-  intake_confirmed: '✅',
-  adherence_alert: '📊',
+  upcoming_reminder: 'Reminder',
+  due_alarm: 'Due',
+  intake_confirmed: 'Confirmed',
+  adherence_alert: 'Alert',
 };
 
 const RISK_COLOR: Record<string, string> = {
@@ -141,9 +141,9 @@ const NotificationBell: React.FC = () => {
     <div className="fixed bottom-6 right-6 z-[100]" ref={panelRef}>
       {/* ── Notification Panel ── */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-80 max-h-[520px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="absolute bottom-16 right-0 w-[min(92vw,20rem)] max-h-[520px] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
+          <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
             <span className="font-semibold text-sm">Notifications</span>
             <div className="flex items-center gap-2">
               {notifications.length > 0 && (
@@ -165,39 +165,39 @@ const NotificationBell: React.FC = () => {
           {/* Notification List */}
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
                 <Bell className="w-10 h-10 mb-2 opacity-30" />
                 <p className="text-sm">No notifications yet</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {notifications.map((n) => (
                   <li
                     key={n._id}
-                    className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${
-                      !n.read ? 'bg-blue-50' : ''
+                    className={`flex items-center gap-3 px-4 py-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                      !n.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                     }`}
                   >
-                    <span className="text-xl mt-0.5 shrink-0">
-                      {TYPE_ICON[n.type] ?? '🔔'}
+                    <span className="inline-flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.24em]">
+                      {TYPE_ICON[n.type] ?? 'Notification'}
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-900 truncate">{n.title}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
-                      {n.riskLevel != null && (
-                        <p className={`text-xs font-medium mt-1 ${RISK_COLOR[n.riskLevel] ?? ''}`}>
-                          {n.riskLevel} Risk
-                          {n.adherenceRate != null ? ` · ${n.adherenceRate}% adherence` : ''}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-0.5">{formatTime(n.createdAt)}</p>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{n.title}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{n.message}</p>
+                      <div className="flex flex-col gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className={`font-medium ${n.riskLevel ? RISK_COLOR[n.riskLevel] : 'text-slate-500 dark:text-slate-400'}`}>
+                          {n.riskLevel ? `${n.riskLevel} Risk${n.adherenceRate != null ? ` · ${n.adherenceRate}% adherence` : ''}` : n.adherenceRate != null ? `${n.adherenceRate}% adherence` : ''}
+                        </span>
+                        <span>{formatTime(n.createdAt)}</span>
+                      </div>
                     </div>
                     <button
                       onClick={() => { void handleDelete(n._id); }}
-                      className="shrink-0 text-gray-300 hover:text-red-400 transition-colors mt-0.5"
+                      className="shrink-0 self-center inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-300 transition-colors"
                       title="Delete"
+                      aria-label="Delete notification"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </li>
                 ))}
@@ -210,7 +210,7 @@ const NotificationBell: React.FC = () => {
       {/* ── Bell Button ── */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className="relative w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+        className="relative w-14 h-14 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         aria-label="Notifications"
       >
         <Bell className="w-6 h-6" />

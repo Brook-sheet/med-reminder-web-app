@@ -5,9 +5,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
-import { CiPill, CiSettings } from "react-icons/ci";
+import { CiPill, CiSettings, CiLogout } from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
-import { CiLogout } from "react-icons/ci";
 
 const Navbar = () => {
   const router = useRouter();
@@ -25,7 +24,7 @@ const Navbar = () => {
     <div>
       <button
         type="button"
-        className="absolute top-3 right-4 inline-flex items-center justify-center p-2 rounded-md text-gray-800 dark:text-gray-100 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white z-30 md:hidden"
+        className="absolute top-4 right-4 inline-flex items-center justify-center rounded-2xl border border-border/80 bg-card p-2 text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900 z-30 md:hidden"
         onClick={() => setOpen((current) => !current)}
         aria-label="Toggle navigation menu"
       >
@@ -33,80 +32,76 @@ const Navbar = () => {
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-10 bg-black/20 md:hidden"
+        <button
+          type="button"
+          className="fixed inset-0 z-10 bg-slate-950/40 md:hidden"
+          aria-label="Close navigation menu"
           onClick={closeSidebar}
         />
       )}
 
-      <div
-        className={`p-5 w-1/2 h-screen bg-gray-100 dark:bg-gray-900 border-r border-gray-400 dark:border-gray-700 z-20 fixed top-0 transition-transform ease-out delay-150 duration-200 ${
+      <aside
+        className={`fixed top-0 z-20 h-screen w-72 overflow-hidden border-r border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 md:w-64 md:left-0`}
+        } md:translate-x-0`}
       >
-        <div className="flex flex-col justify-start items-center">
-          <h1 className="text-base text-center font-bold text-blue-900 dark:text-blue-400 border-b border-gray-300 dark:border-gray-700 pb-4 w-full">
-            Med App Reminder
-          </h1>
+        <div className="flex h-full flex-col gap-6 p-6">
+          <div className="flex flex-col gap-3 rounded-[28px] border border-border/70 bg-background/90 p-5 shadow-sm shadow-slate-900/5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+              <span className="text-sm font-semibold uppercase tracking-[0.2em]">MR</span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Med App Reminder</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Health-first medication tracking.</p>
+            </div>
+          </div>
 
-          <div className="my-4 border-b border-gray-300 dark:border-gray-700 pb-4 w-full">
+          <nav className="space-y-3">
             <Link
               href="/"
               onClick={closeSidebar}
-              className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto"
+              className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
             >
-              <MdOutlineSpaceDashboard className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
-              <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
-                Dashboard
-              </h3>
-            </Link>
-            <Link
-              href="/medicines"
-              onClick={closeSidebar}
-              className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto"
-            >
-              <CiPill className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
-              <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
-                Medicines
-              </h3>
-            </Link>
-          </div>
+            <MdOutlineSpaceDashboard className="h-6 w-6" />
+            <span className="font-semibold">Dashboard</span>
+          </Link>
+          <Link
+            href="/medicines"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+          >
+            <CiPill className="h-6 w-6" />
+            <span className="font-semibold">Medicines</span>
+          </Link>
+          <Link
+            href="/history"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+          >
+            <GoHistory className="h-6 w-6" />
+            <span className="font-semibold">History</span>
+          </Link>
+          <Link
+            href="/settings"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+          >
+            <CiSettings className="h-6 w-6" />
+            <span className="font-semibold">Settings</span>
+          </Link>
+        </nav>
 
-          <div className="my-4 border-b border-gray-300 dark:border-gray-700 pb-4 w-full">
-            <Link
-              href="/history"
-              onClick={closeSidebar}
-              className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto"
+          <div className="mt-auto">
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center gap-3 rounded-3xl border border-transparent bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
             >
-              <GoHistory className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
-              <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
-                History
-              </h3>
-            </Link>
-            <Link
-              href="/settings"
-              onClick={closeSidebar}
-              className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto"
-            >
-              <CiSettings className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
-              <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
-                Settings
-              </h3>
-            </Link>
-          </div>
-
-          <div className="my-4 border-b border-gray-300 dark:border-gray-700 pb-4 w-full">
-            <button onClick={handleLogout} className="w-full">
-              <div className="flex mb-2 justify-start items-center gap-2 px-4 hover:bg-red-600 dark:hover:bg-red-700 p-2 rounded-md group cursor-pointer hover:shadow-lg m-auto">
-                <CiLogout className="text-2xl text-gray-800 dark:text-gray-200 group-hover:text-white" />
-                <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 group-hover:text-white">
-                  Logout
-                </h3>
-              </div>
+              <CiLogout className="h-5 w-5" />
+              Logout
             </button>
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 };

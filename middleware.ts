@@ -11,7 +11,7 @@ const SECRET = new TextEncoder().encode(
 
 // Pages that do NOT require login
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
-// ✅ Public API routes (ESP32 INCLUDED)
+// Public API routes (ESP32 INCLUDED)
 const PUBLIC_API_ROUTES = [
   '/api/auth',
   '/api/auth/login',
@@ -46,7 +46,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── ✅ Allow ALL ESP32 / sensor API routes (NO AUTH) ────────────────
+  // ── Allow ALL ESP32 / sensor API routes (NO AUTH) ────────────────
   if (isPublicApi(pathname)) {
     return NextResponse.next();
   }
