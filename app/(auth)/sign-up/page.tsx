@@ -9,6 +9,14 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import OnboardingDialog from "@/components/OnboardingDialog";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validatePassword,
+  validateConfirmPassword,
+  collectErrors,
+} from "@/lib/validations";
 
 const getPasswordStrength = (password: string): { label: string; color: string; width: string } | null => {
   if (!password) return null;
@@ -54,6 +62,7 @@ const Signup = () => {
     e.preventDefault();
     setError("");
 
+<<<<<<< HEAD
     const passwordError = validatePassword(password);
     if (passwordError) {
       setError(passwordError);
@@ -62,8 +71,23 @@ const Signup = () => {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
+=======
+    // ── Client-side validation ──────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      password: validatePassword(password),
+      confirmPassword: validateConfirmPassword(password, confirmPassword),
+    });
+
+    if (validationError) {
+      setError(validationError);
+>>>>>>> main
       return;
     }
+    // ───────────────────────────────────────────────────────────────────────
 
     setLoading(true);
     try {
@@ -119,7 +143,10 @@ const Signup = () => {
                 {error}
               </div>
             )}
+<<<<<<< HEAD
 
+=======
+>>>>>>> main
             <Input
               type="text"
               value={firstName}
@@ -151,6 +178,7 @@ const Signup = () => {
               placeholder="Email"
               disabled={loading}
             />
+<<<<<<< HEAD
 
             {/* Password field with strength indicator */}
             <div className="space-y-1.5">
@@ -231,6 +259,24 @@ const Signup = () => {
               )}
             </div>
 
+=======
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Password"
+              disabled={loading}
+            />
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="Confirm Password"
+              disabled={loading}
+            />
+>>>>>>> main
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Sign Up"}
             </Button>

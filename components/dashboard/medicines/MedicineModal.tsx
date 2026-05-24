@@ -41,6 +41,8 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const today = new Date().toISOString().split("T")[0];
+
   useEffect(() => {
     if (initialData) {
       setName(initialData.name);
@@ -49,7 +51,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       setScheduledTimes(
         initialData.scheduledTimes.length > 0 ? initialData.scheduledTimes : ["8:00 AM"]
       );
-      setStartDate(initialData.startDate || new Date().toISOString().split("T")[0]);
+      setStartDate(initialData.startDate || today);
       setEndDate(initialData.endDate || "");
       setNotes(initialData.notes || "");
     } else {
@@ -57,12 +59,12 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       setDosage("");
       setFrequency("Once daily");
       setScheduledTimes(["8:00 AM"]);
-      setStartDate(new Date().toISOString().split("T")[0]);
+      setStartDate(today);
       setEndDate("");
       setNotes("");
     }
     setError("");
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, today]);
 
   const addTime = () => setScheduledTimes((prev) => [...prev, "8:00 AM"]);
   const removeTime = (i: number) =>
@@ -77,6 +79,12 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
     if (!name.trim()) { setError("Medicine name is required."); return; }
     if (!dosage.trim()) { setError("Dosage is required."); return; }
     if (!startDate) { setError("Start date is required."); return; }
+
+    if (startDate < today) {
+      setError("Start date cannot be in the past.");
+      return;
+    }
+
     if (endDate && endDate < startDate) {
       setError("End date cannot be before start date.");
       return;
@@ -154,6 +162,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              min={today}
               disabled={saving}
               className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
@@ -168,7 +177,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              min={startDate}
+              min={startDate || today}
               disabled={saving}
               className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />

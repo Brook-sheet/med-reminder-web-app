@@ -4,9 +4,22 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { User, RotateCcw, AlertTriangle, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
+=======
+import Toast from "@/components/ui/Toast";
+import { User, RotateCcw, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  validateName,
+  validateOptionalName,
+  validateEmail,
+  validateAge,
+  collectErrors,
+} from "@/lib/validations";
+>>>>>>> main
 
 const CONDITIONS = [
   { value: "", label: "Not specified" },
@@ -17,6 +30,7 @@ const CONDITIONS = [
   { value: "None", label: "None" },
 ];
 
+// ── Reusable Confirmation Modal ───────────────────────────────────────────────
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
@@ -43,30 +57,29 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h3>
+          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
         </div>
-        <p className="text-gray-600 dark:text-gray-300 text-sm mb-6 leading-relaxed">{message}</p>
+        <p className="text-gray-600 text-sm mb-6 leading-relaxed">{message}</p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2.5 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="flex-1 border-2 border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             No, Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${
-              confirmColor === "red"
+            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor === "red"
                 ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
                 : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
-            }`}
+              }`}
           >
             {loading ? "Processing..." : `Yes, ${confirmLabel}`}
           </button>
@@ -76,10 +89,11 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   );
 };
 
-// ── ProfileCard ───────────────────────────────────────────────────────────────
+// ── Main ProfileCard ──────────────────────────────────────────────────────────
 const ProfileCard = () => {
   const router = useRouter();
 
+  // Profile state
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -92,7 +106,12 @@ const ProfileCard = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [previousCondition, setPreviousCondition] = useState("");
+
+  // Modal states
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -108,6 +127,7 @@ const ProfileCard = () => {
         setPatientId(data.data.patientId || "");
         setEmail(data.data.email || "");
         setCondition(data.data.condition || "");
+        setPreviousCondition(data.data.condition || "");
         setAge(data.data.age != null ? String(data.data.age) : "");
       }
     } catch (err) {
@@ -121,9 +141,26 @@ const ProfileCard = () => {
     fetchProfile();
   }, [fetchProfile]);
 
+  // ── Save Profile ────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    setSaving(true);
     setMessage(null);
+
+    // ── Client-side validation ─────────────────────────────────────────────
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      age: validateAge(age),
+    });
+
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    setSaving(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PUT",
@@ -140,7 +177,18 @@ const ProfileCard = () => {
       });
       const data = await res.json();
       if (data.success) {
+<<<<<<< HEAD
         setMessage({ type: "success", text: "Profile updated successfully." });
+=======
+        // Show toast notification if condition (user type) was changed
+        if (condition !== previousCondition) {
+          const conditionLabel = CONDITIONS.find(c => c.value === condition)?.label || condition;
+          setMessage({ type: "success", text: `Profile updated successfully! Condition set to: ${conditionLabel}` });
+          setPreviousCondition(condition);
+        } else {
+          setMessage({ type: "success", text: "Profile updated successfully!" });
+        }
+>>>>>>> main
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile." });
       }
@@ -152,6 +200,7 @@ const ProfileCard = () => {
     }
   };
 
+<<<<<<< HEAD
   const handleDeleteAccount = async () => {
     setDeleting(true);
     try {
@@ -390,6 +439,9 @@ export const ResetDataCard = () => {
   const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+=======
+  // ── Reset Data ──────────────────────────────────────────────────────────────
+>>>>>>> main
   const handleResetData = async () => {
     setResetting(true);
     try {
@@ -414,8 +466,48 @@ export const ResetDataCard = () => {
     }
   };
 
+  // ── Delete Account ──────────────────────────────────────────────────────────
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/profile/delete-account", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setShowDeleteConfirm(false);
+        router.push("/sign-in");
+        router.refresh();
+      } else {
+        setShowDeleteConfirm(false);
+        setMessage({ type: "error", text: data.error || "Deletion failed. Please try again." });
+      }
+    } catch {
+      setShowDeleteConfirm(false);
+      setMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Loading Skeleton ────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <Card className="w-full mx-auto shadow-lg animate-pulse">
+        <CardContent className="space-y-4 pt-6">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="space-y-1">
+              <div className="h-3 w-20 bg-gray-200 rounded" />
+              <div className="h-9 bg-gray-100 rounded" />
+            </div>
+          ))}
+          <div className="h-10 bg-gray-200 rounded mt-6" />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <>
+      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
       <ConfirmModal
         isOpen={showResetConfirm}
         title="Reset All Data?"
@@ -426,20 +518,201 @@ export const ResetDataCard = () => {
         onCancel={() => setShowResetConfirm(false)}
         loading={resetting}
       />
+      {/* ── Global Toast Notification ──────────────────────── */}
+      {message && (
+        <Toast
+          type={message.type}
+          message={message.text}
+          duration={5000}
+          onClose={() => setMessage(null)}
+        />
+      )}
 
-      <Card className="w-full shadow-sm border-orange-200 dark:border-orange-800">
+      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete Account and Data?"
+        message="Are you sure you want to delete your account? This action will permanently remove your account and all associated data, including medicines, medication logs, notifications, food logs, subscriptions, and profile information. You will be logged out immediately, and your data cannot be recovered."
+        confirmLabel="Delete Account"
+        confirmColor="red"
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setShowDeleteConfirm(false)}
+        loading={deleting}
+      />
+
+      {/* ── Profile Information Card ──────────────────────────────────────── */}
+      <Card className="w-full mx-auto shadow-lg mb-6">
+        <CardHeader className="flex items-center space-x-2 pb-4">
+          <User className="h-5 w-5 text-gray-600" />
+          <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Status message */}
+          {message && (
+            <div
+              className={`text-sm rounded-lg px-4 py-3 border ${message.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
+                }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          {/* First Name */}
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+              First Name
+            </label>
+            <Input
+              id="firstName"
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Enter your first name"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Middle Name */}
+          <div>
+            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
+              Middle Name{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="middleName"
+              type="text"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              placeholder="Enter your middle name"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Last Name */}
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+              Last Name
+            </label>
+            <Input
+              id="lastName"
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Enter your last name"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Patient ID */}
+          <div>
+            <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
+              Patient ID{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="patientId"
+              type="text"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              placeholder="Enter your patient ID"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Age — number input only */}
+          <div>
+            <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
+              Age{" "}
+              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <Input
+              id="age"
+              type="number"
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              placeholder="Enter your age"
+              min="1"
+              max="120"
+              className="bg-gray-50 border-gray-300 rounded-lg"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Condition */}
+          <div>
+            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
+              Condition Managing
+            </label>
+            <select
+              id="condition"
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+              disabled={saving}
+              className="w-full h-9 rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+            >
+              {CONDITIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Save Changes */}
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full mt-2 rounded-lg"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+
+          {/* Delete Account */}
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={saving}
+            className="w-full py-2.5 text-sm font-semibold text-red-600 border-2 border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            Delete Account
+          </button>
+        </CardContent>
+      </Card>
+
+      {/* ── Reset Data Card ───────────────────────────────────────────────── */}
+      <Card className="w-full mx-auto shadow-lg border-orange-200">
         <CardHeader className="flex items-center space-x-2 pb-2">
           <RotateCcw className="h-5 w-5 text-orange-600" />
-          <CardTitle className="text-lg font-semibold text-orange-700 dark:text-orange-400">Reset Data</CardTitle>
+          <CardTitle className="text-lg font-semibold text-orange-700">Reset Data</CardTitle>
         </CardHeader>
         <CardContent>
           {message && (
             <div
-              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${
-                message.type === "success"
+              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
                   ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-              }`}
+                }`}
             >
               {message.text}
             </div>
@@ -451,8 +724,13 @@ export const ResetDataCard = () => {
             <RotateCcw className="w-4 h-4" />
             Reset All Data
           </button>
+<<<<<<< HEAD
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center leading-relaxed">
             Clears all your medicines, medication history, and logs, giving you a clean
+=======
+          <p className="text-xs text-gray-500 mt-3 text-center leading-relaxed">
+            Clears all your medicines, medication history, and logs — giving you a clean
+>>>>>>> main
             fresh start. Your profile information will not be affected. Use this if you
             want to begin a completely new medication plan.
           </p>

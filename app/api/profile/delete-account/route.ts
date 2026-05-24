@@ -6,6 +6,7 @@ import MedicationLog from '@/models/MedicationLog';
 import Notification from '@/models/Notification';
 import FoodLog from '@/models/FoodLog';
 import PushSubscription from '@/models/PushSubscription';
+import SensorData from '@/models/SensorData';
 import { getTokenFromRequest, verifyToken, COOKIE_OPTIONS } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -33,6 +34,7 @@ export async function DELETE(request: NextRequest) {
       Medicine.deleteMany({ userId: user.userId }),
       Notification.deleteMany({ userId: user.userId }),
       FoodLog.deleteMany({ userId: user.userId }),
+      SensorData.deleteMany({ userId: user.userId }),
       PushSubscription.deleteMany({ userId: user.userId }),
     ]);
 

@@ -1,7 +1,7 @@
 "use client";
 // app/(main)/settings/page.tsx
 
-import ProfileCard, { ResetDataCard } from "@/components/dashboard/settings/ProfileCard";
+import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -39,8 +39,6 @@ const Settings = () => {
           {/* 3. Browser Push Notifications */}
           <PushNotificationCard />
 
-          {/* 4. Reset Data */}
-          <ResetDataCard />
         </div>
       </div>
     </div>
