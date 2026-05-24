@@ -18,6 +18,27 @@ import {
   collectErrors,
 } from "@/lib/validations";
 
+const getPasswordStrength = (password: string): { label: string; color: string; width: string } | null => {
+  if (!password) return null;
+
+  const hasLetter = /[a-zA-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSymbol = /[^a-zA-Z0-9]/.test(password);
+  const len = password.length;
+
+  // Weak: missing required parts (length <6 or missing letter/number)
+  if (len < 6 || !hasLetter || !hasNumber) return { label: "Weak", color: "bg-red-400", width: "w-1/4" };
+
+  // Strong: 12+ chars and includes symbol + letter + number
+  if (len >= 12 && hasLetter && hasNumber && hasSymbol) return { label: "Strong", color: "bg-green-500", width: "w-full" };
+
+  // Good: 10+ chars with letters and numbers
+  if (len >= 10 && hasLetter && hasNumber) return { label: "Good", color: "bg-blue-500", width: "w-3/4" };
+
+  // Fair: meets minimum requirements
+  return { label: "Fair", color: "bg-yellow-400", width: "w-2/4" };
+};
+
 const Signup = () => {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
@@ -26,9 +47,12 @@ const Signup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswordReq, setShowPasswordReq] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const strength = getPasswordStrength(password);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,10 +163,49 @@ const Signup = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => setShowPasswordReq(true)}
+              onBlur={() => { if (!password) setShowPasswordReq(false); }}
               required
               placeholder="Password"
               disabled={loading}
             />
+            {strength && (
+              <div className="space-y-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full transition-all duration-300 ${strength.color} ${strength.width}`}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Strength: <span className="font-medium">{strength.label}</span>
+                </p>
+              </div>
+            )}
+            {(showPasswordReq || password) && (
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-3 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300">
+              <p className="font-medium mb-1">Password requirements:</p>
+              <ul className="space-y-0.5">
+                {[
+                  { label: "At least 6 characters", met: password.length >= 6 },
+                  { label: "Contains a letter", met: /[a-zA-Z]/.test(password) },
+                  { label: "Contains a number", met: /[0-9]/.test(password) },
+                ].map(({ label, met }) => (
+                  <li
+                    key={label}
+                    className={`flex items-center gap-2 ${password
+                      ? met
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-500 dark:text-red-400"
+                      : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    <span className="font-semibold">{password ? (met ? "✓" : "✕") : "•"}</span>
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            )}
             <Input
               type="password"
               value={confirmPassword}
@@ -151,6 +214,11 @@ const Signup = () => {
               placeholder="Confirm Password"
               disabled={loading}
             />
+            {confirmPassword && password && (
+              <p className={`text-xs ${confirmPassword === password ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                {confirmPassword === password ? "Passwords match." : "Passwords do not match."}
+              </p>
+            )}
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Sign Up"}
             </Button>

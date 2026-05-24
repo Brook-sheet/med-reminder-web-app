@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Toast from "@/components/ui/Toast";
-import { User, RotateCcw, AlertTriangle } from "lucide-react";
+import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
+import { User, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   validateName,
@@ -103,10 +103,10 @@ const ProfileCard = () => {
   const [previousCondition, setPreviousCondition] = useState("");
 
   // Modal states
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -188,30 +188,7 @@ const ProfileCard = () => {
     }
   };
 
-  // ── Reset Data ──────────────────────────────────────────────────────────────
-  const handleResetData = async () => {
-    setResetting(true);
-    try {
-      const res = await fetch("/api/profile/reset-data", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        setShowResetConfirm(false);
-        setMessage({ type: "success", text: "All your data has been reset. Starting fresh!" });
-        setTimeout(() => {
-          setMessage(null);
-          router.refresh();
-        }, 2000);
-      } else {
-        setShowResetConfirm(false);
-        setMessage({ type: "error", text: data.error || "Reset failed. Please try again." });
-      }
-    } catch {
-      setShowResetConfirm(false);
-      setMessage({ type: "error", text: "Network error. Please try again." });
-    } finally {
-      setResetting(false);
-    }
-  };
+  
 
   // ── Delete Account ──────────────────────────────────────────────────────────
   const handleDeleteAccount = async () => {
@@ -238,33 +215,23 @@ const ProfileCard = () => {
   // ── Loading Skeleton ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <Card className="w-full mx-auto shadow-lg animate-pulse">
-        <CardContent className="space-y-4 pt-6">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 animate-pulse">
+        <div className="space-y-4">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="space-y-1">
-              <div className="h-3 w-20 bg-gray-200 rounded" />
-              <div className="h-9 bg-gray-100 rounded" />
+              <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-9 bg-gray-100 dark:bg-gray-600 rounded" />
             </div>
           ))}
-          <div className="h-10 bg-gray-200 rounded mt-6" />
-        </CardContent>
-      </Card>
+          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded mt-6" />
+        </div>
+      </div>
     );
   }
 
   return (
     <>
-      {/* ── Confirmation Modals ───────────────────────────────────────────── */}
-      <ConfirmModal
-        isOpen={showResetConfirm}
-        title="Reset All Data?"
-        message="This will clear all your medicines, medication logs, and history so you can start fresh. Your profile information (name, email, etc.) will remain. This cannot be undone from the app."
-        confirmLabel="Reset"
-        confirmColor="orange"
-        onConfirm={handleResetData}
-        onCancel={() => setShowResetConfirm(false)}
-        loading={resetting}
-      />
+      
       {/* ── Global Toast Notification ──────────────────────── */}
       {message && (
         <Toast
@@ -288,18 +255,18 @@ const ProfileCard = () => {
       />
 
       {/* ── Profile Information Card ──────────────────────────────────────── */}
-      <Card className="w-full mx-auto shadow-lg mb-6">
-        <CardHeader className="flex items-center space-x-2 pb-4">
-          <User className="h-5 w-5 text-gray-600" />
-          <CardTitle className="text-lg font-semibold">Profile Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex items-center space-x-2 pb-4 mb-4 border-b border-gray-100 dark:border-gray-700">
+          <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Profile Information</h2>
+        </div>
+        <div className="space-y-4">
           {/* Status message */}
           {message && (
             <div
               className={`text-sm rounded-lg px-4 py-3 border ${message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
-                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
+                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700/50 dark:text-green-300"
+                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700/50 dark:text-red-300"
                 }`}
             >
               {message.text}
@@ -308,7 +275,7 @@ const ProfileCard = () => {
 
           {/* First Name */}
           <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               First Name
             </label>
             <Input
@@ -317,16 +284,16 @@ const ProfileCard = () => {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="Enter your first name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Middle Name */}
           <div>
-            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Middle Name{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
             </label>
             <Input
               id="middleName"
@@ -334,14 +301,14 @@ const ProfileCard = () => {
               value={middleName}
               onChange={(e) => setMiddleName(e.target.value)}
               placeholder="Enter your middle name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Last Name */}
           <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Last Name
             </label>
             <Input
@@ -350,14 +317,14 @@ const ProfileCard = () => {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Enter your last name"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Email */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Email
             </label>
             <Input
@@ -366,16 +333,16 @@ const ProfileCard = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Patient ID */}
           <div>
-            <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Patient ID{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
             </label>
             <Input
               id="patientId"
@@ -383,16 +350,16 @@ const ProfileCard = () => {
               value={patientId}
               onChange={(e) => setPatientId(e.target.value)}
               placeholder="Enter your patient ID"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Age — number input only */}
           <div>
-            <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="age" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Age{" "}
-              <span className="text-gray-400 text-xs font-normal">(optional)</span>
+              <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
             </label>
             <Input
               id="age"
@@ -402,14 +369,14 @@ const ProfileCard = () => {
               placeholder="Enter your age"
               min="1"
               max="120"
-              className="bg-gray-50 border-gray-300 rounded-lg"
+              className="bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg dark:placeholder:text-gray-500"
               disabled={saving}
             />
           </div>
 
           {/* Condition */}
           <div>
-            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Condition Managing
             </label>
             <select
@@ -417,7 +384,7 @@ const ProfileCard = () => {
               value={condition}
               onChange={(e) => setCondition(e.target.value)}
               disabled={saving}
-              className="w-full h-9 rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+              className="w-full h-9 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 disabled:opacity-50"
             >
               {CONDITIONS.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -436,6 +403,14 @@ const ProfileCard = () => {
             {saving ? "Saving..." : "Save Changes"}
           </Button>
 
+          <Button
+            onClick={() => setShowPasswordModal(true)}
+            disabled={saving}
+            className="w-full mt-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white dark:bg-slate-600 dark:hover:bg-slate-700"
+          >
+            Update Password
+          </Button>
+
           {/* Delete Account */}
           <button
             onClick={() => setShowDeleteConfirm(true)}
@@ -444,40 +419,13 @@ const ProfileCard = () => {
           >
             Delete Account
           </button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* ── Reset Data Card ───────────────────────────────────────────────── */}
-      <Card className="w-full mx-auto shadow-lg border-orange-200">
-        <CardHeader className="flex items-center space-x-2 pb-2">
-          <RotateCcw className="h-5 w-5 text-orange-600" />
-          <CardTitle className="text-lg font-semibold text-orange-700">Reset Data</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {message && (
-            <div
-              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400"
-                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400"
-                }`}
-            >
-              {message.text}
-            </div>
-          )}
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset All Data
-          </button>
-          <p className="text-xs text-gray-500 mt-3 text-center leading-relaxed">
-            Clears all your medicines, medication history, and logs — giving you a clean
-            fresh start. Your profile information will not be affected. Use this if you
-            want to begin a completely new medication plan.
-          </p>
-        </CardContent>
-      </Card>
+      <UpdatePasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+      />
     </>
   );
 };
