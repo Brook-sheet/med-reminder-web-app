@@ -3,6 +3,7 @@
 
 import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
+import ResetDataCard from "@/components/dashboard/settings/ResetDataCard";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const Settings = () => {
@@ -38,6 +39,9 @@ const Settings = () => {
 
           {/* 3. Browser Push Notifications */}
           <PushNotificationCard />
+
+          {/* 4. Reset Data (bottom) */}
+          <ResetDataCard />
 
         </div>
       </div>

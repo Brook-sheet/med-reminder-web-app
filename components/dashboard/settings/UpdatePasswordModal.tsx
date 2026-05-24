@@ -48,16 +48,37 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
 
     if (!newPassword) {
       errors.newPassword = "New password is required.";
-    } else if (newPassword.length < 6) {
-      errors.newPassword = "Password must be at least 6 characters.";
-    } else if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      errors.newPassword = "Password must contain at least one letter and one number.";
     }
 
     if (!confirmPassword) {
       errors.confirmPassword = "Please confirm your new password.";
     } else if (newPassword && confirmPassword !== newPassword) {
       errors.confirmPassword = "Passwords do not match.";
+    }
+
+    // Additional strength validation
+    const hasLetter = /[a-zA-Z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSymbol = /[^a-zA-Z0-9]/.test(newPassword);
+    const len = newPassword.length;
+
+    if (!errors.newPassword) {
+      if (len < 6) {
+        errors.newPassword = "Password must be at least 6 characters.";
+      } else if (!hasLetter || !hasNumber) {
+        errors.newPassword = "Password must contain at least one letter and one number.";
+      } else {
+        // Determine strength and reject Weak
+        if (len >= 12 && hasLetter && hasNumber && hasSymbol) {
+          // Strong - ok
+        } else if (len >= 10 && hasLetter && hasNumber) {
+          // Good - ok
+        } else if (len >= 6 && hasLetter && hasNumber) {
+          // Fair - ok
+        } else {
+          errors.newPassword = "Password is too weak. Make sure it has letters and numbers and is at least 6 characters.";
+        }
+      }
     }
 
     setFieldErrors(errors);
@@ -105,19 +126,15 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
   const getPasswordStrength = (): { label: string; color: string; width: string } | null => {
     if (!newPassword) return null;
 
-    const hasUpper = /[A-Z]/.test(newPassword);
-    const hasLower = /[a-z]/.test(newPassword);
+    const hasLetter = /[a-zA-Z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
-    const hasSpecial = /[^a-zA-Z0-9]/.test(newPassword);
-    const isLong = newPassword.length >= 10;
+    const hasSymbol = /[^a-zA-Z0-9]/.test(newPassword);
+    const len = newPassword.length;
 
-    const score = [hasUpper, hasLower, hasNumber, hasSpecial, isLong].filter(Boolean).length;
-
-    if (newPassword.length < 6) return { label: "Too short", color: "bg-red-500", width: "w-1/4" };
-    if (score <= 2) return { label: "Weak", color: "bg-red-400", width: "w-1/4" };
-    if (score === 3) return { label: "Fair", color: "bg-yellow-400", width: "w-2/4" };
-    if (score === 4) return { label: "Good", color: "bg-blue-500", width: "w-3/4" };
-    return { label: "Strong", color: "bg-green-500", width: "w-full" };
+    if (len < 6 || !hasLetter || !hasNumber) return { label: "Weak", color: "bg-red-400", width: "w-1/4" };
+    if (len >= 12 && hasLetter && hasNumber && hasSymbol) return { label: "Strong", color: "bg-green-500", width: "w-full" };
+    if (len >= 10 && hasLetter && hasNumber) return { label: "Good", color: "bg-blue-500", width: "w-3/4" };
+    return { label: "Fair", color: "bg-yellow-400", width: "w-2/4" };
   };
 
   const strength = getPasswordStrength();

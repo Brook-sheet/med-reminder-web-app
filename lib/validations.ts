@@ -46,11 +46,13 @@ export function validateEmail(value: string): string | null {
 }
 
 /**
- * Validates a password — at least 6 characters.
+ * Validates a password.
  */
 export function validatePassword(value: string): string | null {
   if (!value) return "Password is required.";
   if (value.length < 6) return "Password must be at least 6 characters.";
+  if (!/[a-zA-Z]/.test(value)) return "Password must contain at least one letter.";
+  if (!/[0-9]/.test(value)) return "Password must contain at least one number.";
   return null;
 }
 
