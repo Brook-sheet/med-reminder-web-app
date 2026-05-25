@@ -1,7 +1,5 @@
 import React from 'react';
-import { FaCheckCircle } from "react-icons/fa";
-import { FaBell } from "react-icons/fa";
-import { FaClock } from "react-icons/fa";
+import { FaCheckCircle, FaBell, FaClock } from "react-icons/fa";
 
 interface ScheduleItemProps {
   name: string;
@@ -38,12 +36,14 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
 
   return (
     <div className="rounded-[28px] border border-border/70 bg-card p-4 shadow-lg shadow-slate-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{name}</h3>
-          <p className="text-gray-600 dark:text-gray-300">{time}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white min-w-0 break-words line-clamp-2">
+            {name}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 truncate">{time}</p>
         </div>
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-medium ${getStatusStyles()}`}>
+        <div className={`flex-shrink-0 flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-medium ${getStatusStyles()}`}>
           {getIcon()}
           <span>{status}</span>
         </div>

@@ -51,17 +51,19 @@ const HistoryItem: React.FC<HistoryItemProps> = ({
 
   return (
     <div className={`rounded-lg border p-4 ${config.bgColor} ${config.borderColor} dark:bg-gray-800 dark:border-gray-700`}>
-      <div className="flex items-start gap-4">
+      <div className="flex flex-wrap items-start gap-4">
         {/* Icon */}
-        <div className={`flex items-center justify-center w-10 h-10 rounded-full ${config.bgColor} border ${config.borderColor} ${config.textColor} dark:bg-gray-700 dark:border-gray-600`}>
+        <div className={`flex items-center justify-center w-10 h-10 rounded-full ${config.bgColor} border ${config.borderColor} ${config.textColor} dark:bg-gray-700 dark:border-gray-600 flex-shrink-0`}>
           {config.icon}
         </div>
 
         {/* Content */}
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="font-semibold text-gray-900 dark:text-white">{medicationName}</h4>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor} border ${config.borderColor} dark:bg-gray-700 dark:border-gray-600`}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+            <h4 className="font-semibold text-gray-900 dark:text-white min-w-0 break-words line-clamp-2">
+              {medicationName}
+            </h4>
+            <span className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor} border ${config.borderColor} dark:bg-gray-700 dark:border-gray-600`}>
               {status}
             </span>
           </div>

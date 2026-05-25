@@ -54,7 +54,7 @@ const Signup = () => {
 
   const strength = getPasswordStrength(password);
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -195,30 +195,28 @@ const Signup = () => {
                 {[
                   { label: "At least 6 characters", met: password.length >= 6 },
                   { label: "Contains a letter", met: /[a-zA-Z]/.test(password) },
-                  { label: "Contains a number", met: /[0-9]/.test(password) },
-                ].map(({ label, met }) => (
-                  <li
-                    key={label}
-                    className={`flex items-center gap-3 ${password
-                      ? met
-                        ? "text-emerald-700"
-                        : "text-rose-600"
-                      : "text-slate-500"
-                    }`}
-                  >
-                    <span
-                      className={
-                        `inline-flex h-3.5 w-3.5 rounded-full ${password
-                          ? met
-                            ? 'bg-emerald-600'
-                            : 'bg-rose-600'
-                          : 'bg-slate-300'
-                        }`
-                      }
-                    />
-                    <span>{label}</span>
-                  </li>
-                ))}
+                  { label: "Contains a number", met: /\d/.test(password) },
+                ].map(({ label, met }) => {
+                  let textClass = "text-slate-500";
+                  let dotClass = "bg-slate-300";
+
+                  if (password) {
+                    if (met) {
+                      textClass = "text-emerald-700";
+                      dotClass = "bg-emerald-600";
+                    } else {
+                      textClass = "text-rose-600";
+                      dotClass = "bg-rose-600";
+                    }
+                  }
+
+                  return (
+                    <li key={label} className={`flex items-center gap-3 ${textClass}`}>
+                      <span className={`inline-flex h-3.5 w-3.5 rounded-full ${dotClass}`} />
+                      <span>{label}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
             )}

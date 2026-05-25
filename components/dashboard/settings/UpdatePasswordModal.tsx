@@ -64,16 +64,16 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
   const validateFields = (): boolean => {
     const errors: FieldErrors = {};
 
-    if (!newPassword) {
+    if (newPassword === "") {
       errors.newPassword = "New password is required.";
     } else {
       const passwordError = getPasswordError(newPassword);
       if (passwordError) errors.newPassword = passwordError;
     }
 
-    if (!confirmPassword) {
+    if (confirmPassword === "") {
       errors.confirmPassword = "Please confirm your new password.";
-    } else if (newPassword && confirmPassword !== newPassword) {
+    } else if (confirmPassword !== newPassword) {
       errors.confirmPassword = "Passwords do not match.";
     }
 
@@ -81,7 +81,7 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setApiError("");
     setSuccessMessage("");
@@ -330,7 +330,6 @@ const UpdatePasswordModal: React.FC<UpdatePasswordModalProps> = ({
                     symbol = "+";
                   } else {
                     statusClass = "text-red-500 dark:text-red-400";
-                    symbol = "-";
                   }
                 }
 

@@ -55,20 +55,22 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
         isDeleting ? "opacity-50 pointer-events-none" : ""
       }`}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-start gap-4 flex-1">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div className="flex min-w-0 items-start gap-4 flex-1">
           <div
-            className={`flex items-center justify-center w-12 h-12 rounded-lg ${avatarColor} text-white font-bold text-lg shrink-0`}
+            className={`flex items-center justify-center w-12 h-12 rounded-lg ${avatarColor} text-white font-bold text-lg flex-shrink-0`}
           >
             {firstLetter}
           </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{dosage}</p>
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white break-words line-clamp-2">
+              {name}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{dosage}</p>
           </div>
         </div>
 
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2 ml-0 sm:ml-4 flex-shrink-0">
           <button
             onClick={onEdit}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
