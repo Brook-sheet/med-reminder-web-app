@@ -19,6 +19,7 @@ interface DeletedNotification {
   id: string;
   data: NotificationItem;
   timeout: NodeJS.Timeout;
+  fading?: boolean;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -154,10 +155,7 @@ const NotificationBell: React.FC = () => {
     const notification = notifications.find((n) => n._id === id);
     if (!notification) return;
 
-    // Remove from active notifications immediately (visual feedback)
-    setNotifications((prev) => prev.filter((n) => n._id !== id));
-    
-    // Create undo entry with 4-second timeout
+    // Create undo entry with 4-second timeout and keep the original notification
     const timeout = setTimeout(async () => {
       try {
         await fetch('/api/notifications', {
@@ -168,14 +166,26 @@ const NotificationBell: React.FC = () => {
       } catch (err) {
         console.error('Failed to permanently delete notification:', err);
       }
+
+      // Start fade animation, then remove from list shortly after
       setDeletedNotifications((prev) => {
         const updated = new Map(prev);
-        updated.delete(id);
+        const entry = updated.get(id);
+        if (entry) updated.set(id, { ...entry, fading: true });
         return updated;
       });
+
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n._id !== id));
+        setDeletedNotifications((prev) => {
+          const updated = new Map(prev);
+          updated.delete(id);
+          return updated;
+        });
+      }, 220);
     }, 4000);
 
-    const deleted: DeletedNotification = { id, data: notification, timeout };
+    const deleted: DeletedNotification = { id, data: notification, timeout, fading: false };
     setDeletedNotifications((prev) => new Map(prev).set(id, deleted));
   };
 
@@ -190,13 +200,6 @@ const NotificationBell: React.FC = () => {
       updated.delete(id);
       return updated;
     });
-
-    // Restore to active notifications
-    setNotifications((prev) => {
-      // Maintain order by re-inserting at original position or end
-      return [...prev, deleted.data];
-    });
-
     // Collapse the expanded view
     if (expandedId === id) {
       setExpandedId(null);
@@ -224,7 +227,7 @@ const NotificationBell: React.FC = () => {
     }
   };
 
-  const visibleNotifications = notifications.filter((n) => !deletedNotifications.has(n._id));
+  // We render all notifications; deleted ones are shown in-place using `deletedNotifications` map
 
   return (
     <div className="fixed bottom-6 right-6 z-100" ref={panelRef}>
@@ -253,15 +256,40 @@ const NotificationBell: React.FC = () => {
 
           {/* Notification List */}
           <div className="overflow-y-auto flex-1">
-            {visibleNotifications.length === 0 && deletedNotifications.size === 0 ? (
+            {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
                 <Bell className="w-10 h-10 mb-2 opacity-30" />
                 <p className="text-sm">No notifications yet</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {/* Active Notifications */}
-                {visibleNotifications.map((n) => {
+                {/* Notifications (show deleted items inline) */}
+                {notifications.map((n) => {
+                  const deleted = deletedNotifications.get(n._id);
+                  if (deleted) {
+                    return (
+                      <div
+                        key={deleted.id}
+                        className={`w-full px-4 py-3 transition-all duration-200 flex items-center justify-between gap-3 ${
+                            deleted.fading ? 'opacity-0 scale-95' : 'opacity-100'
+                          }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-slate-500 dark:text-slate-400">Notification removed</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleUndo(deleted.id)}
+                            className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline px-2 py-1"
+                            aria-label="Undo delete"
+                          >
+                            Undo
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isExpanded = expandedId === n._id;
                   const bgClass = n.read ? '' : 'bg-blue-50 dark:bg-blue-900/20';
                   return (
@@ -316,29 +344,6 @@ const NotificationBell: React.FC = () => {
                     </button>
                   );
                 })}
-
-                {/* Undo Queue */}
-                {Array.from(deletedNotifications.values()).map((deleted) => (
-                  <div
-                    key={deleted.id}
-                    className="px-4 py-3 bg-amber-50 dark:bg-amber-900/10 border-l-4 border-amber-400 dark:border-amber-600 flex items-center justify-between gap-3 animate-pulse"
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                        {deleted.data.title}
-                      </p>
-                      <p className="text-xs text-amber-800 dark:text-amber-200">Permanently deleted in 4 seconds</p>
-                    </div>
-                    <button
-                      onClick={() => handleUndo(deleted.id)}
-                      className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-200 dark:bg-amber-700 text-amber-900 dark:text-amber-100 hover:bg-amber-300 dark:hover:bg-amber-600 transition-colors"
-                      title="Restore notification"
-                      aria-label="Undo delete"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
               </div>
             )}
           </div>

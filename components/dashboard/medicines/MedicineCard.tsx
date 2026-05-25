@@ -58,19 +58,19 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
       <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
         <div className="flex min-w-0 items-start gap-4 flex-1">
           <div
-            className={`flex items-center justify-center w-12 h-12 rounded-lg ${avatarColor} text-white font-bold text-lg flex-shrink-0`}
+            className={`flex items-center justify-center w-12 h-12 rounded-lg ${avatarColor} text-white font-bold text-lg shrink-0`}
           >
             {firstLetter}
           </div>
-          <div className="min-w-0">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white break-words line-clamp-2">
+          <div className="min-w-0 space-y-1">
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white wrap-break-word line-clamp-2">
               {name}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{dosage}</p>
           </div>
         </div>
 
-        <div className="flex gap-2 ml-0 sm:ml-4 flex-shrink-0">
+        <div className="flex gap-2 ml-0 sm:ml-4 shrink-0">
           <button
             onClick={onEdit}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
