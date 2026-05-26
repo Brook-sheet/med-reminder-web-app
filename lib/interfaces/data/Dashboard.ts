@@ -17,6 +17,6 @@ export interface ScheduleItem {
   name: string;
   dosage: string;
   time: string;
-  status: 'Taken' | 'Upcoming' | 'Missed' | 'Scheduled';
+  status: 'Taken' | 'Upcoming' | 'Missed' | 'Scheduled' | 'Now';
   logId?: string;
 }

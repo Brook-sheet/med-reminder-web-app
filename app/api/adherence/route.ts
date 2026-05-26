@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
+import { analyzeAdherence, type RawLog } from '@/lib/adherenceEngine';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -22,67 +23,50 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
-    const allLogs = await MedicationLog.find({ userId: user.userId });
+    const allLogs = await MedicationLog.find({ userId: user.userId }).lean();
 
+    const rawLogs: RawLog[] = allLogs.map((l) => ({
+      status: String(l.status),
+      scheduledDate: String(l.scheduledDate),
+      scheduledTime: String(l.scheduledTime),
+      takenAt: l.takenAt ?? null,
+    }));
+
+    // Run full adherence analysis (rule-based + Random Forest)
+    const analysis = analyzeAdherence(rawLogs);
+
+    const { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation } = analysis;
+
+    // Counts for UI display
     const totalScheduled = allLogs.length;
     const totalTaken = allLogs.filter((l) => l.status === 'taken').length;
-    const totalMissed = allLogs.filter((l) => l.status === 'missed').length;
+    const totalMissed = features.missedDoses;
     const totalPending = allLogs.filter((l) => l.status === 'pending').length;
 
-    const resolvedLogs = totalTaken + totalMissed;
-    const adherenceRate =
-      resolvedLogs > 0 ? Math.round((totalTaken / resolvedLogs) * 100) : 0;
-
-    let riskLevel: 'Low' | 'Moderate' | 'High' = 'Low';
-    if (adherenceRate < 40) {
-      riskLevel = 'High';
-    } else if (adherenceRate < 70) {
-      riskLevel = 'Moderate';
-    }
-
-    const resolvedSorted = allLogs
-      .filter((l) => l.status === 'taken' || l.status === 'missed')
-      .sort(
-        (a, b) =>
-          new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
-      );
-
-    const recent = resolvedSorted.slice(-7);
-    const recentTaken = recent.filter((l) => l.status === 'taken').length;
-    const recentRate =
-      recent.length > 0 ? Math.round((recentTaken / recent.length) * 100) : adherenceRate;
-
-    const trend =
-      recentRate > adherenceRate + 5
-        ? 'improving'
-        : recentRate < adherenceRate - 5
-        ? 'declining'
-        : 'stable';
-
-    let aiInsight = '';
-    let aiRiskLevel = riskLevel;
+    // Optionally enhance insight with Claude AI (if available)
+    let aiInsight = `${insight} ${recommendation}`;
 
     try {
       const prompt = `You are an AI adherence analyst for a medication reminder system.
 
-Here is a patient's overall medication adherence data:
-- Total doses scheduled: ${totalScheduled}
-- Total doses taken: ${totalTaken}
-- Total doses missed: ${totalMissed}
-- Still pending (not yet due): ${totalPending}
-- Overall adherence rate: ${adherenceRate}% (based on resolved doses only)
-- Recent trend (last 7 resolved doses): ${recentRate}% (${trend})
-- Rule-based classification: ${riskLevel} Risk
+Patient adherence data (computed using weighted scoring where on-time=1.0, delayed=0.5):
+- Weighted adherence rate: ${features.adherenceRate}% (excludes future doses)
+- Total due doses evaluated: ${features.totalDue}
+- Missed doses: ${features.missedDoses}
+- Delayed doses: ${features.delayedDoses} (avg delay: ${features.avgDelayMinutes} min)
+- Consecutive missed: ${features.consecutiveMissed}
+- Recent 7-day adherence: ${features.recentAdherenceRate}%
+- Trend: ${features.trend}
 
-Note: This is NOT limited to 7 days. It covers the patient's entire medication history.
+Rule-based classification: ${ruleBased.riskLevel} Risk
+Reasons: ${ruleBased.reasons.join('; ')}
 
-Your task:
-1. Confirm or adjust the risk classification to one of: Low Risk, Moderate Risk, High Risk
-2. Provide a 1-2 sentence insight about the overall pattern
-3. Give one actionable recommendation
+ML (Random Forest) prediction: ${mlPrediction.riskLevel} Risk (confidence: ${Math.round(mlPrediction.confidence * 100)}%)
 
-Respond ONLY as valid JSON with this exact structure (no markdown, no extra text):
-{"riskLevel":"Low Risk","insight":"...","recommendation":"..."}`;
+Final classification: ${finalRiskLevel} Risk
+
+Provide a concise 2-sentence clinical insight and 1 actionable recommendation.
+Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendation":"..."}`;
 
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -105,28 +89,46 @@ Respond ONLY as valid JSON with this exact structure (no markdown, no extra text
         const parsed = JSON.parse(clean);
 
         const rec = parsed.recommendation || '';
-        aiInsight = (parsed.insight || '') + (rec ? ` ${rec}` : '');
-
-        const lvl = parsed.riskLevel || '';
-        if (lvl.includes('High')) aiRiskLevel = 'High';
-        else if (lvl.includes('Moderate')) aiRiskLevel = 'Moderate';
-        else if (lvl.includes('Low')) aiRiskLevel = 'Low';
+        aiInsight = (parsed.insight || insight) + (rec ? ` ${rec}` : '');
       }
     } catch (aiError) {
-      console.warn('[AI adherence] Claude call failed, using rule-based:', aiError);
+      console.warn('[AI adherence] Claude call failed, using rule+ML analysis:', aiError);
+      // aiInsight already set above as fallback
     }
 
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
-        riskLevel: aiRiskLevel,
-        adherenceRate,
+        // Risk levels
+        riskLevel: finalRiskLevel,
+        ruleBasedRisk: ruleBased.riskLevel,
+        mlRisk: mlPrediction.riskLevel,
+        mlConfidence: Math.round(mlPrediction.confidence * 100),
+
+        // Core metrics
+        adherenceRate: features.adherenceRate,
         totalScheduled,
         totalTaken,
         totalMissed,
         totalPending,
-        recentRate,
-        weeklyTrend: trend,
+
+        // Behavioral features
+        consecutiveMissed: features.consecutiveMissed,
+        delayedDoses: features.delayedDoses,
+        avgDelayMinutes: features.avgDelayMinutes,
+
+        // Trend
+        recentRate: features.recentAdherenceRate,
+        weeklyTrend: features.trend,
+
+        // Rule-based explanation
+        ruleReasons: ruleBased.reasons,
+
+        // ML explanation
+        mlPrediction: mlPrediction.prediction,
+        featureImportance: mlPrediction.featureImportance,
+
+        // Combined AI insight
         aiInsight,
       },
     });

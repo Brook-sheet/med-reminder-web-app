@@ -1,7 +1,7 @@
 "use client";
 // components/notifications/NotificationBell.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Bell, X, Trash2, Trash, RotateCcw } from 'lucide-react';
+import { Bell, X, Trash2, Trash } from 'lucide-react';
 
 interface NotificationItem {
   _id: string;
@@ -18,7 +18,6 @@ interface NotificationItem {
 interface DeletedNotification {
   id: string;
   data: NotificationItem;
-  timeout: NodeJS.Timeout;
   fading?: boolean;
 }
 
@@ -83,6 +82,7 @@ const NotificationBell: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletedNotifications, setDeletedNotifications] = useState<Map<string, DeletedNotification>>(new Map());
+  const deletedTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const panelRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(async () => {
@@ -144,48 +144,62 @@ const NotificationBell: React.FC = () => {
     };
   }, [isOpen]);
 
-  // Clean up undo timeouts on unmount
+  // Clean up undo timeouts on unmount (copy ref to avoid mutation race)
   useEffect(() => {
     return () => {
-      deletedNotifications.forEach(({ timeout }) => clearTimeout(timeout));
+      const copy = new Map(deletedTimeoutsRef.current);
+      copy.forEach((timeout) => clearTimeout(timeout));
+      deletedTimeoutsRef.current = new Map();
     };
-  }, [deletedNotifications]);
+  }, []);
+
+  const removeDeletedEntry = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n._id !== id));
+    setDeletedNotifications((prev) => {
+      const updated = new Map(prev);
+      updated.delete(id);
+      return updated;
+    });
+  }, []);
+
+  const finalizeDelete = useCallback(async (id: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', notificationId: id }),
+      });
+    } catch (err) {
+      console.error('Failed to permanently delete notification:', err);
+    }
+
+    // remove timeout tracking
+    deletedTimeoutsRef.current.delete(id);
+
+    // set fading state
+    setDeletedNotifications((prev) => {
+      const updated = new Map(prev);
+      const entry = updated.get(id);
+      if (entry) updated.set(id, { ...entry, fading: true });
+      return updated;
+    });
+
+    // after fade, remove from notifications list
+    setTimeout(() => removeDeletedEntry(id), 220);
+  }, [removeDeletedEntry]);
 
   const handleDeleteWithUndo = (id: string) => {
     const notification = notifications.find((n) => n._id === id);
     if (!notification) return;
 
-    // Create undo entry with 4-second timeout and keep the original notification
-    const timeout = setTimeout(async () => {
-      try {
-        await fetch('/api/notifications', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'delete', notificationId: id }),
-        });
-      } catch (err) {
-        console.error('Failed to permanently delete notification:', err);
-      }
+    if (deletedTimeoutsRef.current.has(id)) return;
 
-      // Start fade animation, then remove from list shortly after
-      setDeletedNotifications((prev) => {
-        const updated = new Map(prev);
-        const entry = updated.get(id);
-        if (entry) updated.set(id, { ...entry, fading: true });
-        return updated;
-      });
-
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n._id !== id));
-        setDeletedNotifications((prev) => {
-          const updated = new Map(prev);
-          updated.delete(id);
-          return updated;
-        });
-      }, 220);
+    const timeout = setTimeout(() => {
+      void finalizeDelete(id);
     }, 4000);
 
-    const deleted: DeletedNotification = { id, data: notification, timeout, fading: false };
+    deletedTimeoutsRef.current.set(id, timeout);
+    const deleted: DeletedNotification = { id, data: notification, fading: false };
     setDeletedNotifications((prev) => new Map(prev).set(id, deleted));
   };
 
@@ -193,14 +207,17 @@ const NotificationBell: React.FC = () => {
     const deleted = deletedNotifications.get(id);
     if (!deleted) return;
 
-    // Clear timeout and remove from deleted
-    clearTimeout(deleted.timeout);
+    const timeout = deletedTimeoutsRef.current.get(id);
+    if (timeout) {
+      clearTimeout(timeout);
+      deletedTimeoutsRef.current.delete(id);
+    }
+
     setDeletedNotifications((prev) => {
       const updated = new Map(prev);
       updated.delete(id);
       return updated;
     });
-    // Collapse the expanded view
     if (expandedId === id) {
       setExpandedId(null);
     }
@@ -217,8 +234,8 @@ const NotificationBell: React.FC = () => {
       });
       setNotifications([]);
       setUnreadCount(0);
-      // Clear all pending undos
-      deletedNotifications.forEach(({ timeout }) => clearTimeout(timeout));
+      Array.from(deletedTimeoutsRef.current.values()).forEach((t) => clearTimeout(t));
+      deletedTimeoutsRef.current = new Map();
       setDeletedNotifications(new Map());
     } catch (err) {
       console.error('Failed to delete all notifications:', err);

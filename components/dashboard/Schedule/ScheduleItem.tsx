@@ -4,7 +4,7 @@ import { FaCheckCircle, FaBell, FaClock } from "react-icons/fa";
 interface ScheduleItemProps {
   name: string;
   time: string;
-  status: 'Taken' | 'Upcoming' | 'Scheduled' | 'Missed';
+  status: 'Taken' | 'Upcoming' | 'Scheduled' | 'Missed' | 'Now';
 }
 
 const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
@@ -14,6 +14,8 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
         return 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800';
       case 'Upcoming':
         return 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+        case 'Now':
+          return 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800';
       case 'Scheduled':
         return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-600';
       default:
@@ -27,6 +29,8 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ name, time, status }) => {
         return <FaCheckCircle className="w-4 h-4" />;
       case 'Upcoming':
         return <FaBell className="w-4 h-4" />;
+        case 'Now':
+          return <FaBell className="w-4 h-4" />;
       case 'Scheduled':
         return <FaClock className="w-4 h-4" />;
       default:

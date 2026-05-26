@@ -20,13 +20,6 @@ interface ClassifyResult {
   delayMinutes: number | null;
 }
 
-/**
- * Shape of every log we return to the client.
- * "taken"  = on-time (within 30 min of schedule)
- * "delayed"= confirmed but 30 min–2 hr after schedule
- * "missed" = no confirmation within 2 hr window
- * "pending"= still within window — never sent to history
- */
 interface EnrichedLog {
   _id: unknown;
   userId: unknown;
@@ -62,13 +55,11 @@ function parseTimeToMinutes(timeStr: string): number {
 }
 
 /**
- * Single source-of-truth classification function.
- *
- * Rules:
- *   confirmed + diff ≤ 30 min  → "taken"   (on-time)
- *   confirmed + diff >  30 min → "delayed"  (late but confirmed)
- *   not confirmed + elapsed > 120 min → "missed"
- *   otherwise → "pending"  (excluded from history)
+ * Classify a log entry:
+ * - taken + diff ≤ 30 min → "taken" (on-time)
+ * - taken + diff > 30 min → "delayed"
+ * - not taken + elapsed > 120 min → "missed"
+ * - otherwise → "pending"
  */
 function classifyLog(
   scheduledDate: string,
@@ -82,33 +73,56 @@ function classifyLog(
 
   const now = new Date();
 
-  // ── Confirmed intake (sensor or manual) ───────────────────────────────
   if (rawStatus === 'taken') {
     if (takenAt) {
       const taken = new Date(takenAt);
       const diffMinutes = Math.round(
         (taken.getTime() - scheduledDateTime.getTime()) / 60_000,
       );
-      // On-time: within 30-min grace window (negative diff = early = on-time)
       if (diffMinutes <= 30) {
         return { status: 'taken', delayMinutes: null };
       }
-      // Late confirmation: delayed
       return { status: 'delayed', delayMinutes: diffMinutes };
     }
-    // No takenAt timestamp → treat as on-time (edge case)
     return { status: 'taken', delayMinutes: null };
   }
 
-  // ── Not confirmed ─────────────────────────────────────────────────────
-  const elapsedMinutes =
-    (now.getTime() - scheduledDateTime.getTime()) / 60_000;
-
+  const elapsedMinutes = (now.getTime() - scheduledDateTime.getTime()) / 60_000;
   if (elapsedMinutes > 120) {
     return { status: 'missed', delayMinutes: null };
   }
 
   return { status: 'pending', delayMinutes: null };
+}
+
+/**
+ * Compute weighted adherence rate across all finalized logs:
+ * ((1.0 × On-Time) + (0.5 × Delayed)) / Total Due Scheduled Doses × 100
+ *
+ * Only includes logs whose scheduled time has already passed.
+ * This ensures consistency with the Dashboard adherence calculation.
+ */
+function computeWeightedAdherenceRate(logs: EnrichedLog[]): number {
+  const now = new Date();
+  let onTime = 0;
+  let delayed = 0;
+  let totalDue = 0;
+
+  for (const log of logs) {
+    const scheduledMinutes = parseTimeToMinutes(log.scheduledTime);
+    const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
+    scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
+
+    // Only count doses that are already due
+    if (scheduledDateTime > now) continue;
+
+    totalDue++;
+    if (log.classifiedStatus === 'taken') onTime++;
+    else if (log.classifiedStatus === 'delayed') delayed++;
+  }
+
+  if (totalDue === 0) return 0;
+  return Math.round(Math.min((1.0 * onTime + 0.5 * delayed) / totalDue * 100, 100));
 }
 
 // ── GET /api/history ───────────────────────────────────────────────────────
@@ -148,7 +162,7 @@ export async function GET(request: NextRequest) {
       .sort({ scheduledDate: -1, scheduledTime: -1 })
       .lean();
 
-    // ── Classify every log ────────────────────────────────────────────────
+    // Classify every log
     const enriched: EnrichedLog[] = rawLogs.map((log) => {
       const { status, delayMinutes } = classifyLog(
         String(log.scheduledDate),
@@ -175,34 +189,31 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Pending stays on the Dashboard — history shows only finalized records
+    // Pending stays on Dashboard — history shows only finalized records
     const finalized = enriched.filter((l) => l.classifiedStatus !== 'pending');
 
-    // ── Section grouping ──────────────────────────────────────────────────
+    // Section grouping
     const today     = finalized.filter((l) => l.scheduledDate === todayStr);
     const thisWeek  = finalized.filter((l) => l.scheduledDate >= weekAgoStr  && l.scheduledDate < todayStr);
     const thisMonth = finalized.filter((l) => l.scheduledDate >= monthAgoStr && l.scheduledDate < weekAgoStr);
     const earlier   = finalized.filter((l) => l.scheduledDate < monthAgoStr);
 
-    // ── Summary counts ────────────────────────────────────────────────────
-    // onTime  = classifiedStatus === 'taken'   (confirmed within 30 min)
-    // delayed = classifiedStatus === 'delayed'  (confirmed after 30 min)
-    // totalConfirmed = onTime + delayed  (this is the "Total Taken" card value)
+    // Summary counts
     const onTime         = finalized.filter((l) => l.classifiedStatus === 'taken').length;
     const totalDelayed   = finalized.filter((l) => l.classifiedStatus === 'delayed').length;
-    const totalConfirmed = onTime + totalDelayed;   // ← displayed as "Total Taken"
+    const totalConfirmed = onTime + totalDelayed;
     const totalMissed    = finalized.filter((l) => l.classifiedStatus === 'missed').length;
     const totalRecords   = finalized.length;
-    const successRate    =
-      totalRecords > 0 ? Math.round((totalConfirmed / totalRecords) * 100) : 0;
+
+    // ── Weighted success rate (uses ALL enriched logs including pending)
+    // This matches the Dashboard "Overall Adherence" calculation exactly
+    const successRate = computeWeightedAdherenceRate(enriched);
 
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
         summary: {
-          // totalTaken = ALL confirmed (on-time + delayed) — used as card headline
           totalTaken: totalConfirmed,
-          // onTime and delayed broken out so the UI can show correct sub-labels
           onTime,
           totalDelayed,
           totalMissed,

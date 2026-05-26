@@ -322,13 +322,21 @@ const NotificationManager: React.FC = () => {
     []
   );
 
+  const removeDueNotificationsByLogId = useCallback((logId?: string): void => {
+    if (!logId) return;
+    setActiveNotifications((prev) => prev.filter((active) => !(active.type === 'due' && active.logId === logId)));
+  }, []);
+
   const enqueueNotification = useCallback(
     (notification: ActiveNotification): void => {
       setActiveNotifications((prev) => [...prev, notification]);
 
+      // Keep due notifications visible longer so users notice them.
+      const duration = notification.type === 'due' ? 15 * 60 * 1000 : 60 * 1000;
+
       setTimeout(() => {
         removeNotification(notification.id);
-      }, 60000);
+      }, duration);
     },
     [removeNotification]
   );
@@ -509,8 +517,12 @@ const NotificationManager: React.FC = () => {
       const dueKey = `due-${item.logId}`;
       const diffAtDue = Math.abs(scheduledMins - nowMins);
 
+      // Fire due reminders either right at the scheduled minute, or if the
+      // server/API has already marked the item as 'Now' (within due window).
+      const shouldFireDue = (diffAtDue <= 1 || item.status === 'Now');
+
       if (
-        diffAtDue <= 1 &&
+        shouldFireDue &&
         item.status !== "Taken" &&
         !firedDue.current.has(dueKey)
       ) {
@@ -568,6 +580,8 @@ const NotificationManager: React.FC = () => {
           alarmStopRef.current();
           alarmStopRef.current = null;
         }
+
+        removeDueNotificationsByLogId(item.logId);
 
         fetch("/api/hardware/alarm", {
           method: "DELETE",
@@ -627,6 +641,7 @@ const NotificationManager: React.FC = () => {
     adherence,
     notificationMemoryLoaded,
     enqueueNotification,
+    removeDueNotificationsByLogId,
   ]);
 
   // ───────────────────────────────────────────────────────────────────────────

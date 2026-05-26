@@ -23,6 +23,64 @@ function timeToMinutes(timeStr: string): number {
   return h * 60 + m;
 }
 
+/**
+ * Weighted Adherence Rate (cumulative, only for due doses):
+ * ((1.0 × On-Time) + (0.5 × Delayed)) / Total Due Scheduled Doses × 100
+ *
+ * Rules:
+ * - On-time: status === 'taken' AND takenAt within 30 min of scheduled
+ * - Delayed: status === 'taken' AND takenAt > 30 min after scheduled
+ * - Missed: not confirmed AND scheduled time + 120 min has passed
+ * - Pending (not yet due): EXCLUDED from calculation
+ */
+function computeWeightedAdherence(
+  logs: Array<{
+    status: string;
+    scheduledDate: string;
+    scheduledTime: string;
+    takenAt?: Date | null;
+  }>
+): number {
+  const now = new Date();
+
+  let onTime = 0;
+  let delayed = 0;
+  let totalDue = 0;
+
+  for (const log of logs) {
+    const scheduledMinutes = timeToMinutes(log.scheduledTime);
+    const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
+    scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
+
+    // Only evaluate doses that are already due (scheduled time has passed)
+    if (scheduledDateTime > now) continue;
+
+    totalDue++;
+
+    if (log.status === 'taken') {
+      if (log.takenAt) {
+        const diffMinutes = Math.round(
+          (new Date(log.takenAt).getTime() - scheduledDateTime.getTime()) / 60_000
+        );
+        if (diffMinutes <= 30) {
+          onTime++;
+        } else {
+          delayed++;
+        }
+      } else {
+        // No takenAt timestamp → treat as on-time
+        onTime++;
+      }
+    }
+    // missed/pending past due = neither onTime nor delayed (counts toward totalDue but not numerator)
+  }
+
+  if (totalDue === 0) return 0;
+
+  const weightedScore = (1.0 * onTime + 0.5 * delayed) / totalDue * 100;
+  return Math.round(Math.min(weightedScore, 100));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
@@ -42,6 +100,7 @@ export async function GET(request: NextRequest) {
     const medicines = await Medicine.find({ userId: user.userId, isActive: true });
     const activeMedicineIds = medicines.map((med) => med._id);
 
+    // Auto-create today's logs if missing
     for (const med of medicines) {
       for (const time of med.scheduledTimes) {
         const existing = await MedicationLog.findOne({
@@ -73,9 +132,14 @@ export async function GET(request: NextRequest) {
 
     const todaySchedule: ScheduleItem[] = todayLogs.map((log) => {
       const logMinutes = timeToMinutes(log.scheduledTime);
+      // If the medication was already taken/missed, keep those statuses.
+      // Otherwise, if current time is within the due-window after scheduled time,
+      // mark it as 'Now' so the UI can highlight it as due-now.
+      const DUE_WINDOW_MINUTES = 15;
       let status: ScheduleItem['status'] = 'Scheduled';
       if (log.status === 'taken') status = 'Taken';
       else if (log.status === 'missed') status = 'Missed';
+      else if (nowMinutes >= logMinutes && nowMinutes < logMinutes + DUE_WINDOW_MINUTES) status = 'Now';
       else if (logMinutes > nowMinutes) status = 'Upcoming';
       else status = 'Scheduled';
 
@@ -115,16 +179,16 @@ export async function GET(request: NextRequest) {
       weeklyData.push({ day: days[d.getDay()], taken, total });
     }
 
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-      .toISOString()
-      .split('T')[0];
-    const monthLogs = await MedicationLog.find({
-      userId: user.userId,
-      scheduledDate: { $gte: monthStart, $lte: todayStr },
-    });
-    const monthTaken = monthLogs.filter((l) => l.status === 'taken').length;
-    const monthTotal = monthLogs.length;
-    const adherenceRate = monthTotal > 0 ? Math.round((monthTaken / monthTotal) * 100) : 0;
+    // ── Weighted cumulative adherence (all historical logs, excluding future) ──
+    const allLogs = await MedicationLog.find({ userId: user.userId }).lean();
+    const adherenceRate = computeWeightedAdherence(
+      allLogs.map((l) => ({
+        status: String(l.status),
+        scheduledDate: String(l.scheduledDate),
+        scheduledTime: String(l.scheduledTime),
+        takenAt: l.takenAt ?? null,
+      }))
+    );
 
     const stats: DashboardStats = {
       adherenceRate,

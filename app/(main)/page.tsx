@@ -66,13 +66,13 @@ export default function Home() {
           <StatCard
             title="Adherence Rate"
             value={<span className="text-white dark:text-white">{adherenceValue}</span>}
-            subtitle="This month"
+            subtitle="Overall Adherence"
             className="border-l-4 border-blue-500 bg-blue-600 dark:bg-blue-700 text-white"
           />
           <StatCard
             title="Today's Progress"
             value={<span className="text-white dark:text-white">{progressValue}</span>}
-            subtitle="medicines taken"
+            subtitle="Medicines Taken"
             className="bg-gray-700 dark:bg-gray-700 text-white"
           />
           <StatCard
