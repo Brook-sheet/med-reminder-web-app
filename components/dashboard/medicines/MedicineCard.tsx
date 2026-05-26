@@ -51,19 +51,19 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 
   return (
     <div
-      className={`rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 transition-all duration-200 ${
+      className={`w-full rounded-[20px] border border-border/70 bg-card p-4 sm:p-6 shadow-lg shadow-slate-900/5 transition-all duration-200 ${
         isDeleting ? "opacity-50 pointer-events-none" : ""
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-        <div className="flex min-w-0 items-start gap-4 flex-1">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+        <div className="flex min-w-0 items-start gap-3 flex-1">
           <div
-            className={`flex items-center justify-center w-12 h-12 rounded-lg ${avatarColor} text-white font-bold text-lg shrink-0`}
+            className={`flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${avatarColor} text-white font-bold text-base sm:text-lg shrink-0`}
           >
             {firstLetter}
           </div>
-          <div className="min-w-0 space-y-1">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white wrap-break-word line-clamp-2">
+          <div className="min-w-0 space-y-0.5">
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
               {name}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{dosage}</p>
@@ -89,7 +89,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
         </div>
       </div>
 
-      <div className="h-px bg-gray-100 dark:bg-gray-700 mb-4" />
+      <div className="h-px bg-gray-100 dark:bg-gray-700 mb-3" />
 
       <div className="space-y-3">
         <div>
@@ -107,7 +107,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
             {scheduledTimes.map((time) => (
               <div
                 key={time}
-                className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium border border-blue-100 dark:border-blue-800"
+                className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full text-sm sm:text-sm font-medium border border-blue-100 dark:border-blue-800"
               >
                 <Clock className="w-3.5 h-3.5" />
                 {time}

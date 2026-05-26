@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus } from "lucide-react";
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
@@ -10,6 +10,8 @@ import type { ToastProps } from "@/components/ui/Toast";
 
 const Medicines = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
+  type SortOption = "recent" | "oldest" | "az" | "za";
+  const [sortOption, setSortOption] = useState<SortOption>("recent");
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
@@ -36,6 +38,34 @@ const Medicines = () => {
     setEditingMedicine(null);
     setModalOpen(true);
   };
+
+  const sortedMedicines = useMemo(() => {
+    const copy = [...medicines];
+    const getTime = (m: Medicine) => {
+      const maybe = m as unknown as { createdAt?: string | Date };
+      if (maybe.createdAt) return new Date(maybe.createdAt).getTime();
+      // Fallback to ObjectId timestamp if available
+      try {
+        const hex = String(m._id).slice(0, 8);
+        return Number.parseInt(hex, 16) * 1000;
+      } catch {
+        return 0;
+      }
+    };
+
+    switch (sortOption) {
+      case "recent":
+        return copy.sort((a, b) => getTime(b) - getTime(a));
+      case "oldest":
+        return copy.sort((a, b) => getTime(a) - getTime(b));
+      case "az":
+        return copy.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      case "za":
+        return copy.sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+      default:
+        return copy;
+    }
+  }, [medicines, sortOption]);
 
   const handleEdit = (medicine: Medicine) => {
     setEditingMedicine(medicine);
@@ -120,10 +150,10 @@ const Medicines = () => {
         </button>
       </div>
     );
-  } else {
+    } else {
     medicineContent = (
       <div className="space-y-4">
-        {medicines.map((medicine) => (
+        {sortedMedicines.map((medicine) => (
           <MedicineCard
             key={medicine._id}
             name={medicine.name}
@@ -150,14 +180,31 @@ const Medicines = () => {
           <p className="text-gray-600 dark:text-gray-300 mt-2">Manage your medication schedule</p>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
           <button
             onClick={handleAdd}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors font-medium"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 transition-colors font-medium"
           >
             <Plus className="w-5 h-5" />
             Add New Medicine
           </button>
+
+          <div className="ml-0 sm:ml-auto w-full sm:w-auto flex items-center gap-2">
+            <label htmlFor="sort" className="hidden sm:block text-sm text-gray-600 dark:text-gray-300">
+              Sort:
+            </label>
+            <select
+              id="sort"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              className="w-full sm:w-auto px-3 py-2 bg-card border border-border/60 rounded-lg text-sm"
+            >
+              <option value="recent">Recently Added</option>
+              <option value="oldest">Oldest Added</option>
+              <option value="az">Alphabetical (A–Z)</option>
+              <option value="za">Alphabetical (Z–A)</option>
+            </select>
+          </div>
         </div>
 
         {medicineContent}
