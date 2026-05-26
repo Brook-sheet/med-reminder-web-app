@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const nowMinutes = today.getHours() * 60 + today.getMinutes();
 
     const medicines = await Medicine.find({ userId: user.userId, isActive: true });
+    const activeMedicineIds = medicines.map((med) => med._id);
 
     for (const med of medicines) {
       for (const time of med.scheduledTimes) {
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
     const todayLogs = await MedicationLog.find({
       userId: user.userId,
       scheduledDate: todayStr,
+      medicineId: { $in: activeMedicineIds },
     }).sort({ scheduledTime: 1 });
 
     const todaySchedule: ScheduleItem[] = todayLogs.map((log) => {

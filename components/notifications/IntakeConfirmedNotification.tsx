@@ -13,6 +13,7 @@ interface IntakeConfirmedNotificationProps {
   showFoodMonitoring: boolean; // true for Diabetes/Hypertension/Both
   onClose: () => void;
   onProceed: () => void; // opens food monitoring modal
+  className?: string;
 }
 
 const RISK_STYLES = {
@@ -37,11 +38,15 @@ const IntakeConfirmedNotification: React.FC<IntakeConfirmedNotificationProps> = 
   showFoodMonitoring,
   onClose,
   onProceed,
+  className,
 }) => {
   const style = RISK_STYLES[riskLevel];
+  let progressBarClass = 'bg-red-500';
+  if (riskLevel === 'Low') progressBarClass = 'bg-green-500';
+  else if (riskLevel === 'Moderate') progressBarClass = 'bg-yellow-500';
 
   return (
-    <div className="fixed top-4 right-4 z-150 w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-100 dark:border-green-900/30 overflow-hidden animate-in slide-in-from-right duration-300">
+    <div className={`w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-100 dark:border-green-900/30 overflow-hidden animate-in slide-in-from-right duration-300 ${className ?? ''}`}>
       {/* Header */}
       <div className="bg-linear-to-r from-green-500 to-green-600 px-4 py-3 flex items-center justify-between">
         <div>
@@ -70,9 +75,7 @@ const IntakeConfirmedNotification: React.FC<IntakeConfirmedNotificationProps> = 
           {/* Progress bar */}
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
             <div
-              className={`h-2 rounded-full transition-all ${
-                riskLevel === 'Low' ? 'bg-green-500' : riskLevel === 'Moderate' ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
+              className={`h-2 rounded-full transition-all ${progressBarClass}`}
               style={{ width: `${Math.min(adherenceRate, 100)}%` }}
             />
           </div>

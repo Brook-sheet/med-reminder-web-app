@@ -289,6 +289,14 @@ export async function DELETE(
       );
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    await MedicationLog.deleteMany({
+      userId: user.userId,
+      medicineId: medicine._id,
+      scheduledDate: { $gte: todayStr },
+      status: { $in: ['pending', 'reminder'] },
+    });
+
     return NextResponse.json<ApiResponse>({
       success: true,
       message: 'Medicine deleted successfully',

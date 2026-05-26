@@ -12,6 +12,7 @@ interface UpcomingReminderNotificationProps {
   scheduledTime: string;
   condition: string;
   onClose: () => void;
+  className?: string;
 }
 
 const UpcomingReminderNotification: React.FC<UpcomingReminderNotificationProps> = ({
@@ -19,13 +20,14 @@ const UpcomingReminderNotification: React.FC<UpcomingReminderNotificationProps> 
   scheduledTime,
   condition,
   onClose,
+  className,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const foodContent = getFoodReminderContent(condition);
   const showFoodReminder = isFoodMonitoringApplicable(condition) && foodContent;
 
   return (
-    <div className="fixed top-4 right-4 z-150 w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-blue-100 dark:border-blue-900 overflow-hidden animate-in slide-in-from-right duration-300">
+    <div className={`w-[min(92vw,20rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-blue-100 dark:border-blue-900 overflow-hidden animate-in slide-in-from-right duration-300 ${className ?? ''}`}>
       {/* Header bar */}
       <div className="bg-linear-to-r from-blue-500 to-blue-600 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -69,8 +71,8 @@ const UpcomingReminderNotification: React.FC<UpcomingReminderNotificationProps> 
                     Recommended to eat:
                   </p>
                   <ul className="space-y-1">
-                    {foodContent.eat.slice(0, 4).map((item, i) => (
-                      <li key={i} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                    {foodContent.eat.slice(0, 4).map((item) => (
+                      <li key={item} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
                         <span className="text-green-500 mt-0.5">•</span>
                         {item}
                       </li>
@@ -82,8 +84,8 @@ const UpcomingReminderNotification: React.FC<UpcomingReminderNotificationProps> 
                     Try to avoid:
                   </p>
                   <ul className="space-y-1">
-                    {foodContent.avoid.slice(0, 4).map((item, i) => (
-                      <li key={i} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
+                    {foodContent.avoid.slice(0, 4).map((item) => (
+                      <li key={item} className="text-xs text-gray-600 dark:text-gray-300 flex items-start gap-1.5">
                         <span className="text-red-400 mt-0.5">•</span>
                         {item}
                       </li>
