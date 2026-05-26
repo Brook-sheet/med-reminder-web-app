@@ -367,7 +367,7 @@ const History = () => {
           <StatCard
             title="Total Missed"
             value={loading ? "—" : String(s?.totalMissed ?? 0)}
-            subtitle="Medicines missed this month"
+            subtitle="Overall missed medication records"
             className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
           />
 
