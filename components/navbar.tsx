@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
@@ -47,8 +48,15 @@ const Navbar = () => {
       >
         <div className="flex h-full flex-col gap-6 p-6">
           <div className="flex flex-col gap-3 rounded-[28px] border border-border/70 bg-background/90 p-5 shadow-sm shadow-slate-900/5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm shadow-primary/30">
-              <span className="text-sm font-semibold uppercase tracking-[0.2em]">MR</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl md:h-12 md:w-12">
+              <Image
+                src="/icon.png"
+                alt="Med App Reminder Logo"
+                width={48}
+                height={48}
+                className="h-full w-full object-contain"
+                priority
+              />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Med App Reminder</p>
