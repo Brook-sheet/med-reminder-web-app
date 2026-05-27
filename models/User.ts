@@ -1,40 +1,53 @@
-import mongoose, { Schema, Model } from 'mongoose';
-import type { UserDoc } from '@/lib/interfaces/documents/UserDoc';
+import mongoose, { Document, Schema } from 'mongoose';
 
-const UserSchema = new Schema<UserDoc>(
+export interface IUser extends Document {
+  _id: mongoose.Types.ObjectId;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  password: string;
+  condition?: 'Diabetes' | 'Hypertension' | 'Both';
+  onboardingCompleted: boolean;
+  patientId: string;
+  monitoredPatients: string[];
+  authorizedMonitors: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const UserSchema = new Schema<IUser>(
   {
-    email: {
-      type: String,
-      required: [true, 'Email is required'],
-      unique: true,
-      lowercase: true,
-      trim: true,
-      match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email'],
-    },
-    password: {
-      type: String,
-      required: [true, 'Password is required'],
-      minlength: [6, 'Password must be at least 6 characters'],
-    },
-    firstName: { type: String, default: '', trim: true },
+    firstName:  { type: String, default: '', trim: true },
     middleName: { type: String, default: '', trim: true },
-    lastName: { type: String, default: '', trim: true },
-    patientId: { type: String, default: '', trim: true },
+    lastName:   { type: String, default: '', trim: true },
+    email:      { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password:   { type: String, required: true },
     condition: {
       type: String,
-      enum: ['Diabetes', 'Hypertension', 'Both', 'Other', 'None', ''],
-      default: '',
+      enum: ['Diabetes', 'Hypertension', 'Both'],
+      required: false,
+      default: null,
     },
-    age: { type: Number, default: null },
-    onboardingCompleted: { type: Boolean, default: false },
-    isDeleted: { type: Boolean, default: false },
-    deletedAt: { type: Date, default: null },
-    dataResetAt: { type: Date, default: null },
+    onboardingCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    patientId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    monitoredPatients: {
+      type: [String],
+      default: [],
+    },
+    authorizedMonitors: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );
 
-const User: Model<UserDoc> =
-  mongoose.models.User || mongoose.model<UserDoc>('User', UserSchema);
-
-export default User;
+export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema);

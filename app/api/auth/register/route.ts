@@ -5,6 +5,19 @@ import User from '@/models/User';
 import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
+async function generateUniquePatientId(): Promise<string> {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  for (let attempt = 0; attempt < 10; attempt++) {
+    let id = 'PT-';
+    for (let i = 0; i < 6; i++) {
+      id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const existing = await User.findOne({ patientId: id }).select('_id').lean();
+    if (!existing) return id;
+  }
+  throw new Error('Failed to generate unique Patient ID');
+}
+
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -12,6 +25,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, confirmPassword, firstName, middleName, lastName } = body;
 
+    // ── Validation ────────────────────────────────────────────────────────
     if (!email || !password || !confirmPassword) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'All fields are required.' },
@@ -34,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasLetter = /[a-zA-Z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
+    const hasNumber  = /[0-9]/.test(password);
 
     if (!hasLetter || !hasNumber) {
       return NextResponse.json<ApiResponse>(
@@ -43,6 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Duplicate check ───────────────────────────────────────────────────
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return NextResponse.json<ApiResponse>(
@@ -51,18 +66,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Hash password ─────────────────────────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // ── Generate Patient ID ───────────────────────────────────────────────
+    const patientId = await generateUniquePatientId();
+
+    // ── Create user ───────────────────────────────────────────────────────
     const user = await User.create({
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      firstName: firstName || '',
-      middleName: middleName || '',
-      lastName: lastName || '',
+      email:               email.toLowerCase(),
+      password:            hashedPassword,
+      firstName:           firstName   || '',
+      middleName:          middleName  || '',
+      lastName:            lastName    || '',
       onboardingCompleted: false,
+      patientId,
+      monitoredPatients:  [],
+      authorizedMonitors: [],
+      // condition is intentionally omitted here —
+      // it will be set during onboarding
     });
 
-    const token = await signToken({ userId: user._id.toString(), email: user.email });
+    // ── Sign token ────────────────────────────────────────────────────────
+    const token = await signToken({
+      userId: user._id.toString(),
+      email:  user.email,
+    });
 
     const response = NextResponse.json<ApiResponse>(
       {
@@ -70,12 +99,13 @@ export async function POST(request: NextRequest) {
         message: 'Account created successfully.',
         data: {
           user: {
-            id: user._id.toString(),
-            email: user.email,
-            firstName: user.firstName,
-            middleName: user.middleName,
-            lastName: user.lastName,
+            id:                  user._id.toString(),
+            email:               user.email,
+            firstName:           user.firstName,
+            middleName:          user.middleName,
+            lastName:            user.lastName,
             onboardingCompleted: false,
+            patientId:           user.patientId,
           },
         },
       },
@@ -84,8 +114,14 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set({ ...COOKIE_OPTIONS, value: token });
     return response;
-  } catch (error) {
-    console.error('[REGISTER]', error);
+
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('[REGISTER] ERROR:', error.message);
+      console.error('[REGISTER] STACK:', error.stack);
+    } else {
+      console.error('[REGISTER] UNKNOWN ERROR:', error);
+    }
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error.' },
       { status: 500 }
