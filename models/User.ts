@@ -7,11 +7,14 @@ export interface IUser extends Document {
   lastName: string;
   email: string;
   password: string;
-  condition?: 'Diabetes' | 'Hypertension' | 'Both';
+  age?: number;
+  condition?: string;
   onboardingCompleted: boolean;
   patientId: string;
   monitoredPatients: string[];
   authorizedMonitors: string[];
+  isDeleted?: boolean;
+  dataResetAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,9 +26,13 @@ const UserSchema = new Schema<IUser>(
     lastName:   { type: String, default: '', trim: true },
     email:      { type: String, required: true, unique: true, lowercase: true, trim: true },
     password:   { type: String, required: true },
+    age: {
+      type: Number,
+      default: null,
+    },
     condition: {
       type: String,
-      enum: ['Diabetes', 'Hypertension', 'Both'],
+      enum: ['Diabetes', 'Hypertension', 'Both', 'Other', 'None'],
       required: false,
       default: null,
     },
@@ -45,6 +52,14 @@ const UserSchema = new Schema<IUser>(
     authorizedMonitors: {
       type: [String],
       default: [],
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    dataResetAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

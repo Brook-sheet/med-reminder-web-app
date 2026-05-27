@@ -14,7 +14,7 @@ async function getAuthUser(request: NextRequest) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { patientId: string } }
+  { params }: { params: Promise<{ patientID: string }> }
 ) {
   try {
     const auth = await getAuthUser(request);
@@ -27,7 +27,6 @@ export async function GET(
 
     await connectDB();
 
-    // Verify current user is authorized to monitor this patient
     const currentUser = await User.findById(auth.userId).select('monitoredPatients');
     if (!currentUser) {
       return NextResponse.json<ApiResponse>(
@@ -36,17 +35,28 @@ export async function GET(
       );
     }
 
-    const { patientId } = params;
+    const { patientID } = await params;
+    const normalizedId = patientID?.trim().toUpperCase();
 
-    if (!currentUser.monitoredPatients.includes(patientId)) {
+    if (!normalizedId) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Patient ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const monitoredNormalized = currentUser.monitoredPatients.map((id: string) =>
+      id.trim().toUpperCase()
+    );
+
+    if (!monitoredNormalized.includes(normalizedId)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Access denied. You are not authorized to monitor this patient.' },
         { status: 403 }
       );
     }
 
-    // Fetch patient data
-    const patient = await User.findOne({ patientId }).select(
+    const patient = await User.findOne({ patientId: normalizedId }).select(
       'firstName lastName condition patientId createdAt'
     );
     if (!patient) {
@@ -56,12 +66,10 @@ export async function GET(
       );
     }
 
-    // Fetch medication logs
     const logs = await MedicationLog.find({ userId: patient._id })
       .sort({ scheduledDate: -1, scheduledTime: -1 })
       .lean();
 
-    // Adherence analysis
     const rawLogs = logs.map((l) => ({
       status: String(l.status),
       scheduledDate: String(l.scheduledDate),
@@ -71,7 +79,6 @@ export async function GET(
 
     const analysis = analyzeAdherence(rawLogs);
 
-    // Recent logs (last 30)
     const recentLogs = logs.slice(0, 30).map((l) => ({
       medicineName: l.medicineName,
       scheduledDate: l.scheduledDate,
@@ -112,7 +119,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('[GET /api/patient/monitor/[patientId]/dashboard]', error);
+    console.error('[GET /api/patient/monitor/[patientID]/dashboard]', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
       { status: 500 }
