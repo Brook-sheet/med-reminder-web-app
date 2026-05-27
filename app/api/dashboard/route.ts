@@ -128,7 +128,11 @@ export async function GET(request: NextRequest) {
       userId: user.userId,
       scheduledDate: todayStr,
       medicineId: { $in: activeMedicineIds },
-    }).sort({ scheduledTime: 1 });
+    });
+
+    todayLogs.sort((a, b) =>
+      timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime)
+    );
 
     const todaySchedule: ScheduleItem[] = todayLogs.map((log) => {
       const logMinutes = timeToMinutes(log.scheduledTime);
@@ -156,9 +160,9 @@ export async function GET(request: NextRequest) {
     const todayTaken = todayLogs.filter((l) => l.status === 'taken').length;
     const todayTotal = todayLogs.length;
 
-    const upcomingLogs = todayLogs.filter((log) => {
-      return log.status === 'pending' && timeToMinutes(log.scheduledTime) > nowMinutes;
-    });
+    const upcomingLogs = todayLogs
+      .filter((log) => log.status === 'pending' && timeToMinutes(log.scheduledTime) > nowMinutes)
+      .sort((a, b) => timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime));
     const nextLog = upcomingLogs[0] ?? null;
     const nextReminder = nextLog
       ? { time: nextLog.scheduledTime, medicineName: `${nextLog.medicineName} ${nextLog.dosage}` }

@@ -43,6 +43,19 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchDashboard]);
 
+  useEffect(() => {
+    const handleScheduleChange = () => {
+      setLoading(true);
+      fetchDashboard();
+    };
+
+    window.addEventListener('medicineScheduleChanged', handleScheduleChange);
+
+    return () => {
+      window.removeEventListener('medicineScheduleChanged', handleScheduleChange);
+    };
+  }, [fetchDashboard]);
+
   const adherenceValue = loading ? "—" : `${stats?.adherenceRate ?? 0}%`;
   const progressValue = loading
     ? "—"

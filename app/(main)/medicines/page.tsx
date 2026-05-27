@@ -81,6 +81,7 @@ const Medicines = () => {
       if (data.success) {
         setMedicines((prev) => prev.filter((m) => m._id !== id));
         setToast({ type: "success", message: "Medicine deleted successfully" });
+        window.dispatchEvent(new Event('medicineScheduleChanged'));
       } else {
         setToast({ type: "error", message: data.error || "Failed to delete medicine." });
       }
@@ -114,6 +115,7 @@ const Medicines = () => {
 
     await fetchMedicines();
     handleModalClose();
+    window.dispatchEvent(new Event('medicineScheduleChanged'));
     setToast({
       type: "success",
       message: isEdit ? "Medicine updated successfully" : "Medicine created successfully",
