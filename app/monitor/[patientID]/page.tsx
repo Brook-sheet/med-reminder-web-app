@@ -8,8 +8,6 @@ import {
   Activity, Clock, Pill, User,
 } from 'lucide-react';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
 interface PatientInfo {
   patientId: string;
   name: string;
@@ -51,8 +49,6 @@ interface DashboardData {
   readOnly: boolean;
 }
 
-// ── Config ─────────────────────────────────────────────────────────────────
-
 const RISK_CONFIG = {
   Low: {
     badge: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700',
@@ -90,12 +86,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string 
   skipped: { label: 'Skipped', color: 'text-gray-500', dot: 'bg-gray-400' },
 };
 
-// ── Page ───────────────────────────────────────────────────────────────────
-
 export default function MonitorDashboardPage() {
   const params = useParams();
   const router = useRouter();
-  const patientId = params.patientId as string;
+  const patientID = params.patientID as string;
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,8 +97,9 @@ export default function MonitorDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchDashboard = useCallback(async () => {
+    if (!patientID) return;
     try {
-      const res = await fetch(`/api/patient/monitor/${patientId}/dashboard`);
+      const res = await fetch(`/api/patient/monitor/${patientID}/dashboard`);
       const json = await res.json();
       if (!json.success) {
         setError(json.error || 'Failed to load patient dashboard');
@@ -117,11 +112,10 @@ export default function MonitorDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [patientId]);
+  }, [patientID]);
 
   useEffect(() => {
     fetchDashboard();
-    // Auto-refresh every 60 seconds
     const interval = setInterval(fetchDashboard, 60_000);
     return () => clearInterval(interval);
   }, [fetchDashboard]);
@@ -170,7 +164,7 @@ export default function MonitorDashboardPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
 
-        {/* ── Read-Only Banner ── */}
+        {/* Read-Only Banner */}
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
           <Eye className="w-4 h-4 text-blue-500 shrink-0" />
           <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">
@@ -183,7 +177,7 @@ export default function MonitorDashboardPage() {
           )}
         </div>
 
-        {/* ── Back Button ── */}
+        {/* Back Button */}
         <button
           onClick={() => router.back()}
           className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
@@ -192,7 +186,7 @@ export default function MonitorDashboardPage() {
           Back to Profile
         </button>
 
-        {/* ── Patient Info ── */}
+        {/* Patient Info */}
         <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -218,7 +212,7 @@ export default function MonitorDashboardPage() {
           </div>
         </div>
 
-        {/* ── Adherence Overview ── */}
+        {/* Adherence Overview */}
         <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 space-y-5">
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -338,7 +332,7 @@ export default function MonitorDashboardPage() {
           )}
         </div>
 
-        {/* ── Recent Medication Logs ── */}
+        {/* Recent Medication Logs */}
         <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 space-y-4">
           <div className="flex items-center gap-2">
             <Pill className="w-5 h-5 text-purple-500" />
@@ -385,7 +379,7 @@ export default function MonitorDashboardPage() {
           )}
         </div>
 
-        {/* ── Activity Summary ── */}
+        {/* Activity Summary */}
         <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
           <div className="flex items-center gap-2 mb-4">
             <Activity className="w-5 h-5 text-green-500" />
@@ -407,7 +401,7 @@ export default function MonitorDashboardPage() {
           </div>
         </div>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="text-center text-xs text-gray-400 dark:text-gray-500 pb-4">
           Auto-refreshes every 60 seconds · Read-only monitoring mode
         </div>
