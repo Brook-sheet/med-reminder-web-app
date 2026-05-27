@@ -16,6 +16,7 @@
 export type RiskLevel = 'Low' | 'Moderate' | 'High';
 export type TrendDirection = 'improving' | 'stable' | 'declining';
 
+
 export interface AdherenceFeatures {
   /** Weighted adherence rate 0-100 */
   adherenceRate: number;
@@ -450,4 +451,6 @@ export function analyzeAdherence(logs: RawLog[]): AdherenceAnalysis {
   }
 
   return { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation };
+  
 }
+
