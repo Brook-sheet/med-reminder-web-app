@@ -1,3 +1,4 @@
+// app/api/adherence/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
@@ -30,10 +31,19 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
-    const userDoc = await User.findById(user.userId).select('firstName lastName condition');
+    const userDoc = await User.findById(user.userId).select(
+      'firstName lastName condition lastRiskLevel'
+    );
     const patientName = userDoc?.firstName
       ? `${userDoc.firstName} ${userDoc.lastName || ''}`.trim()
       : undefined;
+
+    // Previous risk level for escalation detection
+    const previousRiskLevel = userDoc?.lastRiskLevel as
+      | 'Low'
+      | 'Moderate'
+      | 'High'
+      | undefined;
 
     const allLogs = await MedicationLog.find({ userId: user.userId }).lean();
 
@@ -44,16 +54,16 @@ export async function GET(request: NextRequest) {
       takenAt: l.takenAt ?? null,
     }));
 
-    // ── Existing: Full adherence analysis (Rule-Based + Random Forest) ──────
+    // Full adherence analysis (Rule-Based + Random Forest)
     const analysis = analyzeAdherence(rawLogs);
-    const { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation } = analysis;
+    const { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation } =
+      analysis;
 
-    // Counts for UI display
     const totalScheduled = allLogs.length;
     const totalTaken = allLogs.filter((l) => l.status === 'taken').length;
     const totalMissed = features.missedDoses;
 
-    // ── NEW: Adaptive Intervention Engine ───────────────────────────────────
+    // Adaptive Intervention Engine
     const behaviorLogs: RawLogForBehavior[] = allLogs.map((l) => ({
       status: String(l.status),
       scheduledDate: String(l.scheduledDate),
@@ -67,27 +77,33 @@ export async function GET(request: NextRequest) {
       finalRiskLevel,
       mlPrediction.riskLevel,
       mlPrediction.confidence * 100,
-      undefined // previousRiskLevel — could persist in DB for escalation detection
+      previousRiskLevel
     );
 
-    // ── Motivational message ─────────────────────────────────────────────────
+    // Persist the new risk level so next call can detect escalation
+    if (finalRiskLevel !== previousRiskLevel) {
+      await User.findByIdAndUpdate(user.userId, {
+        lastRiskLevel: finalRiskLevel,
+      });
+    }
+
+    // Motivational message
     const motivationalMessage = generateMotivationalMessage(
       finalRiskLevel,
       features.trend,
       features.adherenceRate
     );
 
-    // ── Escalation message (only when relevant) ──────────────────────────────
-    const escalationMessage =
-      adaptiveResult.reminderConfig.escalationEnabled
-        ? generateEscalationMessage(
-            adaptiveResult.reminderConfig.escalationPriority,
-            features,
-            patientName
-          )
-        : null;
+    // Escalation message
+    const escalationMessage = adaptiveResult.reminderConfig.escalationEnabled
+      ? generateEscalationMessage(
+          adaptiveResult.reminderConfig.escalationPriority,
+          features,
+          patientName
+        )
+      : null;
 
-    // ── Optional: AI insight enhancement via Claude ──────────────────────────
+    // AI insight via Claude
     let aiInsight = `${insight} ${recommendation}`;
 
     try {
@@ -150,41 +166,40 @@ Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendat
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
-        // ── Existing risk levels ────────────────────────────────────────────
+        // Risk levels
         riskLevel: finalRiskLevel,
         ruleBasedRisk: ruleBased.riskLevel,
         mlRisk: mlPrediction.riskLevel,
         mlConfidence: Math.round(mlPrediction.confidence * 100),
 
-        // ── Core metrics ────────────────────────────────────────────────────
+        // Core metrics
         adherenceRate: features.adherenceRate,
         totalScheduled,
         totalTaken,
         totalMissed,
         totalPending: allLogs.filter((l) => l.status === 'pending').length,
 
-        // ── Behavioral features ─────────────────────────────────────────────
+        // Behavioral features
         consecutiveMissed: features.consecutiveMissed,
         delayedDoses: features.delayedDoses,
         avgDelayMinutes: features.avgDelayMinutes,
 
-        // ── Trend ───────────────────────────────────────────────────────────
+        // Trend
         recentRate: features.recentAdherenceRate,
         weeklyTrend: features.trend,
 
-        // ── Rule-based explanation ──────────────────────────────────────────
+        // Rule-based explanation
         ruleReasons: ruleBased.reasons,
 
-        // ── ML explanation ──────────────────────────────────────────────────
+        // ML explanation
         mlPrediction: mlPrediction.prediction,
         featureImportance: mlPrediction.featureImportance,
 
-        // ── AI insight ──────────────────────────────────────────────────────
+        // AI insight
         aiInsight,
 
-        // ── NEW: Adaptive Intervention Data ─────────────────────────────────
+        // Adaptive Intervention Data
         adaptiveIntervention: {
-          // Behavioral pattern
           behavioralPattern: {
             avgIntakeDelayMinutes: adaptiveResult.behavioralPattern.avgIntakeDelayMinutes,
             delayProfile: adaptiveResult.behavioralPattern.delayProfile,
@@ -194,7 +209,6 @@ Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendat
             maxHistoricalMissStreak: adaptiveResult.behavioralPattern.maxHistoricalMissStreak,
             peakMissHour: adaptiveResult.behavioralPattern.peakMissHour,
           },
-          // Adaptive reminder config
           reminderConfig: {
             leadTimeMinutes: adaptiveResult.reminderConfig.leadTimeMinutes,
             followUpCount: adaptiveResult.reminderConfig.followUpCount,
@@ -204,10 +218,10 @@ Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendat
             highSensitivityMode: adaptiveResult.reminderConfig.highSensitivityMode,
             escalationEnabled: adaptiveResult.reminderConfig.escalationEnabled,
             escalationPriority: adaptiveResult.reminderConfig.escalationPriority,
-            motivationalMessagingEnabled: adaptiveResult.reminderConfig.motivationalMessagingEnabled,
+            motivationalMessagingEnabled:
+              adaptiveResult.reminderConfig.motivationalMessagingEnabled,
             behavioralLeadTimeBonus: adaptiveResult.reminderConfig.behavioralLeadTimeBonus,
           },
-          // Intervention metadata
           interventionSummary: adaptiveResult.interventionSummary,
           isEscalation: adaptiveResult.isEscalation,
           drivingRiskLevel: adaptiveResult.drivingRiskLevel,
@@ -215,7 +229,6 @@ Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendat
           keySignals: adaptiveResult.keySignals,
           interventionReason: adaptiveResult.reminderConfig.interventionReason,
           clinicalActionSuggestion: adaptiveResult.reminderConfig.clinicalActionSuggestion,
-          // Messaging
           motivationalMessage,
           escalationMessage,
         },

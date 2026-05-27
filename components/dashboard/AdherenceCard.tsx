@@ -1,7 +1,47 @@
 // components/dashboard/AdherenceCard.tsx
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Brain, Shield, TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import {
+  Brain, Shield, TrendingUp, TrendingDown, Minus,
+  AlertTriangle, CheckCircle, Info, Clock, Bell,
+} from 'lucide-react';
+
+interface AdaptiveReminderConfig {
+  leadTimeMinutes: number;
+  followUpCount: number;
+  followUpIntervalMinutes: number;
+  intensity: string;
+  messageTone: string;
+  highSensitivityMode: boolean;
+  escalationEnabled: boolean;
+  escalationPriority: string;
+  motivationalMessagingEnabled: boolean;
+  behavioralLeadTimeBonus: number;
+}
+
+interface AdaptiveBehavioralPattern {
+  avgIntakeDelayMinutes: number;
+  delayProfile: string;
+  hasClusteredMisses: boolean;
+  delayTrend: string;
+  currentMissStreak: number;
+  maxHistoricalMissStreak: number;
+  peakMissHour: number | null;
+}
+
+interface AdaptiveIntervention {
+  behavioralPattern: AdaptiveBehavioralPattern;
+  reminderConfig: AdaptiveReminderConfig;
+  interventionSummary: string;
+  isEscalation: boolean;
+  drivingRiskLevel: string;
+  interventionConfidence: number;
+  keySignals: string[];
+  interventionReason: string;
+  clinicalActionSuggestion: string;
+  motivationalMessage: string;
+  escalationMessage: string | null;
+}
 
 interface AdherenceData {
   riskLevel: 'Low' | 'Moderate' | 'High';
@@ -22,6 +62,7 @@ interface AdherenceData {
   mlPrediction: string;
   featureImportance: Record<string, number>;
   aiInsight: string;
+  adaptiveIntervention: AdaptiveIntervention;
 }
 
 const RISK_BADGE = {
@@ -63,10 +104,17 @@ const FEATURE_LABELS: Record<string, string> = {
   compositeRisk: 'Composite Risk',
 };
 
+function formatHour(h: number): string {
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
+}
+
 export default function AdherenceCard() {
   const [data, setData] = useState<AdherenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
+  const [showAdaptive, setShowAdaptive] = useState(false);
 
   const fetchAdherence = useCallback(async () => {
     try {
@@ -84,30 +132,6 @@ export default function AdherenceCard() {
     fetchAdherence();
   }, [fetchAdherence]);
 
-  useEffect(() => {
-    if (!data) return;
-    if (data.riskLevel === 'High' || data.riskLevel === 'Moderate') {
-      sendRiskNotification(data.riskLevel, data.adherenceRate);
-    }
-  }, [data]);
-
-  async function sendRiskNotification(risk: string, rate: number) {
-    try {
-      await fetch('/api/push/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY || '',
-        },
-        body: JSON.stringify({
-          title: `Medication Adherence Alert — ${risk} Risk`,
-          body: `Current adherence rate is ${rate}%. Please check your medication schedule.`,
-          riskLevel: risk,
-        }),
-      });
-    } catch {}
-  }
-
   if (loading) {
     return (
       <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 animate-pulse">
@@ -124,20 +148,27 @@ export default function AdherenceCard() {
   const RiskIcon = riskCfg.icon;
   const trendCfg = TREND_CONFIG[data.weeklyTrend];
   const TrendIcon = trendCfg.icon;
-
   const mlMatch = data.ruleBasedRisk === data.mlRisk;
 
-  // Adherence bar color
-  const barColor = data.adherenceRate >= 80
-    ? 'bg-green-500'
-    : data.adherenceRate >= 50
-    ? 'bg-yellow-500'
+  const barColor =
+    data.adherenceRate >= 80 ? 'bg-green-500'
+    : data.adherenceRate >= 50 ? 'bg-yellow-500'
     : 'bg-red-500';
 
+  const adaptive = data.adaptiveIntervention;
+  const rc = adaptive?.reminderConfig;
+  const bp = adaptive?.behavioralPattern;
+
+  const intensityColor =
+    rc?.intensity === 'aggressive' ? 'text-red-600 dark:text-red-400'
+    : rc?.intensity === 'moderate' ? 'text-yellow-600 dark:text-yellow-400'
+    : 'text-green-600 dark:text-green-400';
+
   return (
-    <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
+    <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5 space-y-5">
+
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -150,8 +181,33 @@ export default function AdherenceCard() {
         </span>
       </div>
 
+      {/* ── Escalation Banner ── */}
+      {adaptive?.isEscalation && adaptive?.escalationMessage && (
+        <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700">
+          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-red-700 dark:text-red-300 uppercase tracking-wide mb-1">
+              Risk Escalation Detected
+            </p>
+            <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">
+              {adaptive.escalationMessage}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Motivational Message ── */}
+      {adaptive?.motivationalMessage && (
+        <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            {adaptive.motivationalMessage}
+          </p>
+        </div>
+      )}
+
       {/* ── Adherence Rate Bar ── */}
-      <div className="mb-5">
+      <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
             Overall Weighted Adherence
@@ -175,31 +231,171 @@ export default function AdherenceCard() {
       </div>
 
       {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 text-center border border-border/30">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Taken</p>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">{data.totalTaken}</p>
-        </div>
-        <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 text-center border border-border/30">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Missed</p>
-          <p className="text-xl font-bold text-red-600 dark:text-red-400">{data.totalMissed}</p>
-        </div>
-        <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 text-center border border-border/30">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Delayed</p>
-          <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{data.delayedDoses}</p>
-        </div>
-        <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 text-center border border-border/30">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Recent 7d</p>
-          <div className="flex items-center justify-center gap-1">
-            <TrendIcon className={`w-3.5 h-3.5 ${trendCfg.color}`} />
-            <p className={`text-xl font-bold ${trendCfg.color}`}>{data.recentRate}%</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Taken', value: data.totalTaken, color: 'text-gray-900 dark:text-white' },
+          { label: 'Missed', value: data.totalMissed, color: 'text-red-600 dark:text-red-400' },
+          { label: 'Delayed', value: data.delayedDoses, color: 'text-yellow-600 dark:text-yellow-400' },
+          { label: 'Recent 7d', value: null, color: trendCfg.color, isTrend: true },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 text-center border border-border/30">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{stat.label}</p>
+            {stat.isTrend ? (
+              <div className="flex items-center justify-center gap-1">
+                <TrendIcon className={`w-3.5 h-3.5 ${trendCfg.color}`} />
+                <p className={`text-xl font-bold ${trendCfg.color}`}>{data.recentRate}%</p>
+              </div>
+            ) : (
+              <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
+            )}
           </div>
-        </div>
+        ))}
       </div>
 
-      {/* ── Dual Classification: Rule-Based + ML ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-        {/* Rule-Based */}
+      {/* ── Adaptive Intervention Config ── */}
+      {rc && (
+        <div className="rounded-xl border border-border/50 bg-white/50 dark:bg-gray-800/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                Adaptive Reminder Config
+              </span>
+              <span className={`text-xs font-bold uppercase tracking-wide ${intensityColor}`}>
+                · {rc.intensity}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowAdaptive(!showAdaptive)}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              {showAdaptive ? '▲ Hide' : '▼ Show'}
+            </button>
+          </div>
+
+          {/* Always visible summary */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-2 border border-indigo-100 dark:border-indigo-800">
+              <Clock className="w-3.5 h-3.5 text-indigo-500 mx-auto mb-1" />
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">
+                {rc.leadTimeMinutes} min
+              </p>
+              <p className="text-[10px] text-indigo-500 dark:text-indigo-500">Lead Time</p>
+              {rc.behavioralLeadTimeBonus > 0 && (
+                <p className="text-[10px] text-indigo-400">(+{rc.behavioralLeadTimeBonus} bonus)</p>
+              )}
+            </div>
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2 border border-orange-100 dark:border-orange-800">
+              <Bell className="w-3.5 h-3.5 text-orange-500 mx-auto mb-1" />
+              <p className="text-xs text-orange-600 dark:text-orange-400 font-bold">
+                {rc.followUpCount}×
+              </p>
+              <p className="text-[10px] text-orange-500">Follow-ups</p>
+              <p className="text-[10px] text-orange-400">every {rc.followUpIntervalMinutes}m</p>
+            </div>
+            <div className={`rounded-lg p-2 border ${
+              rc.escalationEnabled
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800'
+                : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+            }`}>
+              <AlertTriangle className={`w-3.5 h-3.5 mx-auto mb-1 ${
+                rc.escalationEnabled ? 'text-red-500' : 'text-gray-400'
+              }`} />
+              <p className={`text-xs font-bold ${
+                rc.escalationEnabled ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+              }`}>
+                {rc.escalationEnabled ? rc.escalationPriority : 'None'}
+              </p>
+              <p className={`text-[10px] ${
+                rc.escalationEnabled ? 'text-red-500' : 'text-gray-400'
+              }`}>
+                Escalation
+              </p>
+            </div>
+          </div>
+
+          {/* Expanded details */}
+          {showAdaptive && bp && (
+            <div className="space-y-2 pt-2 border-t border-border/30">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                Behavioral Pattern
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Delay Profile</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200 capitalize">
+                    {bp.delayProfile.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Avg Delay</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                    {bp.avgIntakeDelayMinutes} min
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Miss Streak</span>
+                  <span className={`font-semibold ${bp.currentMissStreak > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                    {bp.currentMissStreak}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Delay Trend</span>
+                  <span className={`font-semibold capitalize ${
+                    bp.delayTrend === 'improving' ? 'text-green-600 dark:text-green-400'
+                    : bp.delayTrend === 'worsening' ? 'text-red-600 dark:text-red-400'
+                    : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {bp.delayTrend}
+                  </span>
+                </div>
+                {bp.peakMissHour !== null && (
+                  <div className="flex justify-between col-span-2">
+                    <span className="text-gray-500">Peak Miss Hour</span>
+                    <span className="font-semibold text-orange-600 dark:text-orange-400">
+                      {formatHour(bp.peakMissHour)} (proactive nudge sent 1hr before)
+                    </span>
+                  </div>
+                )}
+                {bp.hasClusteredMisses && (
+                  <div className="col-span-2 text-orange-600 dark:text-orange-400 text-xs">
+                    ⚠ Clustered missed doses detected at specific scheduled times.
+                  </div>
+                )}
+              </div>
+
+              {adaptive.keySignals.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                    Key Signals
+                  </p>
+                  <ul className="space-y-1">
+                    {adaptive.keySignals.map((s, i) => (
+                      <li key={i} className="text-xs text-gray-600 dark:text-gray-400">
+                        • {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {adaptive.clinicalActionSuggestion && (
+                <div className="pt-2 border-t border-border/30">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                    Clinical Suggestion
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    {adaptive.clinicalActionSuggestion}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Dual Classification ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-xl border border-border/50 bg-white/50 dark:bg-gray-800/50 p-3">
           <div className="flex items-center gap-2 mb-2">
             <Shield className="w-4 h-4 text-blue-500" />
@@ -220,7 +416,6 @@ export default function AdherenceCard() {
           ))}
         </div>
 
-        {/* Random Forest ML */}
         <div className="rounded-xl border border-border/50 bg-white/50 dark:bg-gray-800/50 p-3">
           <div className="flex items-center gap-2 mb-2">
             <Brain className="w-4 h-4 text-purple-500" />
@@ -239,7 +434,6 @@ export default function AdherenceCard() {
               {data.mlConfidence}% confidence
             </span>
           </div>
-          {/* Feature importance mini-bars */}
           <div className="space-y-1">
             {Object.entries(data.featureImportance)
               .sort((a, b) => b[1] - a[1])
@@ -264,12 +458,12 @@ export default function AdherenceCard() {
         </div>
       </div>
 
-      {/* ── Agreement / Disagreement indicator ── */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-xs
-        ${mlMatch
+      {/* ── Agreement indicator ── */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
+        mlMatch
           ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
           : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-        }`}>
+      }`}>
         <Info className="w-3.5 h-3.5 shrink-0" />
         {mlMatch
           ? `Both rule-based and ML models agree: ${data.riskLevel} Risk. High classification confidence.`
@@ -289,16 +483,16 @@ export default function AdherenceCard() {
         </div>
       )}
 
-      {/* ── Toggle details ── */}
+      {/* ── Toggle ML details ── */}
       <button
         onClick={() => setShowDetails(!showDetails)}
-        className="mt-3 w-full text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        className="w-full text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
       >
-        {showDetails ? '▲ Hide details' : '▼ Show ML prediction details'}
+        {showDetails ? '▲ Hide ML details' : '▼ Show ML prediction details'}
       </button>
 
       {showDetails && (
-        <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-border/30">
+        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-border/30">
           <p className="text-xs text-gray-500 dark:text-gray-400 font-mono leading-relaxed">
             {data.mlPrediction}
           </p>

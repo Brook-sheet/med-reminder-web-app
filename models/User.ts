@@ -1,3 +1,4 @@
+// models/User.ts
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IUser extends Document {
@@ -15,6 +16,7 @@ export interface IUser extends Document {
   authorizedMonitors: string[];
   isDeleted?: boolean;
   dataResetAt?: Date;
+  lastRiskLevel?: string; // NEW
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +61,11 @@ const UserSchema = new Schema<IUser>(
     },
     dataResetAt: {
       type: Date,
+      default: null,
+    },
+    lastRiskLevel: {       // NEW
+      type: String,
+      enum: ['Low', 'Moderate', 'High'],
       default: null,
     },
   },
