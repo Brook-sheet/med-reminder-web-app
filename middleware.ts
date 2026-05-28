@@ -2,7 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-export const runtime = 'edge';
+// Updated for Next.js 16
+export const runtime = 'experimental-edge';
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ||
@@ -11,6 +12,7 @@ const SECRET = new TextEncoder().encode(
 
 // Pages that do NOT require login
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
+
 // Public API routes (ESP32 INCLUDED)
 const PUBLIC_API_ROUTES = [
   '/api/auth',
@@ -46,28 +48,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Allow ALL ESP32 / sensor API routes (NO AUTH) ────────────────
+  // ── Allow ALL ESP32 / sensor API routes (NO AUTH) ───────────────────
   if (isPublicApi(pathname)) {
     return NextResponse.next();
   }
 
-  // ── Check auth token ────────────────────────────────────────────────
+  // ── Check auth token ─────────────────────────────────────────────────
   const token = request.cookies.get('med_auth_token')?.value;
+
   const user = token ? await verifyToken(token) : null;
 
-  const isPublicPage = PUBLIC_ROUTES.some((r) =>
-    pathname.startsWith(r)
+  const isPublicPage = PUBLIC_ROUTES.some((route) =>
+    pathname.startsWith(route)
   );
 
-  // ── If logged in → block auth pages ────────────────────────────────
+  // ── If logged in → block auth pages ──────────────────────────────────
   if (user && isPublicPage) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // ── If NOT logged in → redirect only NON-public pages ──────────────
+  // ── If NOT logged in → redirect protected pages ──────────────────────
   if (!user && !isPublicPage) {
     const signInUrl = new URL('/sign-in', request.url);
     signInUrl.searchParams.set('from', pathname);
+
     return NextResponse.redirect(signInUrl);
   }
 
