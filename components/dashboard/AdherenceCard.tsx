@@ -111,26 +111,13 @@ function formatHour(h: number): string {
 }
 
 export default function AdherenceCard() {
-  const [data, setData] = useState<AdherenceData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, error } = useAdherence({
+    autoRefetch: true,
+    refetchIntervalMs: 60_000, // Refresh every 60 seconds
+    initialLoad: true,
+  });
   const [showDetails, setShowDetails] = useState(false);
   const [showAdaptive, setShowAdaptive] = useState(false);
-
-  const fetchAdherence = useCallback(async () => {
-    try {
-      const res = await fetch('/api/adherence');
-      const json = await res.json();
-      if (json.success) setData(json.data);
-    } catch (err) {
-      console.error('Adherence fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAdherence();
-  }, [fetchAdherence]);
 
   if (loading) {
     return (
@@ -138,6 +125,14 @@ export default function AdherenceCard() {
         <div className="h-4 bg-muted rounded w-1/3 mb-4" />
         <div className="h-24 bg-muted/70 rounded mb-3" />
         <div className="h-16 bg-muted/50 rounded" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-[28px] border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 shadow-lg shadow-slate-900/5">
+        <p className="text-red-700 dark:text-red-300">Failed to load adherence data: {error}</p>
       </div>
     );
   }

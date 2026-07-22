@@ -12,6 +12,7 @@ import React, {
 import UpcomingReminderNotification from "./UpcomingReminderNotification";
 import IntakeConfirmedNotification from "./IntakeConfirmedNotification";
 import FoodMonitoringModal from "./FoodMonitoringModal";
+import { useAdherence } from "@/hooks/useAdherence";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -242,11 +243,26 @@ async function saveNotificationToDB(params: {
 const NotificationManager: React.FC = () => {
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [adherence, setAdherence] = useState<AdherenceData | null>(null);
   const [activeNotifications, setActiveNotifications] = useState<ActiveNotification[]>([]);
   const [showFoodModal, setShowFoodModal] = useState(false);
   const [currentLogId, setCurrentLogId] = useState<string | undefined>();
   const [notificationMemoryLoaded, setNotificationMemoryLoaded] = useState(false);
+
+  // Use shared adherence hook - auto-refetches on schedule changes and intervals
+  const { data: adherenceData, refetch: refetchAdherence } = useAdherence({
+    autoRefetch: true,
+    refetchIntervalMs: 60_000,
+    initialLoad: true,
+  });
+
+  // Convert hook data to local format for compatibility
+  const adherence = adherenceData
+    ? {
+        adherenceRate: adherenceData.adherenceRate,
+        riskLevel: normaliseRiskLevel(adherenceData.riskLevel),
+        adaptiveIntervention: adherenceData.adaptiveIntervention,
+      }
+    : null;
 
   // Escalation banner state
   const [escalationBanner, setEscalationBanner] = useState<string | null>(null);
@@ -324,42 +340,24 @@ const NotificationManager: React.FC = () => {
     }
   }, []);
 
-  const fetchAdherence = useCallback(async () => {
-    try {
-      const adherenceRes = await fetch("/api/adherence");
-      const adherenceData = await adherenceRes.json();
-      if (adherenceData.success) {
-        const d = adherenceData.data;
-        setAdherence({
-          adherenceRate: d.adherenceRate,
-          riskLevel: normaliseRiskLevel(d.riskLevel),
-          adaptiveIntervention: d.adaptiveIntervention,
-        });
-
-        // Show escalation banner if applicable
-        const esc = d.adaptiveIntervention?.escalationMessage;
-        if (esc && d.adaptiveIntervention?.isEscalation) {
-          setEscalationBanner(esc);
-        }
-      }
-    } catch (err) {
-      console.error("NotificationManager fetchAdherence error:", err);
-    }
-  }, []);
-
-  // On mount: fetch dashboard + adherence once
+  // On mount: fetch dashboard and set up polling
   useEffect(() => {
     fetchAll().catch(console.error);
-    if (!adherenceFetchedRef.current) {
-      adherenceFetchedRef.current = true;
-      fetchAdherence().catch(console.error);
-    }
-    // Poll dashboard every 30s (lightweight), adherence is NOT re-polled
+    // Poll dashboard every 30s (lightweight)
     const interval = setInterval(() => {
       fetchAll().catch(console.error);
     }, 30_000);
     return () => clearInterval(interval);
-  }, [fetchAll, fetchAdherence]);
+  }, [fetchAll]);
+
+  // Update escalation banner when adherence data changes
+  useEffect(() => {
+    if (!adherence?.adaptiveIntervention) return;
+    const esc = adherence.adaptiveIntervention.escalationMessage;
+    if (esc && adherence.adaptiveIntervention.isEscalation) {
+      setEscalationBanner(esc);
+    }
+  }, [adherence?.adaptiveIntervention]);
 
   // ── Browser permission ───────────────────────────────────────────────────
   useEffect(() => {
@@ -560,10 +558,9 @@ const NotificationManager: React.FC = () => {
 
         setCurrentLogId(item.logId);
 
-        // Re-fetch adherence after intake so lead time updates for next dose
-        adherenceFetchedRef.current = false;
-        fetchAdherence().catch(console.error);
-        adherenceFetchedRef.current = true;
+        // Re-fetch adherence after intake immediately so popup shows current rate
+        // The useAdherence hook will notify all subscribers of the update
+        refetchAdherence().catch(console.error);
 
         saveNotificationToDB({
           type: "intake_confirmed",

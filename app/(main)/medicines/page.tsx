@@ -104,22 +104,71 @@ const Medicines = () => {
     const url = isEdit ? `/api/medicines/${editingMedicine._id}` : "/api/medicines";
     const method = isEdit ? "PUT" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-    if (!data.success) throw new Error(data.error || "Failed to save medicine.");
+      // Handle non-200 status codes
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type");
+        let errorMessage = "Failed to save medicine.";
 
-    await fetchMedicines();
-    handleModalClose();
-    window.dispatchEvent(new Event('medicineScheduleChanged'));
-    setToast({
-      type: "success",
-      message: isEdit ? "Medicine updated successfully" : "Medicine created successfully",
-    });
+        // Try to parse error response
+        if (contentType?.includes("application/json")) {
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } catch (parseErr) {
+            console.error("Failed to parse error response:", parseErr);
+          }
+        } else {
+          // Got HTML or other non-JSON response
+          errorMessage = `Server error (${res.status}): ${res.statusText}`;
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      // Parse successful response
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error("Failed to parse response JSON:", parseErr);
+        throw new Error("Server returned invalid JSON response");
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || "Failed to save medicine.");
+      }
+
+      // Success: refresh all dependent components
+      await fetchMedicines();
+      handleModalClose();
+
+      // Trigger adherence recalculation by invalidating the cache
+      if (typeof window !== "undefined" && window.invalidateAdherence) {
+        window.invalidateAdherence();
+      }
+
+      // Dispatch event to notify all components of schedule change
+      window.dispatchEvent(new Event("medicineScheduleChanged"));
+
+      // Also trigger dashboard refresh
+      window.dispatchEvent(new Event("dashboardRefresh"));
+
+      setToast({
+        type: "success",
+        message: isEdit ? "Medicine updated successfully" : "Medicine created successfully",
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save medicine. Please try again.";
+      console.error("Medicine save error:", err);
+      throw new Error(errorMessage);
+    }
   };
 
   let medicineContent;

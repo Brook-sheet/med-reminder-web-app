@@ -12,6 +12,53 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
+// ── GET /api/medicines/[id] ───────────────────────────────────────────────
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Unauthorized' },
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Invalid medicine ID' },
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    await connectDB();
+
+    const medicine = await Medicine.findOne({ _id: id, userId: user.userId });
+
+    if (!medicine) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Medicine not found' },
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return NextResponse.json<ApiResponse>(
+      { success: true, data: medicine },
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('[GET /api/medicines/[id]] Error:', error);
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: 'Internal server error' },
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
 // ── Validation helpers (duplicated here to keep each route file self-contained) ──
 
 const VALID_FREQUENCIES = [
@@ -153,7 +200,7 @@ export async function PUT(
     if (!user) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -161,7 +208,7 @@ export async function PUT(
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid medicine ID' },
-        { status: 400 }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -170,10 +217,11 @@ export async function PUT(
     let body: Record<string, unknown>;
     try {
       body = await request.json();
-    } catch {
+    } catch (parseErr) {
+      console.error('[PUT /api/medicines/[id]] JSON parse error:', parseErr);
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid JSON body.' },
-        { status: 400 }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -182,7 +230,7 @@ export async function PUT(
     if (!validation.valid) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: validation.error },
-        { status: 400 }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -206,47 +254,60 @@ export async function PUT(
         startDate: startDate && startDate.trim() ? startDate.trim() : undefined,
         endDate: endDate && endDate.trim() ? endDate.trim() : null,
         notes: typeof notes === 'string' ? notes.trim().slice(0, 500) : '',
+        updatedAt: new Date(),
       },
       { new: true, runValidators: true }
     );
 
     if (!medicine) {
+      console.warn(`[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`);
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Medicine not found' },
-        { status: 404 }
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    await MedicationLog.deleteMany({
-      userId: user.userId,
-      medicineId: id,
-      scheduledDate: today,
-      status: 'pending',
-    });
-    for (const time of scheduledTimes as string[]) {
-      await MedicationLog.create({
+    // ── Regenerate medication logs for today ──────────────────────────────
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await MedicationLog.deleteMany({
         userId: user.userId,
         medicineId: id,
-        medicineName: medicine.name,
-        dosage: medicine.dosage,
         scheduledDate: today,
-        scheduledTime: time.trim(),
         status: 'pending',
-        source: 'auto',
       });
+
+      // Create new logs for today with updated times
+      for (const time of scheduledTimes as string[]) {
+        await MedicationLog.create({
+          userId: user.userId,
+          medicineId: id,
+          medicineName: medicine.name,
+          dosage: medicine.dosage,
+          scheduledDate: today,
+          scheduledTime: time.trim(),
+          status: 'pending',
+          source: 'auto',
+        });
+      }
+    } catch (logErr) {
+      console.error('[PUT /api/medicines/[id]] Error updating medication logs:', logErr);
+      // Don't fail the response if log update fails, but log it
     }
 
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: medicine,
-      message: 'Medicine updated successfully',
-    });
+    return NextResponse.json<ApiResponse>(
+      {
+        success: true,
+        data: medicine,
+        message: 'Medicine updated successfully',
+      },
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
-    console.error('[PUT /api/medicines/[id]]', error);
+    console.error('[PUT /api/medicines/[id]] Unhandled error:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
@@ -262,7 +323,7 @@ export async function DELETE(
     if (!user) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -270,7 +331,7 @@ export async function DELETE(
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid medicine ID' },
-        { status: 400 }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -278,14 +339,14 @@ export async function DELETE(
 
     const medicine = await Medicine.findOneAndUpdate(
       { _id: id, userId: user.userId },
-      { isActive: false },
+      { isActive: false, updatedAt: new Date() },
       { new: true }
     );
 
     if (!medicine) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Medicine not found' },
-        { status: 404 }
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -297,15 +358,18 @@ export async function DELETE(
       status: { $in: ['pending', 'reminder'] },
     });
 
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      message: 'Medicine deleted successfully',
-    });
+    return NextResponse.json<ApiResponse>(
+      {
+        success: true,
+        message: 'Medicine deleted successfully',
+      },
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
-    console.error('[DELETE /api/medicines/[id]]', error);
+    console.error('[DELETE /api/medicines/[id]] Error:', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
