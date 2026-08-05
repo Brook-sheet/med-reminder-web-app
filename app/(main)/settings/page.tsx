@@ -4,7 +4,6 @@ import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import ResetDataCard from "@/components/dashboard/settings/ResetDataCard";
 import { ThemeToggle } from "@/components/theme-toggle";
-import PatientIdSection from "@/components/profile/PatientIdSection";
 
 const Settings = () => {
   return (
@@ -37,18 +36,10 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* 3. Patient ID & Monitoring */}
-          <div className="bg-card p-6 rounded-[28px] shadow-sm border border-border/80">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Patient Monitoring
-            </h2>
-            <PatientIdSection />
-          </div>
-
-          {/* 4. Browser Push Notifications */}
+          {/* 3. Browser Push Notifications */}
           <PushNotificationCard />
 
-          {/* 5. Reset Data (bottom) */}
+          {/* 4. Reset Data (bottom) */}
           <ResetDataCard />
         </div>
       </div>

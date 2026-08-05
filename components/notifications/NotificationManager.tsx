@@ -639,7 +639,7 @@ const NotificationManager: React.FC = () => {
     notificationMemoryLoaded,
     enqueueNotification,
     removeDueNotificationsByLogId,
-    fetchAdherence,
+    refetchAdherence,
   ]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────

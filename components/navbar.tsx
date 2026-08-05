@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
-import { CiPill, CiSettings, CiLogout } from "react-icons/ci";
+import { CiPill, CiSettings, CiLogout, CiMonitor } from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
 
 const Navbar = () => {
@@ -74,6 +74,14 @@ const Navbar = () => {
             <span className="font-semibold">Dashboard</span>
           </Link>
           <Link
+            href="/monitor"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+          >
+            <CiMonitor className="h-6 w-6" />
+            <span className="font-semibold">Patient Monitoring</span>
+          </Link>
+          <Link
             href="/medicines"
             onClick={closeSidebar}
             className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
@@ -101,6 +109,7 @@ const Navbar = () => {
 
           <div className="mt-auto">
             <button
+              type="button"
               onClick={handleLogout}
               className="flex w-full items-center gap-3 rounded-3xl border border-transparent bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
             >

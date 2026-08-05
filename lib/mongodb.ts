@@ -21,15 +21,13 @@ export async function connectDB(): Promise<typeof mongoose> {
     return global.mongooseCache.conn;
   }
 
-  if (!global.mongooseCache) {
-    global.mongooseCache = { conn: null, promise: null };
-  }
+  global.mongooseCache ??= { conn: null, promise: null };
 
-  if (!global.mongooseCache.promise) {
-    global.mongooseCache.promise = mongoose.connect(uri, {
-      bufferCommands: false,
-    });
-  }
+  global.mongooseCache.promise ??= mongoose.connect(uri, {
+    bufferCommands: false,
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 5000,
+  });
 
   global.mongooseCache.conn = await global.mongooseCache.promise;
   console.log('[MongoDB] Connected successfully');

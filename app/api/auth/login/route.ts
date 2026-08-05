@@ -5,6 +5,23 @@ import User from '@/models/User';
 import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
+function isDatabaseUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+  const message = 'message' in error ? String((error as { message?: unknown }).message) : '';
+
+  return (
+    code === 'ENOTFOUND' ||
+    code === 'ECONNREFUSED' ||
+    code === 'EAI_AGAIN' ||
+    code === 'ETIMEDOUT' ||
+    message.includes('querySrv') ||
+    message.includes('server selection timed out') ||
+    message.includes('MONGODB_URI')
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -67,6 +84,17 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('[LOGIN]', error);
+
+    if (isDatabaseUnavailableError(error)) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: 'The authentication service is temporarily unavailable. Please try again in a moment.',
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
       { status: 500 }
