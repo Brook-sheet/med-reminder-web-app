@@ -3,15 +3,19 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
 import { CiPill, CiSettings, CiLogout, CiMonitor } from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
+import { MessageCircle } from "lucide-react";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 
 const Navbar = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { unreadCount } = useChatNotifications();
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -80,6 +84,23 @@ const Navbar = () => {
           >
             <CiMonitor className="h-6 w-6" />
             <span className="font-semibold">Patient Monitoring</span>
+          </Link>
+          <Link
+            href="/chats"
+            onClick={closeSidebar}
+            className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
+              pathname === "/chats" ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900" : ""
+            }`}
+          >
+            <span className="relative">
+              <MessageCircle className="h-6 w-6" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </span>
+            <span className="font-semibold">Chats</span>
           </Link>
           <Link
             href="/medicines"
