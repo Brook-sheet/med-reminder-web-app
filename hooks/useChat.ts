@@ -48,12 +48,17 @@ export function useChat(conversationId: string | null, currentUserId: string) {
           lastFetchedAtRef.current = json.data.serverTime;
 
           if (since) {
-            // Incremental update: merge new messages + refresh statuses of existing ones
+            // Incremental update: merge newly-arrived server messages into
+            // the existing list. Only messages the server just confirmed are
+            // ever dropped-and-replaced by their `_id`; optimistic ("sending")
+            // messages don't have a real server `_id` yet, so they're never
+            // matched here and correctly survive every poll tick until the
+            // in-flight send/upload actually resolves.
             setMessages((prev) => {
               const incoming: ChatMessage[] = json.data.messages;
               if (incoming.length === 0) return prev;
               const incomingIds = new Set(incoming.map((m) => m._id));
-              const kept = prev.filter((m) => !incomingIds.has(m._id) && !m.clientId);
+              const kept = prev.filter((m) => !incomingIds.has(m._id));
               return [...kept, ...incoming].sort(
                 (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
               );
@@ -104,6 +109,7 @@ export function useChat(conversationId: string | null, currentUserId: string) {
         conversationId,
         senderId: currentUserId,
         recipientId: '',
+        type: 'text',
         text: trimmed,
         status: 'sending',
         createdAt: new Date().toISOString(),
@@ -135,11 +141,102 @@ export function useChat(conversationId: string | null, currentUserId: string) {
     [conversationId, currentUserId]
   );
 
+  // Sends a file (image or any other document) as an attachment message.
+  // Uses XMLHttpRequest instead of fetch specifically because fetch has no
+  // reliable cross-browser way to report upload progress, and showing real
+  // progress for larger files is one of the stated requirements.
+  const sendAttachment = useCallback(
+    (file: File, caption?: string) => {
+      if (!conversationId) return;
+
+      const clientId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const isImage = file.type.startsWith('image/');
+      const localPreviewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      const trimmedCaption = (caption || '').trim();
+
+      const optimisticMessage: ChatMessage = {
+        _id: clientId,
+        clientId,
+        conversationId,
+        senderId: currentUserId,
+        recipientId: '',
+        type: 'attachment',
+        text: trimmedCaption,
+        attachment: {
+          attachmentId: '',
+          url: '',
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+        },
+        status: 'sending',
+        createdAt: new Date().toISOString(),
+        uploadProgress: 0,
+        localPreviewUrl,
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setSending(true);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      if (trimmedCaption) formData.append('caption', trimmedCaption);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/chats/${conversationId}/messages`);
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable || !isMountedRef.current) return;
+        const progress = Math.round((event.loaded / event.total) * 100);
+        setMessages((prev) =>
+          prev.map((m) => (m.clientId === clientId ? { ...m, uploadProgress: progress } : m))
+        );
+      };
+
+      xhr.onload = () => {
+        if (!isMountedRef.current) return;
+        setSending(false);
+        try {
+          const json = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && json.success) {
+            setMessages((prev) =>
+              prev.map((m) => (m.clientId === clientId ? { ...json.data, localPreviewUrl } : m))
+            );
+          } else {
+            setMessages((prev) =>
+              prev.map((m) => (m.clientId === clientId ? { ...m, status: 'failed', uploadProgress: undefined } : m))
+            );
+          }
+        } catch {
+          setMessages((prev) =>
+            prev.map((m) => (m.clientId === clientId ? { ...m, status: 'failed', uploadProgress: undefined } : m))
+          );
+        }
+      };
+
+      xhr.onerror = () => {
+        if (!isMountedRef.current) return;
+        setSending(false);
+        setMessages((prev) =>
+          prev.map((m) => (m.clientId === clientId ? { ...m, status: 'failed', uploadProgress: undefined } : m))
+        );
+      };
+
+      xhr.send(formData);
+    },
+    [conversationId, currentUserId]
+  );
+
   const retryMessage = useCallback(
     (clientId: string) => {
       const failed = messages.find((m) => m.clientId === clientId);
       if (!failed) return;
       setMessages((prev) => prev.filter((m) => m.clientId !== clientId));
+      if (failed.type === 'attachment') {
+        // The original File object isn't retained after a failed upload
+        // (only its metadata is), so a "failed" attachment simply has to be
+        // re-attached by the user rather than silently retried.
+        return;
+      }
       void sendMessage(failed.text);
     },
     [messages, sendMessage]
@@ -160,5 +257,16 @@ export function useChat(conversationId: string | null, currentUserId: string) {
     [conversationId]
   );
 
-  return { messages, otherIsTyping, loading, error, sending, sendMessage, retryMessage, notifyTyping, refresh: fetchMessages };
+  return {
+    messages,
+    otherIsTyping,
+    loading,
+    error,
+    sending,
+    sendMessage,
+    sendAttachment,
+    retryMessage,
+    notifyTyping,
+    refresh: fetchMessages,
+  };
 }

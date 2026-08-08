@@ -2,9 +2,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Send, MessageCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Send, MessageCircle, AlertTriangle, Pencil, Paperclip } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import MessageBubble from './MessageBubble';
+import EditContactDialog from './EditContactDialog';
+import PendingAttachmentBar from './PendingAttachmentBar';
+import { validateAttachment } from '@/lib/chatMedia';
 import type { ConversationSummary } from '@/lib/interfaces/data/Chat';
 
 function initials(name: string) {
@@ -31,17 +34,24 @@ interface ChatWindowProps {
   conversation: ConversationSummary;
   currentUserId: string;
   onBack: () => void;
+  onUpdateContact: (updates: {
+    contactName?: string;
+    avatarUrl?: string | null;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
-export default function ChatWindow({ conversation, currentUserId, onBack }: ChatWindowProps) {
-  const { messages, otherIsTyping, loading, error, sendMessage, retryMessage, notifyTyping } = useChat(
-    conversation.conversationId,
-    currentUserId
-  );
+export default function ChatWindow({ conversation, currentUserId, onBack, onUpdateContact }: ChatWindowProps) {
+  const { messages, otherIsTyping, loading, error, sendMessage, sendAttachment, retryMessage, notifyTyping } =
+    useChat(conversation.conversationId, currentUserId);
   const [draft, setDraft] = useState('');
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const wasNearBottomRef = useRef(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to the latest message, but don't yank the view if the user
   // has scrolled up to read older history.
@@ -54,6 +64,14 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
     }
   }, [messages.length, otherIsTyping]);
 
+  // Revoke the pending-file object URL whenever it's replaced or the
+  // component unmounts, so we don't leak memory on repeated attach/cancel.
+  useEffect(() => {
+    return () => {
+      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+    };
+  }, [pendingPreviewUrl]);
+
   const handleScroll = () => {
     const container = scrollRef.current;
     if (!container) return;
@@ -62,6 +80,17 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
   };
 
   const handleSend = () => {
+    if (pendingFile) {
+      const caption = draft.trim();
+      const file = pendingFile;
+      setPendingFile(null);
+      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+      setPendingPreviewUrl(null);
+      setDraft('');
+      notifyTyping(false);
+      void sendAttachment(file, caption);
+      return;
+    }
     const text = draft.trim();
     if (!text) return;
     setDraft('');
@@ -74,6 +103,31 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handlePickAttachment = () => fileInputRef.current?.click();
+
+  const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+
+    const validationError = validateAttachment(file);
+    if (validationError) {
+      setAttachError(validationError);
+      return;
+    }
+
+    setAttachError(null);
+    if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+    setPendingFile(file);
+    setPendingPreviewUrl(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+  };
+
+  const handleCancelAttachment = () => {
+    if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+    setPendingFile(null);
+    setPendingPreviewUrl(null);
   };
 
   // Pre-compute day-divider labels by comparing each message against the
@@ -98,10 +152,21 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
-          {initials(conversation.contact.name)}
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
+          {conversation.contact.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={conversation.contact.avatarUrl}
+              alt={conversation.contact.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials(conversation.contact.name)
+          )}
         </div>
-        <div className="min-w-0">
+
+        <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-slate-900 dark:text-white">{conversation.contact.name}</p>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
             {otherIsTyping ? (
@@ -113,6 +178,16 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
             )}
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowEditDialog(true)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          aria-label="Edit contact"
+          title="Edit contact"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Messages */}
@@ -168,7 +243,25 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
 
       {/* Composer */}
       <div className="border-t border-border/70 p-3">
+        {attachError && (
+          <p className="mb-2 rounded-2xl bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-300">
+            {attachError}
+          </p>
+        )}
+        {pendingFile && (
+          <PendingAttachmentBar file={pendingFile} previewUrl={pendingPreviewUrl} onCancel={handleCancelAttachment} />
+        )}
         <div className="flex items-end gap-2 rounded-3xl border border-border/70 bg-background px-3 py-2">
+          <input ref={fileInputRef} type="file" onChange={handleAttachmentChange} className="hidden" />
+          <button
+            type="button"
+            onClick={handlePickAttachment}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            aria-label="Attach a photo or file"
+            title="Attach a photo or file"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
           <textarea
             value={draft}
             onChange={(e) => {
@@ -177,14 +270,14 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
             }}
             onBlur={() => notifyTyping(false)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message…"
+            placeholder={pendingFile ? 'Add a caption (optional)…' : 'Type a message…'}
             rows={1}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />
           <button
             type="button"
             onClick={handleSend}
-            disabled={!draft.trim()}
+            disabled={!draft.trim() && !pendingFile}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
@@ -192,6 +285,15 @@ export default function ChatWindow({ conversation, currentUserId, onBack }: Chat
           </button>
         </div>
       </div>
+
+      {showEditDialog && (
+        <EditContactDialog
+          currentName={conversation.contact.name}
+          currentAvatarUrl={conversation.contact.avatarUrl}
+          onClose={() => setShowEditDialog(false)}
+          onSave={onUpdateContact}
+        />
+      )}
     </div>
   );
 }

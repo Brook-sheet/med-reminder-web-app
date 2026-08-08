@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
 
         const customName = c.contactNames?.get?.(auth.userId) || (c.contactNames as unknown as Record<string, string>)?.[auth.userId];
         const fallbackName = other ? `${other.firstName ?? ''} ${other.lastName ?? ''}`.trim() : 'Unknown user';
+        const customAvatar = c.contactAvatars?.get?.(auth.userId) || (c.contactAvatars as unknown as Record<string, string>)?.[auth.userId];
 
         const unreadCount = await Message.countDocuments({
           conversationId: c._id,
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
             userId: other?._id.toString() ?? '',
             name: customName || fallbackName || 'Unknown user',
             patientId: other?.patientId ?? '',
+            avatarUrl: customAvatar || null,
           },
           lastMessage: c.lastMessageText
             ? {
@@ -162,6 +164,7 @@ export async function POST(request: NextRequest) {
           userId: targetUser._id.toString(),
           name: contactName,
           patientId: targetUser.patientId,
+          avatarUrl: null,
         },
       },
     }, { status: 201 });

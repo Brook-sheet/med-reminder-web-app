@@ -146,8 +146,13 @@ export default function ChatSidebarList({
                   }`}
                 >
                   <div className="relative shrink-0">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
-                      {initials(c.contact.name)}
+                    <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
+                      {c.contact.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.contact.avatarUrl} alt={c.contact.name} className="h-full w-full object-cover" />
+                      ) : (
+                        initials(c.contact.name)
+                      )}
                     </div>
                     {c.isTyping && (
                       <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card bg-emerald-500" />

@@ -14,7 +14,7 @@ interface ChatsPageClientProps {
 }
 
 export default function ChatsPageClient({ currentUserId }: ChatsPageClientProps) {
-  const { conversations, loading, error, addContact, removeContact } = useConversations();
+  const { conversations, loading, error, addContact, removeContact, updateContact } = useConversations();
   const { permission, requestPermission } = useChatNotifications();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -77,6 +77,7 @@ export default function ChatsPageClient({ currentUserId }: ChatsPageClientProps)
               conversation={selectedConversation}
               currentUserId={currentUserId}
               onBack={() => setSelectedId(null)}
+              onUpdateContact={(updates) => updateContact(selectedConversation.conversationId, updates)}
             />
           ) : (
             <div className="hidden h-full flex-col items-center justify-center gap-2 px-6 text-center md:flex">

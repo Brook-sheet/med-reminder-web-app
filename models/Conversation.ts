@@ -5,6 +5,7 @@ export interface IConversationDocument extends Document {
   _id: mongoose.Types.ObjectId;
   participants: mongoose.Types.ObjectId[]; // exactly 2 users
   contactNames: Map<string, string>; // per-user custom label for the *other* participant
+  contactAvatars: Map<string, string>; // per-user custom avatar (data URI) for the *other* participant
   deletedFor: mongoose.Types.ObjectId[]; // users who removed this conversation from their list
   lastMessageText: string | null;
   lastMessageAt: Date | null;
@@ -25,6 +26,7 @@ const ConversationSchema = new Schema<IConversationDocument>(
       },
     },
     contactNames: { type: Map, of: String, default: {} },
+    contactAvatars: { type: Map, of: String, default: {} },
     deletedFor: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
     lastMessageText: { type: String, default: null },
     lastMessageAt: { type: Date, default: null },

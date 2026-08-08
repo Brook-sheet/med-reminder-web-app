@@ -71,6 +71,38 @@ export function useConversations() {
     []
   );
 
+  // Renames and/or re-photographs a contact. Purely local to this user's own
+  // chat list — the request body only includes whichever field changed, and
+  // the update is applied optimistically so the header/list feel instant.
+  const updateContact = useCallback(
+    async (conversationId: string, updates: { contactName?: string; avatarUrl?: string | null }) => {
+      const res = await fetch(`/api/chats/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.conversationId === conversationId
+              ? {
+                  ...c,
+                  contact: {
+                    ...c.contact,
+                    name: json.data.contactName ?? c.contact.name,
+                    avatarUrl: 'avatarUrl' in updates ? json.data.avatarUrl : c.contact.avatarUrl,
+                  },
+                }
+              : c
+          )
+        );
+      }
+      return json as { success: boolean; error?: string; data?: { contactName: string | null; avatarUrl: string | null } };
+    },
+    []
+  );
+
   return {
     conversations,
     loading,
@@ -79,5 +111,6 @@ export function useConversations() {
     refresh: fetchConversations,
     addContact,
     removeContact,
+    updateContact,
   };
 }
