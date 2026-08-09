@@ -66,3 +66,49 @@ export async function checkAndRecordAttempt(params: RateLimitCheck): Promise<Rat
     retryAfterMinutes: Math.max(perEmail.windowMinutes, perIp.windowMinutes),
   };
 }
+
+/** How long a user must wait between successive "send me a code" requests. */
+export const RESEND_COOLDOWN_SECONDS = 120;
+
+export interface CooldownResult {
+  onCooldown: boolean;
+  /** Seconds remaining until another code can be requested (0 if not on cooldown). */
+  retryAfterSeconds: number;
+}
+
+/**
+ * Enforces the 120-second resend cooldown for password-reset code requests.
+ *
+ * This reads from the SAME append-only PasswordResetAttempt log that
+ * checkAndRecordAttempt() writes to (type: 'request'), so it applies
+ * identically whether the email belongs to a real account or not — keeping
+ * the endpoint safe from account enumeration via response-timing/shape
+ * differences. It's a dedicated, tighter check layered underneath the
+ * broader 15-minute/3-request window: this one specifically produces the
+ * "Resend code in Ns" countdown the UI needs, and closes the gap where a
+ * user (or a script) could otherwise hammer the endpoint as fast as the
+ * 15-minute window allows.
+ *
+ * Read-only — does not itself write a log row. The caller still goes on to
+ * call checkAndRecordAttempt() (which does write one) when not on cooldown,
+ * so the timestamp used here is always up to date for the next check.
+ */
+export async function checkResendCooldown(email: string): Promise<CooldownResult> {
+  const lastAttempt = await PasswordResetAttempt.findOne({ type: 'request', email })
+    .sort({ createdAt: -1 })
+    .select('createdAt')
+    .lean();
+
+  if (!lastAttempt) {
+    return { onCooldown: false, retryAfterSeconds: 0 };
+  }
+
+  const elapsedMs = Date.now() - new Date(lastAttempt.createdAt).getTime();
+  const remainingMs = RESEND_COOLDOWN_SECONDS * 1000 - elapsedMs;
+
+  if (remainingMs <= 0) {
+    return { onCooldown: false, retryAfterSeconds: 0 };
+  }
+
+  return { onCooldown: true, retryAfterSeconds: Math.ceil(remainingMs / 1000) };
+}

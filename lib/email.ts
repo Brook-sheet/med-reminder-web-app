@@ -122,6 +122,56 @@ export async function sendPasswordResetEmail({ to, firstName, code, expiresInMin
     return true;
   } catch (error) {
     console.error('[email] Failed to send password reset email:', error);
+    logSmtpAuthGuidance(error);
     return false;
   }
+}
+
+/**
+ * SMTP auth failures (535 / EAUTH) are a configuration/credentials problem,
+ * not a code bug — nodemailer is behaving correctly by rejecting the
+ * connection. The most common cause by far is a Gmail account where
+ * SMTP_PASS is set to the normal account password: Google requires a
+ * 16-character "App Password" for SMTP instead (and that requires 2-Step
+ * Verification to be turned on for the account first — App Passwords aren't
+ * offered at all until 2FA is enabled). Surface that explicitly so it's not
+ * mistaken for an application bug.
+ */
+function logSmtpAuthGuidance(error: unknown): void {
+  const err = error as { code?: string; responseCode?: number } | undefined;
+  const isAuthFailure = err?.code === 'EAUTH' || err?.responseCode === 535;
+  if (!isAuthFailure) return;
+
+  const host = (process.env.SMTP_HOST || '').toLowerCase();
+  const isGmail = host.includes('gmail');
+
+  console.error(
+    [
+      '[email] SMTP authentication was rejected (535 / EAUTH). This is a',
+      'credentials/configuration problem, not an application error — the',
+      'SMTP server is refusing the SMTP_USER/SMTP_PASS combination currently',
+      'set in the environment.',
+      isGmail
+        ? [
+            '',
+            'Detected a Gmail SMTP host. Gmail does NOT accept a normal account',
+            'password for SMTP (this is the exact cause of a 535-5.7.8',
+            '"Username and Password not accepted" error). To fix it:',
+            '  1. Enable 2-Step Verification on the Google account:',
+            '     https://myaccount.google.com/security',
+            '  2. Generate a 16-character App Password:',
+            '     https://myaccount.google.com/apppasswords',
+            '  3. Set SMTP_PASS to that App Password (remove any spaces),',
+            '     NOT the normal Gmail login password.',
+            '  4. Set SMTP_USER to the full Gmail address, SMTP_HOST to',
+            '     smtp.gmail.com, SMTP_PORT to 587, and SMTP_SECURE to false',
+            '     (STARTTLS on 587) — or port 465 with SMTP_SECURE=true.',
+            '  5. Restart the server after changing .env.local so the new',
+            '     values are picked up.',
+          ].join('\n')
+        : 'Double-check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_SECURE in the environment, and restart the server after changing them.',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  );
 }

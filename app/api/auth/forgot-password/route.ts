@@ -4,7 +4,7 @@ import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 import PasswordResetToken, { RESET_CODE_TTL_MINUTES } from '@/models/PasswordResetToken';
 import { generateResetCode, hashResetCode } from '@/lib/resetCode';
-import { checkAndRecordAttempt, getClientIp } from '@/lib/rateLimit';
+import { checkAndRecordAttempt, checkResendCooldown, getClientIp, RESEND_COOLDOWN_SECONDS } from '@/lib/rateLimit';
 import { sendPasswordResetEmail } from '@/lib/email';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -31,6 +31,23 @@ export async function POST(request: NextRequest) {
     const ip = getClientIp(request);
 
     await connectDB();
+
+    // 120-second resend cooldown — checked BEFORE the broader rate limit and
+    // BEFORE touching the User collection. Reads the same append-only log
+    // that's written for every request regardless of whether the email is
+    // registered, so a made-up address is throttled identically to a real
+    // one and this check can't be used to probe which emails exist.
+    const cooldown = await checkResendCooldown(email);
+    if (cooldown.onCooldown) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: `Please wait ${cooldown.retryAfterSeconds}s before requesting another code.`,
+          data: { retryAfterSeconds: cooldown.retryAfterSeconds },
+        },
+        { status: 429 }
+      );
+    }
 
     // Rate limit BEFORE touching the User collection, and key it on the raw
     // submitted email string regardless of whether an account exists for
@@ -89,7 +106,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json<ApiResponse>({ success: true, message: GENERIC_SUCCESS_MESSAGE });
+    // Include the cooldown duration so the client can start its "Resend
+    // code in Ns" countdown from a single source of truth instead of
+    // hardcoding 120 on the frontend.
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message: GENERIC_SUCCESS_MESSAGE,
+      data: { retryAfterSeconds: RESEND_COOLDOWN_SECONDS },
+    });
   } catch (error) {
     console.error('[FORGOT_PASSWORD]', error);
     // Even on an unexpected error, avoid leaking anything account-specific.

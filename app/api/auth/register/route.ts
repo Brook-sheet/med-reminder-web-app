@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
+import { validateEmail } from '@/lib/emailValidation';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 async function generateUniquePatientId(): Promise<string> {
@@ -34,11 +35,15 @@ export async function POST(request: NextRequest) {
     }
 
     // A valid, reachable email is required so the account can receive
-    // verification and password-reset emails.
-    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!EMAIL_REGEX.test(String(email).trim())) {
+    // verification and password-reset emails. This goes beyond a plain
+    // format check: it also rejects disposable/throwaway domains, obviously
+    // fake addresses, and domains that don't even have an MX record (i.e.
+    // can't receive mail at all) — while still allowing legitimate
+    // providers like Gmail, Yahoo, Outlook, etc. See lib/emailValidation.ts.
+    const emailCheck = await validateEmail(String(email).trim());
+    if (!emailCheck.valid) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Please enter a valid email address.' },
+        { success: false, error: emailCheck.error || 'Please enter a valid email address.' },
         { status: 400 }
       );
     }

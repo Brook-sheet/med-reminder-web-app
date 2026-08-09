@@ -51,7 +51,9 @@ const ForgotPasswordPage = () => {
   };
 
   const goToVerify = () => {
-    router.push(`/reset-password?email=${encodeURIComponent(email.trim())}`);
+    // Pass along when the code was sent so the reset-password page can
+    // resume the 120-second resend cooldown instead of resetting it.
+    router.push(`/reset-password?email=${encodeURIComponent(email.trim())}&sentAt=${Date.now()}`);
   };
 
   return (

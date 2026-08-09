@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import {
   Card, CardHeader, CardDescription, CardContent, CardTitle,
 } from "@/components/ui/card";
@@ -12,6 +12,12 @@ import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 import { validateEmail, validatePassword, validateConfirmPassword, collectErrors } from "@/lib/validations";
 
 type Step = "verify" | "newPassword" | "done";
+
+// Fallback used only if the server response doesn't include a value (e.g. an
+// older cached response) — kept in sync with RESEND_COOLDOWN_SECONDS on the
+// server (lib/rateLimit.ts). The server's response value is always
+// preferred when available so there's a single source of truth.
+const DEFAULT_COOLDOWN_SECONDS = 120;
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -28,6 +34,26 @@ function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
+
+  // ── 120-second resend cooldown ────────────────────────────────────────
+  // Initialized from the "sentAt" timestamp passed in from the
+  // forgot-password page (when the user just had a code sent), so a page
+  // refresh or slow navigation doesn't grant an extra, un-cooled-down resend.
+  const [cooldown, setCooldown] = useState<number>(() => {
+    const sentAtParam = searchParams.get("sentAt");
+    if (!sentAtParam) return 0;
+    const sentAt = Number(sentAtParam);
+    if (!Number.isFinite(sentAt)) return 0;
+    const elapsedSeconds = Math.floor((Date.now() - sentAt) / 1000);
+    return Math.max(0, DEFAULT_COOLDOWN_SECONDS - elapsedSeconds);
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +96,12 @@ function ResetPasswordContent() {
   const handleResend = async () => {
     setError("");
     setResendMessage("");
+
+    // Client-side guard so a rapid double-click can't fire a second request
+    // — the real enforcement is server-side (see forgot-password route),
+    // this is just to keep the UI honest and avoid a wasted round trip.
+    if (cooldown > 0 || resending) return;
+
     const emailError = validateEmail(email);
     if (emailError) {
       setError(emailError);
@@ -84,12 +116,28 @@ function ResetPasswordContent() {
         body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
+
       if (!res.ok || !data.success) {
+        // If the server rejected this because the cooldown hasn't elapsed
+        // yet (e.g. our client-side timer drifted, or a request came in
+        // from another tab/device), sync the countdown to the server's
+        // authoritative remaining time instead of just showing an error.
+        const retryAfterSeconds = data?.data?.retryAfterSeconds;
+        if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+          setCooldown(retryAfterSeconds);
+        }
         setError(data.error || "Could not resend the code. Please try again.");
         return;
       }
+
       setCode("");
       setResendMessage("A new code has been sent if an account exists for that email.");
+      const retryAfterSeconds = data?.data?.retryAfterSeconds;
+      setCooldown(
+        typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
+          ? retryAfterSeconds
+          : DEFAULT_COOLDOWN_SECONDS
+      );
     } catch {
       setError("Network error. Please check your connection.");
     } finally {
@@ -191,10 +239,14 @@ function ResetPasswordContent() {
                 <button
                   type="button"
                   onClick={handleResend}
-                  disabled={resending}
-                  className="font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-60"
+                  disabled={resending || cooldown > 0}
+                  className="font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:text-sky-600"
                 >
-                  {resending ? "Resending..." : "Resend code"}
+                  {resending
+                    ? "Resending..."
+                    : cooldown > 0
+                    ? `Resend code in ${cooldown}s`
+                    : "Resend code"}
                 </button>
               </p>
               <p className="mt-3 text-sm text-center text-slate-500">
