@@ -11,13 +11,23 @@ const SECRET = new TextEncoder().encode(
 );
 
 // Pages that do NOT require login
-const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
+const PUBLIC_ROUTES = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password'];
+
+// Of those, which ones a LOGGED-IN user should still be bounced away from
+// (signing in/up again makes no sense once authenticated). Forgot/reset
+// password are deliberately left off this list — someone might legitimately
+// want to reset their password while still holding an active session on
+// another device, so we don't force them out of that flow.
+const AUTH_ONLY_ROUTES = ['/sign-in', '/sign-up'];
 
 // Public API routes (ESP32 INCLUDED)
 const PUBLIC_API_ROUTES = [
   '/api/auth',
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/forgot-password',
+  '/api/auth/verify-reset-code',
+  '/api/auth/reset-password',
   '/api/sensor',
   '/api/esp32',
   '/api/hardware',
@@ -61,9 +71,12 @@ export async function middleware(request: NextRequest) {
   const isPublicPage = PUBLIC_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
+  const isAuthOnlyPage = AUTH_ONLY_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
 
-  // ── If logged in → block auth pages ──────────────────────────────────
-  if (user && isPublicPage) {
+  // ── If logged in → block sign-in/sign-up (not forgot/reset-password) ──
+  if (user && isAuthOnlyPage) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

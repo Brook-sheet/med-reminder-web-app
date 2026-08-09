@@ -107,6 +107,11 @@ const Signin = () => {
               disabled={loading}
               className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
+            <div className="flex justify-end">
+              <a href="/forgot-password" className="text-sm font-semibold text-sky-600 hover:text-sky-700">
+                Forgot password?
+              </a>
+            </div>
             <Button className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200" type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>

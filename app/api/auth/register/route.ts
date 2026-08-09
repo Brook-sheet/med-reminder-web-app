@@ -33,6 +33,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A valid, reachable email is required so the account can receive
+    // verification and password-reset emails.
+    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!EMAIL_REGEX.test(String(email).trim())) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Please enter a valid email address.' },
+        { status: 400 }
+      );
+    }
+
     if (password !== confirmPassword) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Passwords do not match.' },
