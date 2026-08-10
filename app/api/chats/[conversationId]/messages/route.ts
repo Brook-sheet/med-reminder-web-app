@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
 import Conversation, { IConversationDocument } from '@/models/Conversation';
-import Message, { IMessageDocument } from '@/models/Message';
+import Message from '@/models/Message';
 import Attachment, { MAX_ATTACHMENT_BYTES } from '@/models/Attachment';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
+import { serializeMessageForUser, type SerializedChatMessage } from '@/lib/chatSerializers';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 const TYPING_TTL_MS = 6000;
@@ -37,28 +38,6 @@ async function loadConversation(conversationId: string, userId: string) {
     participants: userId,
   });
   return conversation;
-}
-
-function serializeMessage(m: IMessageDocument) {
-  return {
-    _id: m._id.toString(),
-    conversationId: m.conversationId.toString(),
-    senderId: m.senderId.toString(),
-    recipientId: m.recipientId.toString(),
-    type: m.type,
-    text: m.text,
-    attachment: m.attachment
-      ? {
-          attachmentId: m.attachment.attachmentId.toString(),
-          url: `/api/chats/attachments/${m.attachment.attachmentId.toString()}`,
-          fileName: m.attachment.fileName,
-          mimeType: m.attachment.mimeType,
-          fileSize: m.attachment.fileSize,
-        }
-      : null,
-    status: m.status,
-    createdAt: m.createdAt.toISOString(),
-  };
 }
 
 // Applies the bookkeeping shared by every new message (text or attachment):
@@ -127,11 +106,17 @@ export async function GET(
     if (since) {
       const sinceDate = new Date(since);
       if (!isNaN(sinceDate.getTime())) {
-        query.createdAt = { $gt: sinceDate };
+        // Filtered by updatedAt rather than createdAt: an "unsend" (or a
+        // delivered/read status change) touches an EXISTING message rather
+        // than creating a new one, so it only bumps updatedAt. Filtering by
+        // createdAt would mean a message that already scrolled past the
+        // `since` cutoff could never be re-fetched again after it's edited —
+        // the other participant's poll would just never see the unsend.
+        query.updatedAt = { $gt: sinceDate };
       }
     }
 
-    const messages = await Message.find(query).sort({ createdAt: since ? 1 : 1 }).limit(since ? 200 : 100);
+    const messages = await Message.find(query).sort({ createdAt: 1 }).limit(since ? 200 : 100);
 
     // If no `since` was passed, only return the most recent 100, still oldest→newest
     const trimmed = since ? messages : messages.slice(-100);
@@ -143,10 +128,14 @@ export async function GET(
       if (ts) otherIsTyping = Date.now() - new Date(ts).getTime() < TYPING_TTL_MS;
     }
 
+    const serialized = trimmed
+      .map((m) => serializeMessageForUser(m, auth.userId))
+      .filter((m): m is SerializedChatMessage => m !== null);
+
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
-        messages: trimmed.map(serializeMessage),
+        messages: serialized,
         otherIsTyping,
         serverTime: new Date().toISOString(),
       },
@@ -242,7 +231,12 @@ export async function POST(
       const preview = mimeType.startsWith('image/') ? '📷 Photo' : `📎 ${fileName}`;
       await applyConversationSideEffects(conversation, auth.userId, recipientId, preview, message.createdAt);
 
-      return NextResponse.json<ApiResponse>({ success: true, data: serializeMessage(message) }, { status: 201 });
+      // Non-null: a message the sender just created is never in its own
+      // deletedFor list and is never already unsent.
+      return NextResponse.json<ApiResponse>(
+        { success: true, data: serializeMessageForUser(message, auth.userId)! },
+        { status: 201 }
+      );
     }
 
     // ── Plain text message ──────────────────────────────────────────────
@@ -266,7 +260,10 @@ export async function POST(
 
     await applyConversationSideEffects(conversation, auth.userId, recipientId, text, message.createdAt);
 
-    return NextResponse.json<ApiResponse>({ success: true, data: serializeMessage(message) }, { status: 201 });
+    return NextResponse.json<ApiResponse>(
+      { success: true, data: serializeMessageForUser(message, auth.userId)! },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('[POST /api/chats/[conversationId]/messages]', error);
     return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });

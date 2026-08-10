@@ -17,6 +17,13 @@ export interface IMessageDocument extends Document {
   text: string;
   attachment: IMessageAttachmentMeta | null;
   status: 'sent' | 'delivered' | 'read';
+  // "Unsend for you" — users who chose to hide this message from their own
+  // view only. The message still exists normally for everyone else.
+  deletedFor: mongoose.Types.ObjectId[];
+  // "Unsend for everyone" — set by the original sender only (enforced
+  // server-side). Once true, the message is shown as a tombstone to BOTH
+  // participants; text/attachment are cleared rather than kept around.
+  unsentForEveryone: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +47,8 @@ const MessageSchema = new Schema<IMessageDocument>(
     text: { type: String, trim: true, maxlength: 4000, default: '' },
     attachment: { type: MessageAttachmentSchema, default: null },
     status: { type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' },
+    deletedFor: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
+    unsentForEveryone: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

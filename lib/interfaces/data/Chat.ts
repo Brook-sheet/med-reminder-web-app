@@ -24,6 +24,7 @@ export interface ChatMessage {
   clientId?: string; // used client-side for optimistic messages before server confirms
   uploadProgress?: number; // 0-100, only set while an attachment is uploading
   localPreviewUrl?: string; // client-only object URL for instant image preview pre-upload
+  unsent?: boolean; // true once "unsent for everyone" — render as a tombstone
 }
 
 export interface ConversationParticipant {

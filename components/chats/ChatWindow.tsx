@@ -41,8 +41,18 @@ interface ChatWindowProps {
 }
 
 export default function ChatWindow({ conversation, currentUserId, onBack, onUpdateContact }: ChatWindowProps) {
-  const { messages, otherIsTyping, loading, error, sendMessage, sendAttachment, retryMessage, notifyTyping } =
-    useChat(conversation.conversationId, currentUserId);
+  const {
+    messages,
+    otherIsTyping,
+    loading,
+    error,
+    sendMessage,
+    sendAttachment,
+    retryMessage,
+    unsendForMe,
+    unsendForEveryone,
+    notifyTyping,
+  } = useChat(conversation.conversationId, currentUserId);
   const [draft, setDraft] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -226,6 +236,8 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
                 message={m}
                 isOwn={m.senderId === currentUserId}
                 onRetry={m.clientId ? () => retryMessage(m.clientId!) : undefined}
+                onUnsendForMe={() => unsendForMe(m._id)}
+                onUnsendForEveryone={() => unsendForEveryone(m._id)}
               />
             </div>
           ))}

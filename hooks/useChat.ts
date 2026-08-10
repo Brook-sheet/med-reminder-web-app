@@ -242,6 +242,71 @@ export function useChat(conversationId: string | null, currentUserId: string) {
     [messages, sendMessage]
   );
 
+  // ── Message unsend ───────────────────────────────────────────────────────
+  // Two distinct actions — see app/api/chats/[conversationId]/messages/[messageId]/route.ts.
+  // Neither of these touches conversation/contact removal in any way.
+
+  const unsendForMe = useCallback(
+    async (messageId: string): Promise<{ success: boolean; error?: string }> => {
+      if (!conversationId) return { success: false, error: 'No conversation selected' };
+
+      // Optimistic: this only ever affects the current user's own view, so
+      // it's safe to remove it from the list immediately.
+      setMessages((prev) => prev.filter((m) => m._id !== messageId));
+
+      try {
+        const res = await fetch(`/api/chats/${conversationId}/messages/${messageId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'me' }),
+        });
+        const json = await res.json();
+        if (!isMountedRef.current) return { success: true };
+        if (!json.success) {
+          // Re-sync from the server rather than trying to manually restore
+          // the removed message — simplest way to guarantee correctness.
+          void fetchMessages({ silent: true });
+          return { success: false, error: json.error || 'Could not unsend message' };
+        }
+        return { success: true };
+      } catch {
+        if (isMountedRef.current) void fetchMessages({ silent: true });
+        return { success: false, error: 'Network error. Please check your connection.' };
+      }
+    },
+    [conversationId, fetchMessages]
+  );
+
+  const unsendForEveryone = useCallback(
+    async (messageId: string): Promise<{ success: boolean; error?: string }> => {
+      if (!conversationId) return { success: false, error: 'No conversation selected' };
+
+      try {
+        const res = await fetch(`/api/chats/${conversationId}/messages/${messageId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'everyone' }),
+        });
+        const json = await res.json();
+        if (!isMountedRef.current) return { success: true };
+        if (!json.success) {
+          return { success: false, error: json.error || 'Could not unsend message' };
+        }
+        // Swap in the tombstone immediately for the sender; the other
+        // participant picks up the same change on their next poll tick
+        // (see the updatedAt-based incremental query in the messages route).
+        const updated = json.data?.updatedMessage;
+        if (updated) {
+          setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...updated } : m)));
+        }
+        return { success: true };
+      } catch {
+        return { success: false, error: 'Network error. Please check your connection.' };
+      }
+    },
+    [conversationId]
+  );
+
   const notifyTyping = useCallback(
     (isTyping: boolean) => {
       if (!conversationId) return;
@@ -266,6 +331,8 @@ export function useChat(conversationId: string | null, currentUserId: string) {
     sendMessage,
     sendAttachment,
     retryMessage,
+    unsendForMe,
+    unsendForEveryone,
     notifyTyping,
     refresh: fetchMessages,
   };

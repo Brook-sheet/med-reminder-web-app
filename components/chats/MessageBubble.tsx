@@ -1,9 +1,13 @@
 // components/chats/MessageBubble.tsx
 'use client';
 
-import { Check, CheckCheck, Clock, AlertCircle, FileText, Download } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, Download, Ban } from 'lucide-react';
 import type { ChatMessage } from '@/lib/interfaces/data/Chat';
 import { formatFileSize } from '@/lib/chatMedia';
+import MessageActionMenu from './MessageActionMenu';
+
+const LONG_PRESS_MS = 500;
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -34,10 +38,31 @@ const STATUS_LABEL: Record<ChatMessage['status'], string> = {
   failed: 'Failed to send',
 };
 
+interface UnsendResult {
+  success: boolean;
+  error?: string;
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isOwn: boolean;
   onRetry?: () => void;
+  onUnsendForMe?: () => Promise<UnsendResult>;
+  onUnsendForEveryone?: () => Promise<UnsendResult>;
+}
+
+/** Placeholder shown once a message has been unsent for everyone. */
+function UnsentContent({ isOwn }: { isOwn: boolean }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 rounded-3xl px-4 py-2.5 text-sm italic text-slate-400 dark:text-slate-500 ${
+        isOwn ? 'rounded-br-md bg-slate-100 dark:bg-slate-800/60' : 'rounded-bl-md border border-border/70 bg-card'
+      }`}
+    >
+      <Ban className="h-3.5 w-3.5 shrink-0" />
+      {isOwn ? 'You unsent this message' : 'This message was unsent'}
+    </div>
+  );
 }
 
 /** Bubble body for a plain text message. */
@@ -161,22 +186,70 @@ function FileContent({ message, isOwn }: { message: ChatMessage; isOwn: boolean 
   );
 }
 
-export default function MessageBubble({ message, isOwn, onRetry }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, onRetry, onUnsendForMe, onUnsendForEveryone }: MessageBubbleProps) {
   const isAttachment = message.type === 'attachment' && !!message.attachment;
   const isImage = isAttachment && message.attachment!.mimeType.startsWith('image/');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // The unsend menu is only ever offered for the current user's own,
+  // already-persisted, not-yet-unsent messages — matches the requirement
+  // that this menu appears on long-pressing "their own message".
+  const canUnsend =
+    isOwn && !message.unsent && !message._id.startsWith('tmp-') && !!onUnsendForMe && !!onUnsendForEveryone;
+
+  const startPress = () => {
+    if (!canUnsend) return;
+    pressTimer.current = setTimeout(() => setMenuOpen(true), LONG_PRESS_MS);
+  };
+  const cancelPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!canUnsend) return;
+    e.preventDefault();
+    setMenuOpen(true);
+  };
+
+  if (message.unsent) {
+    return (
+      <div className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex max-w-[78%] flex-col gap-1 ${isOwn ? 'items-end' : 'items-start'}`}>
+          <UnsentContent isOwn={isOwn} />
+          <div
+            className={`flex items-center gap-1.5 px-1 text-[11px] text-slate-400 dark:text-slate-500 ${
+              isOwn ? 'flex-row-reverse' : 'flex-row'
+            }`}
+          >
+            <span>{formatTime(message.createdAt)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[78%] flex-col gap-1 ${isOwn ? 'items-end' : 'items-start'}`}>
-        {isAttachment ? (
-          isImage ? (
-            <ImageContent message={message} isOwn={isOwn} />
+        <div
+          onTouchStart={startPress}
+          onTouchEnd={cancelPress}
+          onTouchMove={cancelPress}
+          onMouseDown={startPress}
+          onMouseUp={cancelPress}
+          onMouseLeave={cancelPress}
+          onContextMenu={handleContextMenu}
+        >
+          {isAttachment ? (
+            isImage ? (
+              <ImageContent message={message} isOwn={isOwn} />
+            ) : (
+              <FileContent message={message} isOwn={isOwn} />
+            )
           ) : (
-            <FileContent message={message} isOwn={isOwn} />
-          )
-        ) : (
-          <TextContent message={message} isOwn={isOwn} />
-        )}
+            <TextContent message={message} isOwn={isOwn} />
+          )}
+        </div>
 
         <div
           className={`flex items-center gap-1.5 px-1 text-[11px] text-slate-400 dark:text-slate-500 ${
@@ -193,6 +266,14 @@ export default function MessageBubble({ message, isOwn, onRetry }: MessageBubble
           )}
         </div>
       </div>
+
+      {menuOpen && canUnsend && (
+        <MessageActionMenu
+          onClose={() => setMenuOpen(false)}
+          onUnsendForMe={onUnsendForMe!}
+          onUnsendForEveryone={onUnsendForEveryone!}
+        />
+      )}
     </div>
   );
 }
