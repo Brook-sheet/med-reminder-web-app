@@ -3,10 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
 import Conversation, { IConversationDocument } from '@/models/Conversation';
-import Message from '@/models/Message';
+import Message, { IMessageDocument } from '@/models/Message';
 import Attachment, { MAX_ATTACHMENT_BYTES } from '@/models/Attachment';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import { serializeMessageForUser, type SerializedChatMessage } from '@/lib/chatSerializers';
+import {
+  serializeMessageForUser,
+  buildReplyPreview,
+  type SerializedChatMessage,
+  type SerializedReplyPreview,
+} from '@/lib/chatSerializers';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 const TYPING_TTL_MS = 6000;
@@ -38,6 +43,29 @@ async function loadConversation(conversationId: string, userId: string) {
     participants: userId,
   });
   return conversation;
+}
+
+// Validates an optional "reply to" reference sent by the client. Returns the
+// resolved ObjectId to store on the new message plus its preview for the
+// immediate response — or an `error` string if the client supplied a value
+// that doesn't check out (invalid id, or a message from a different
+// conversation, which would let one conversation's messages leak a preview
+// into another).
+async function resolveReplyTarget(
+  conversationId: mongoose.Types.ObjectId,
+  rawId: unknown
+): Promise<{ id?: mongoose.Types.ObjectId; preview: SerializedReplyPreview | null; error?: string }> {
+  if (rawId === undefined || rawId === null || rawId === '') {
+    return { preview: null };
+  }
+  if (typeof rawId !== 'string' || !mongoose.Types.ObjectId.isValid(rawId)) {
+    return { preview: null, error: 'Invalid message to reply to' };
+  }
+  const ref = await Message.findOne({ _id: rawId, conversationId });
+  if (!ref) {
+    return { preview: null, error: 'The message you are replying to could not be found' };
+  }
+  return { id: ref._id, preview: buildReplyPreview(ref) };
 }
 
 // Applies the bookkeeping shared by every new message (text or attachment):
@@ -121,6 +149,19 @@ export async function GET(
     // If no `since` was passed, only return the most recent 100, still oldest→newest
     const trimmed = since ? messages : messages.slice(-100);
 
+    // Batch-resolve reply previews in a single query rather than one lookup
+    // per message — this is a live lookup (not a stored snapshot), so a
+    // reply's quoted preview always reflects the referenced message's
+    // current state, including a later "unsend".
+    const replyIds = Array.from(
+      new Set(trimmed.filter((m) => m.replyToMessageId).map((m) => m.replyToMessageId!.toString()))
+    );
+    const replyRefMap = new Map<string, IMessageDocument>();
+    if (replyIds.length > 0) {
+      const refs = await Message.find({ _id: { $in: replyIds } });
+      for (const ref of refs) replyRefMap.set(ref._id.toString(), ref);
+    }
+
     const otherId = conversation.participants.find((p) => p.toString() !== auth.userId)?.toString();
     let otherIsTyping = false;
     if (otherId) {
@@ -129,7 +170,14 @@ export async function GET(
     }
 
     const serialized = trimmed
-      .map((m) => serializeMessageForUser(m, auth.userId))
+      .map((m) => {
+        let replyPreview: SerializedReplyPreview | null = null;
+        if (m.replyToMessageId) {
+          const ref = replyRefMap.get(m.replyToMessageId.toString());
+          if (ref) replyPreview = buildReplyPreview(ref);
+        }
+        return serializeMessageForUser(m, auth.userId, replyPreview);
+      })
       .filter((m): m is SerializedChatMessage => m !== null);
 
     return NextResponse.json<ApiResponse>({
@@ -148,8 +196,8 @@ export async function GET(
 
 // ── POST /api/chats/[conversationId]/messages — send a new message ────────
 // Accepts either:
-//   - application/json     { text: string }                     → text message
-//   - multipart/form-data  { file: File, caption?: string }      → attachment message
+//   - application/json     { text: string, replyToMessageId?: string }
+//   - multipart/form-data  { file: File, caption?: string, replyToMessageId?: string }
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> }
@@ -181,6 +229,7 @@ export async function POST(
       const file = formData.get('file');
       const captionRaw = formData.get('caption');
       const caption = typeof captionRaw === 'string' ? captionRaw.trim().slice(0, MAX_CAPTION_LENGTH) : '';
+      const replyToRaw = formData.get('replyToMessageId');
 
       if (!(file instanceof File)) {
         return NextResponse.json<ApiResponse>({ success: false, error: 'No file was provided' }, { status: 400 });
@@ -197,6 +246,11 @@ export async function POST(
       const ext = getExtension(file.name || '');
       if (BLOCKED_EXTENSIONS.has(ext)) {
         return NextResponse.json<ApiResponse>({ success: false, error: 'This file type is not allowed for security reasons' }, { status: 400 });
+      }
+
+      const replyTarget = await resolveReplyTarget(conversation._id, replyToRaw);
+      if (replyTarget.error) {
+        return NextResponse.json<ApiResponse>({ success: false, error: replyTarget.error }, { status: 400 });
       }
 
       const arrayBuffer = await file.arrayBuffer();
@@ -226,6 +280,7 @@ export async function POST(
           fileSize: file.size,
         },
         status: 'sent',
+        replyToMessageId: replyTarget.id ?? null,
       });
 
       const preview = mimeType.startsWith('image/') ? '📷 Photo' : `📎 ${fileName}`;
@@ -234,7 +289,7 @@ export async function POST(
       // Non-null: a message the sender just created is never in its own
       // deletedFor list and is never already unsent.
       return NextResponse.json<ApiResponse>(
-        { success: true, data: serializeMessageForUser(message, auth.userId)! },
+        { success: true, data: serializeMessageForUser(message, auth.userId, replyTarget.preview)! },
         { status: 201 }
       );
     }
@@ -249,6 +304,11 @@ export async function POST(
       return NextResponse.json<ApiResponse>({ success: false, error: 'Message is too long' }, { status: 400 });
     }
 
+    const replyTarget = await resolveReplyTarget(conversation._id, body.replyToMessageId);
+    if (replyTarget.error) {
+      return NextResponse.json<ApiResponse>({ success: false, error: replyTarget.error }, { status: 400 });
+    }
+
     const message = await Message.create({
       conversationId: conversation._id,
       senderId: auth.userId,
@@ -256,12 +316,13 @@ export async function POST(
       type: 'text',
       text,
       status: 'sent',
+      replyToMessageId: replyTarget.id ?? null,
     });
 
     await applyConversationSideEffects(conversation, auth.userId, recipientId, text, message.createdAt);
 
     return NextResponse.json<ApiResponse>(
-      { success: true, data: serializeMessageForUser(message, auth.userId)! },
+      { success: true, data: serializeMessageForUser(message, auth.userId, replyTarget.preview)! },
       { status: 201 }
     );
   } catch (error) {

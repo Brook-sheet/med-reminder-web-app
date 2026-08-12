@@ -2,10 +2,30 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessage } from '@/lib/interfaces/data/Chat';
+import type { ChatMessage, MessageReplyPreview } from '@/lib/interfaces/data/Chat';
 
 const MESSAGE_POLL_MS = 2000;
 const TYPING_PING_MS = 2000;
+
+// Builds the reply-quote preview shown instantly in an optimistic message,
+// from a message object already held client-side (no network round trip
+// needed) — mirrors buildReplyPreview() on the server so the optimistic and
+// server-confirmed shapes match.
+function buildLocalReplyPreview(replyTarget?: ChatMessage | null): MessageReplyPreview | null {
+  if (!replyTarget) return null;
+  const text =
+    replyTarget.type === 'attachment' && replyTarget.attachment
+      ? replyTarget.attachment.mimeType.startsWith('image/')
+        ? '📷 Photo'
+        : `📎 ${replyTarget.attachment.fileName}`
+      : replyTarget.text;
+  return {
+    messageId: replyTarget._id,
+    senderId: replyTarget.senderId,
+    text,
+    unsent: !!replyTarget.unsent,
+  };
+}
 
 export function useChat(conversationId: string | null, currentUserId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -98,9 +118,14 @@ export function useChat(conversationId: string | null, currentUserId: string) {
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, replyTarget?: ChatMessage | null) => {
       const trimmed = text.trim();
       if (!trimmed || !conversationId) return;
+
+      // Only ever reply to a real, already-persisted message — never an
+      // optimistic ("tmp-") one still in flight.
+      const replyToMessageId =
+        replyTarget && !replyTarget._id.startsWith('tmp-') ? replyTarget._id : undefined;
 
       const clientId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const optimisticMessage: ChatMessage = {
@@ -113,6 +138,7 @@ export function useChat(conversationId: string | null, currentUserId: string) {
         text: trimmed,
         status: 'sending',
         createdAt: new Date().toISOString(),
+        replyTo: buildLocalReplyPreview(replyTarget),
       };
       setMessages((prev) => [...prev, optimisticMessage]);
       setSending(true);
@@ -121,7 +147,7 @@ export function useChat(conversationId: string | null, currentUserId: string) {
         const res = await fetch(`/api/chats/${conversationId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: trimmed }),
+          body: JSON.stringify({ text: trimmed, replyToMessageId }),
         });
         const json = await res.json();
         if (!isMountedRef.current) return;
@@ -146,8 +172,11 @@ export function useChat(conversationId: string | null, currentUserId: string) {
   // reliable cross-browser way to report upload progress, and showing real
   // progress for larger files is one of the stated requirements.
   const sendAttachment = useCallback(
-    (file: File, caption?: string) => {
+    (file: File, caption?: string, replyTarget?: ChatMessage | null) => {
       if (!conversationId) return;
+
+      const replyToMessageId =
+        replyTarget && !replyTarget._id.startsWith('tmp-') ? replyTarget._id : undefined;
 
       const clientId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const isImage = file.type.startsWith('image/');
@@ -173,6 +202,7 @@ export function useChat(conversationId: string | null, currentUserId: string) {
         createdAt: new Date().toISOString(),
         uploadProgress: 0,
         localPreviewUrl,
+        replyTo: buildLocalReplyPreview(replyTarget),
       };
       setMessages((prev) => [...prev, optimisticMessage]);
       setSending(true);
@@ -180,6 +210,7 @@ export function useChat(conversationId: string | null, currentUserId: string) {
       const formData = new FormData();
       formData.append('file', file);
       if (trimmedCaption) formData.append('caption', trimmedCaption);
+      if (replyToMessageId) formData.append('replyToMessageId', replyToMessageId);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/chats/${conversationId}/messages`);
@@ -237,7 +268,23 @@ export function useChat(conversationId: string | null, currentUserId: string) {
         // re-attached by the user rather than silently retried.
         return;
       }
-      void sendMessage(failed.text);
+      // Reconstruct a minimal reply-target from the preview that was
+      // already attached to the failed message, so a retry doesn't silently
+      // drop the reply context the user originally set.
+      const replyTarget: ChatMessage | undefined = failed.replyTo
+        ? {
+            _id: failed.replyTo.messageId,
+            conversationId: failed.conversationId,
+            senderId: failed.replyTo.senderId,
+            recipientId: '',
+            type: 'text',
+            text: failed.replyTo.text,
+            status: 'sent',
+            createdAt: failed.createdAt,
+            unsent: failed.replyTo.unsent,
+          }
+        : undefined;
+      void sendMessage(failed.text, replyTarget);
     },
     [messages, sendMessage]
   );

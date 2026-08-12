@@ -11,6 +11,13 @@ export interface MessageAttachment {
   fileSize: number;
 }
 
+export interface MessageReplyPreview {
+  messageId: string;
+  senderId: string;
+  text: string;
+  unsent: boolean;
+}
+
 export interface ChatMessage {
   _id: string;
   conversationId: string;
@@ -25,6 +32,7 @@ export interface ChatMessage {
   uploadProgress?: number; // 0-100, only set while an attachment is uploading
   localPreviewUrl?: string; // client-only object URL for instant image preview pre-upload
   unsent?: boolean; // true once "unsent for everyone" — render as a tombstone
+  replyTo?: MessageReplyPreview | null; // quoted preview of the message this one replies to, if any
 }
 
 export interface ConversationParticipant {

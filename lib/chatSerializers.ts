@@ -1,6 +1,15 @@
 // lib/chatSerializers.ts
 import type { IMessageDocument } from '@/models/Message';
 
+export interface SerializedReplyPreview {
+  messageId: string;
+  senderId: string;
+  // Already-resolved snippet: the actual text, "📷 Photo" / "📎 filename"
+  // for an attachment, or "" when the referenced message was unsent.
+  text: string;
+  unsent: boolean;
+}
+
 export interface SerializedChatMessage {
   _id: string;
   conversationId: string;
@@ -18,6 +27,27 @@ export interface SerializedChatMessage {
   status: 'sent' | 'delivered' | 'read';
   createdAt: string;
   unsent: boolean;
+  replyTo: SerializedReplyPreview | null;
+}
+
+/**
+ * Builds the quoted preview shown in a reply composer / reply bubble for a
+ * given referenced message. This is resolved LIVE from the referenced
+ * message's current document rather than snapshotted at reply-creation
+ * time, so if the original is later unsent, every reply quoting it updates
+ * to reflect that automatically instead of showing stale content.
+ */
+export function buildReplyPreview(m: IMessageDocument): SerializedReplyPreview {
+  if (m.unsentForEveryone) {
+    return { messageId: m._id.toString(), senderId: m.senderId.toString(), text: '', unsent: true };
+  }
+  const text =
+    m.type === 'attachment' && m.attachment
+      ? m.attachment.mimeType.startsWith('image/')
+        ? '📷 Photo'
+        : `📎 ${m.attachment.fileName}`
+      : m.text;
+  return { messageId: m._id.toString(), senderId: m.senderId.toString(), text, unsent: false };
 }
 
 /**
@@ -32,10 +62,15 @@ export interface SerializedChatMessage {
  * gets an entry for it (so message order/spacing doesn't shift), but its
  * content is replaced with an empty tombstone and `unsent: true`, which the
  * client renders as "message was unsent".
+ *
+ * `replyPreview` is resolved by the caller (a single batched lookup covers
+ * a whole page of messages) and passed in here purely for shaping into the
+ * response — this function does no DB access itself.
  */
 export function serializeMessageForUser(
   m: IMessageDocument,
-  viewerId: string
+  viewerId: string,
+  replyPreview: SerializedReplyPreview | null = null
 ): SerializedChatMessage | null {
   if (m.deletedFor.some((id) => id.toString() === viewerId)) {
     return null;
@@ -53,6 +88,7 @@ export function serializeMessageForUser(
       status: m.status,
       createdAt: m.createdAt.toISOString(),
       unsent: true,
+      replyTo: replyPreview,
     };
   }
 
@@ -75,5 +111,6 @@ export function serializeMessageForUser(
     status: m.status,
     createdAt: m.createdAt.toISOString(),
     unsent: false,
+    replyTo: replyPreview,
   };
 }

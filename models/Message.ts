@@ -24,6 +24,10 @@ export interface IMessageDocument extends Document {
   // server-side). Once true, the message is shown as a tombstone to BOTH
   // participants; text/attachment are cleared rather than kept around.
   unsentForEveryone: boolean;
+  // Reply feature: optional reference to the message this one is replying
+  // to. Resolved live (not snapshotted) when serialized, so the quoted
+  // preview always reflects the referenced message's current state.
+  replyToMessageId: mongoose.Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +53,7 @@ const MessageSchema = new Schema<IMessageDocument>(
     status: { type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' },
     deletedFor: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
     unsentForEveryone: { type: Boolean, default: false },
+    replyToMessageId: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
   },
   { timestamps: true }
 );

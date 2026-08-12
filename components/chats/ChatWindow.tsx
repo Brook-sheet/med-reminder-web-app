@@ -2,13 +2,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Send, MessageCircle, AlertTriangle, Pencil, Paperclip } from 'lucide-react';
+import { ArrowLeft, Send, MessageCircle, AlertTriangle, Pencil, Paperclip, Reply, X } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import MessageBubble from './MessageBubble';
 import EditContactDialog from './EditContactDialog';
 import PendingAttachmentBar from './PendingAttachmentBar';
 import { validateAttachment } from '@/lib/chatMedia';
-import type { ConversationSummary } from '@/lib/interfaces/data/Chat';
+import type { ChatMessage, ConversationSummary } from '@/lib/interfaces/data/Chat';
 
 function initials(name: string) {
   return name
@@ -28,6 +28,16 @@ function dayLabel(iso: string) {
   yesterday.setDate(now.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// Snippet used in the "Replying to…" composer bar — same convention used
+// server-side for list previews and reply-quote previews.
+function replySnippet(message: ChatMessage): string {
+  if (message.unsent) return 'Original message was unsent';
+  if (message.type === 'attachment' && message.attachment) {
+    return message.attachment.mimeType.startsWith('image/') ? '📷 Photo' : `📎 ${message.attachment.fileName}`;
+  }
+  return message.text;
 }
 
 interface ChatWindowProps {
@@ -58,10 +68,35 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const wasNearBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset the reply target and jump-highlight when switching conversations.
+  // ChatWindow isn't remounted on conversation change (no `key` prop at the
+  // call site), so this can't rely on fresh initial state — but it also
+  // shouldn't be a useEffect, since that's pure "setState in response to a
+  // prop change" with no external system involved. This is React's
+  // recommended pattern for that: compare against the previous value
+  // directly during render and adjust state inline.
+  const [prevConversationId, setPrevConversationId] = useState(conversation.conversationId);
+  if (conversation.conversationId !== prevConversationId) {
+    setPrevConversationId(conversation.conversationId);
+    setReplyTarget(null);
+    setHighlightedMessageId(null);
+  }
+
+  // Clean up the jump-to-message highlight timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
 
   // Auto-scroll to the latest message, but don't yank the view if the user
   // has scrolled up to read older history.
@@ -90,6 +125,7 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
   };
 
   const handleSend = () => {
+    const activeReply = replyTarget;
     if (pendingFile) {
       const caption = draft.trim();
       const file = pendingFile;
@@ -97,15 +133,17 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
       setPendingPreviewUrl(null);
       setDraft('');
+      setReplyTarget(null);
       notifyTyping(false);
-      void sendAttachment(file, caption);
+      void sendAttachment(file, caption, activeReply);
       return;
     }
     const text = draft.trim();
     if (!text) return;
     setDraft('');
+    setReplyTarget(null);
     notifyTyping(false);
-    void sendMessage(text);
+    void sendMessage(text, activeReply);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -138,6 +176,25 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingFile(null);
     setPendingPreviewUrl(null);
+  };
+
+  // Activates the reply composer for a given message and focuses the input,
+  // matching Messenger's "tap reply, start typing immediately" flow.
+  const handleReply = (message: ChatMessage) => {
+    setReplyTarget(message);
+    composerRef.current?.focus();
+  };
+
+  // Scrolls to and briefly highlights the original message when a reply
+  // quote is clicked — purely a convenience, not required, but gives the
+  // "clear visual connection to the original message" the spec asks for.
+  const handleJumpToMessage = (messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(messageId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1200);
   };
 
   // Pre-compute day-divider labels by comparing each message against the
@@ -232,13 +289,23 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
                   </span>
                 </div>
               )}
-              <MessageBubble
-                message={m}
-                isOwn={m.senderId === currentUserId}
-                onRetry={m.clientId ? () => retryMessage(m.clientId!) : undefined}
-                onUnsendForMe={() => unsendForMe(m._id)}
-                onUnsendForEveryone={() => unsendForEveryone(m._id)}
-              />
+              <div
+                className={`-mx-2 rounded-2xl px-2 transition-colors duration-500 ${
+                  highlightedMessageId === m._id ? 'bg-blue-100/70 dark:bg-blue-900/30' : ''
+                }`}
+              >
+                <MessageBubble
+                  message={m}
+                  isOwn={m.senderId === currentUserId}
+                  currentUserId={currentUserId}
+                  contactName={conversation.contact.name}
+                  onRetry={m.clientId ? () => retryMessage(m.clientId!) : undefined}
+                  onReply={handleReply}
+                  onJumpToMessage={handleJumpToMessage}
+                  onUnsendForMe={() => unsendForMe(m._id)}
+                  onUnsendForEveryone={() => unsendForEveryone(m._id)}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -260,6 +327,27 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
             {attachError}
           </p>
         )}
+
+        {replyTarget && (
+          <div className="mb-2 flex items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2">
+            <Reply className="h-4 w-4 shrink-0 text-blue-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                Replying to {replyTarget.senderId === currentUserId ? 'yourself' : conversation.contact.name}
+              </p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">{replySnippet(replyTarget)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyTarget(null)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              aria-label="Cancel reply"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {pendingFile && (
           <PendingAttachmentBar file={pendingFile} previewUrl={pendingPreviewUrl} onCancel={handleCancelAttachment} />
         )}
@@ -275,6 +363,7 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
             <Paperclip className="h-5 w-5" />
           </button>
           <textarea
+            ref={composerRef}
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
@@ -282,7 +371,7 @@ export default function ChatWindow({ conversation, currentUserId, onBack, onUpda
             }}
             onBlur={() => notifyTyping(false)}
             onKeyDown={handleKeyDown}
-            placeholder={pendingFile ? 'Add a caption (optional)…' : 'Type a message…'}
+            placeholder={pendingFile ? 'Add a caption (optional)…' : replyTarget ? 'Write a reply…' : 'Type a message…'}
             rows={1}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />

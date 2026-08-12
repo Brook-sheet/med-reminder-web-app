@@ -6,7 +6,7 @@ import Conversation from '@/models/Conversation';
 import Message from '@/models/Message';
 import Attachment from '@/models/Attachment';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import { serializeMessageForUser } from '@/lib/chatSerializers';
+import { serializeMessageForUser, buildReplyPreview } from '@/lib/chatSerializers';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 async function getAuthUser(request: NextRequest) {
@@ -131,13 +131,22 @@ export async function DELETE(
       }
     }
 
+    // If this message was itself a reply, keep that context visible on its
+    // tombstone too (resolved fresh here since the DELETE handler above
+    // doesn't otherwise touch reply data).
+    let replyPreview = null;
+    if (message.replyToMessageId) {
+      const ref = await Message.findById(message.replyToMessageId);
+      if (ref) replyPreview = buildReplyPreview(ref);
+    }
+
     return NextResponse.json<ApiResponse>({
       success: true,
       message: 'Message unsent for everyone',
       data: {
         messageId: message._id.toString(),
         scope: 'everyone',
-        updatedMessage: serializeMessageForUser(message, auth.userId),
+        updatedMessage: serializeMessageForUser(message, auth.userId, replyPreview),
       },
     });
   } catch (error) {
