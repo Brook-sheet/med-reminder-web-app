@@ -5,11 +5,18 @@ import { FaBell, FaClock } from "react-icons/fa";
 interface UpcomingItemProps {
   name: string;
   time: string;
-  date: string;           // "Today", "Mon, Apr 21", etc.
+  date: string;
+  note?: string;
   status: "Upcoming" | "Scheduled";
 }
 
-const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status }) => {
+const UpcomingItem: React.FC<UpcomingItemProps> = ({
+  name,
+  time,
+  date,
+  note,
+  status,
+}) => {
   const getStatusStyles = () => {
     switch (status) {
       case "Upcoming":
@@ -24,9 +31,9 @@ const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status })
   const getIcon = () => {
     switch (status) {
       case "Upcoming":
-        return <FaBell className="w-4 h-4" />;
+        return <FaBell className="h-4 w-4" />;
       case "Scheduled":
-        return <FaClock className="w-4 h-4" />;
+        return <FaClock className="h-4 w-4" />;
       default:
         return null;
     }
@@ -36,14 +43,27 @@ const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status })
     <div className="rounded-[28px] border border-border/70 bg-card p-4 shadow-lg shadow-slate-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white min-w-0 wrap-break-word line-clamp-2">
+          <h3 className="min-w-0 line-clamp-2 wrap-break-word text-base font-semibold text-gray-900 dark:text-white">
             {name}
           </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5 truncate">{time}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{date}</p>
+
+          <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-gray-300">
+            {time}
+          </p>
+
+          <p className="mt-0.5 truncate text-xs text-gray-400 dark:text-gray-500">
+            {date}
+          </p>
+
+          {note && (
+            <p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+              <span className="font-semibold">Note:</span> {note}
+            </p>
+          )}
         </div>
+
         <div
-          className={`shrink-0 flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-medium ${getStatusStyles()}`}
+          className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${getStatusStyles()}`}
         >
           {getIcon()}
           <span>{status}</span>
@@ -54,4 +74,3 @@ const UpcomingItem: React.FC<UpcomingItemProps> = ({ name, time, date, status })
 };
 
 export default UpcomingItem;
-

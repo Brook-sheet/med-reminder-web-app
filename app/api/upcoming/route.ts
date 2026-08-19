@@ -38,6 +38,7 @@ export interface UpcomingItem {
   medicineId: string;
   medicineName: string;
   dosage: string;
+  notes?: string;
   scheduledDate: string;
   scheduledDateFormatted: string;
   scheduledTime: string;
@@ -61,7 +62,10 @@ export async function GET(request: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const nowMinutes = today.getHours() * 60 + today.getMinutes();
 
-    const medicines = await Medicine.find({ userId: user.userId, isActive: true });
+    const medicines = await Medicine.find({
+      userId: user.userId,
+      isActive: true,
+    });
 
     const upcomingItems: UpcomingItem[] = [];
     const lookAheadDays = 30;
@@ -95,14 +99,22 @@ export async function GET(request: NextRequest) {
           if (existingLog && existingLog.status === 'taken') continue;
 
           const isToday = checkDateStr === todayStr;
-          const status: 'Upcoming' | 'Scheduled' = isToday ? 'Upcoming' : 'Scheduled';
+          const status: 'Upcoming' | 'Scheduled' = isToday
+            ? 'Upcoming'
+            : 'Scheduled';
 
           upcomingItems.push({
             medicineId: med._id.toString(),
             medicineName: med.name,
             dosage: med.dosage,
+            notes:
+              typeof med.notes === 'string'
+                ? med.notes.trim()
+                : '',
             scheduledDate: checkDateStr,
-            scheduledDateFormatted: isToday ? 'Today' : formatDate(checkDateStr),
+            scheduledDateFormatted: isToday
+              ? 'Today'
+              : formatDate(checkDateStr),
             scheduledTime: time,
             status,
             logId: existingLog?._id?.toString(),
@@ -115,16 +127,27 @@ export async function GET(request: NextRequest) {
       if (a.scheduledDate !== b.scheduledDate) {
         return a.scheduledDate.localeCompare(b.scheduledDate);
       }
-      return timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime);
+
+      return (
+        timeToMinutes(a.scheduledTime) -
+        timeToMinutes(b.scheduledTime)
+      );
     });
 
     const limitedItems = upcomingItems.slice(0, 20);
 
-    return NextResponse.json<ApiResponse>({ success: true, data: limitedItems });
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: limitedItems,
+    });
   } catch (error) {
     console.error('[GET /api/upcoming]', error);
+
     return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Internal server error' },
+      {
+        success: false,
+        error: 'Internal server error',
+      },
       { status: 500 }
     );
   }

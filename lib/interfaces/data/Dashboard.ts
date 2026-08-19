@@ -16,6 +16,7 @@ export interface ScheduleItem {
   medicineId: string;
   name: string;
   dosage: string;
+  notes?: string;
   time: string;
   status: 'Taken' | 'Upcoming' | 'Missed' | 'Scheduled' | 'Now';
   logId?: string;

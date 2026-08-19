@@ -51,11 +51,25 @@ export default function ChatSidebarList({
     c.contact.name.toLowerCase().includes(query.trim().toLowerCase())
   );
 
+  // Mobile-only: touch long-press reveals the remove confirmation. Not
+  // bound to mouse events — desktop uses the hover-revealed trash icon
+  // instead (see the button beside the timestamp below), so a mouse
+  // "long press" would just be a second, conflicting way to trigger the
+  // same thing. Right-click is kept as an additional desktop shortcut,
+  // which is orthogonal to hover and doesn't conflict with it either.
   const startPress = (id: string) => {
     pressTimer.current = setTimeout(() => setConfirmDeleteId(id), 550);
   };
   const cancelPress = () => {
     if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+
+  const handleRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, id: string, isConfirming: boolean) => {
+    if (isConfirming) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect(id);
+    }
   };
 
   return (
@@ -125,10 +139,17 @@ export default function ChatSidebarList({
             const isSelected = c.conversationId === selectedId;
             const isConfirming = confirmDeleteId === c.conversationId;
             return (
-              <li key={c.conversationId} className="relative">
-                <button
-                  type="button"
+              <li key={c.conversationId} className="group relative">
+                {/* This is a div (not a <button>) specifically so the
+                    hover-revealed delete button below can be a real,
+                    independently-clickable sibling control rather than an
+                    invalid button-inside-button. role="button" + tabIndex +
+                    onKeyDown keep it keyboard/screen-reader accessible. */}
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => (isConfirming ? undefined : onSelect(c.conversationId))}
+                  onKeyDown={(e) => handleRowKeyDown(e, c.conversationId, isConfirming)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setConfirmDeleteId(c.conversationId);
@@ -136,10 +157,7 @@ export default function ChatSidebarList({
                   onTouchStart={() => startPress(c.conversationId)}
                   onTouchEnd={cancelPress}
                   onTouchMove={cancelPress}
-                  onMouseDown={() => startPress(c.conversationId)}
-                  onMouseUp={cancelPress}
-                  onMouseLeave={cancelPress}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
                     isSelected
                       ? 'bg-blue-50 dark:bg-blue-900/30'
                       : 'hover:bg-slate-100 dark:hover:bg-slate-900'
@@ -163,11 +181,31 @@ export default function ChatSidebarList({
                       <p className="truncate font-semibold text-sm text-slate-900 dark:text-white">
                         {c.contact.name}
                       </p>
-                      {c.lastMessage && (
-                        <span className="shrink-0 text-[11px] text-slate-400">
-                          {formatTimestamp(c.lastMessage.createdAt)}
-                        </span>
-                      )}
+
+                      {/* Timestamp / hover delete-icon swap — desktop only.
+                          The timestamp occupies this slot normally; hovering
+                          the row (sm breakpoint and up) swaps it for a
+                          delete button in the same spot, so no layout shift
+                          and no interference with mobile's long-press. */}
+                      <div className="flex h-5 shrink-0 items-center">
+                        {c.lastMessage && (
+                          <span className="text-[11px] text-slate-400 sm:group-hover:hidden">
+                            {formatTimestamp(c.lastMessage.createdAt)}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(c.conversationId);
+                          }}
+                          className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-600 sm:group-hover:flex dark:hover:bg-red-900/20"
+                          aria-label={`Remove ${c.contact.name}`}
+                          title="Remove contact"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <p
@@ -188,7 +226,7 @@ export default function ChatSidebarList({
                       )}
                     </div>
                   </div>
-                </button>
+                </div>
 
                 {isConfirming && (
                   <div

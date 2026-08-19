@@ -7,6 +7,7 @@ interface UpcomingItemData {
   medicineId: string;
   medicineName: string;
   dosage: string;
+  notes?: string;
   scheduledDate: string;
   scheduledDateFormatted: string;
   scheduledTime: string;
@@ -22,6 +23,7 @@ const UpcomingList = () => {
     try {
       const res = await fetch("/api/upcoming");
       const data = await res.json();
+
       if (data.success) {
         setItems(data.data);
       }
@@ -34,8 +36,10 @@ const UpcomingList = () => {
 
   useEffect(() => {
     fetchUpcoming();
+
     // Refresh every 60 seconds
     const interval = setInterval(fetchUpcoming, 60000);
+
     return () => clearInterval(interval);
   }, [fetchUpcoming]);
 
@@ -43,7 +47,10 @@ const UpcomingList = () => {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-gray-100 rounded-lg h-20 animate-pulse" />
+          <div
+            key={i}
+            className="h-20 animate-pulse rounded-lg bg-gray-100"
+          />
         ))}
       </div>
     );
@@ -51,7 +58,7 @@ const UpcomingList = () => {
 
   if (items.length === 0) {
     return (
-      <p className="text-gray-400 text-sm">
+      <p className="text-sm text-gray-400">
         No upcoming medications scheduled. Add a medicine to see it here.
       </p>
     );
@@ -65,6 +72,7 @@ const UpcomingList = () => {
           name={`${item.medicineName} ${item.dosage}`}
           time={item.scheduledTime}
           date={item.scheduledDateFormatted}
+          note={item.notes}
           status={item.status}
         />
       ))}
@@ -73,4 +81,3 @@ const UpcomingList = () => {
 };
 
 export default UpcomingList;
-
