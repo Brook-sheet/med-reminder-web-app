@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { RotateCcw, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  RotateCcw,
+} from "lucide-react";
 import Toast from "@/components/ui/Toast";
 
 interface ConfirmModalProps {
@@ -15,7 +18,9 @@ interface ConfirmModalProps {
   loading?: boolean;
 }
 
-const ConfirmModal: React.FC<ConfirmModalProps> = ({
+const ConfirmModal: React.FC<
+  ConfirmModalProps
+> = ({
   isOpen,
   title,
   message,
@@ -26,34 +31,54 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   loading,
 }) => {
   if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+      <button
+        type="button"
+        aria-label="Close confirmation dialog"
+        onClick={onCancel}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      />
+
+      <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+
+          <h3 className="text-lg font-bold text-gray-900">
+            {title}
+          </h3>
         </div>
-        <p className="text-gray-600 text-sm mb-6 leading-relaxed">{message}</p>
+
+        <p className="mb-6 text-sm leading-relaxed text-gray-600">
+          {message}
+        </p>
+
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 border-2 border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex-1 rounded-xl border-2 border-gray-300 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
             No, Cancel
           </button>
+
           <button
+            type="button"
             onClick={onConfirm}
             disabled={loading}
-            className={`flex-1 py-2.5 rounded-xl font-semibold text-white transition-colors disabled:opacity-50 ${confirmColor === "red"
+            className={`flex-1 rounded-xl py-2.5 font-semibold text-white transition-colors disabled:opacity-50 ${
+              confirmColor === "red"
                 ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
                 : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
-              }`}
+            }`}
           >
-            {loading ? "Processing..." : `Yes, ${confirmLabel}`}
+            {loading
+              ? "Processing..."
+              : `Yes, ${confirmLabel}`}
           </button>
         </div>
       </div>
@@ -62,29 +87,60 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 };
 
 const ResetDataCard: React.FC = () => {
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showConfirm, setShowConfirm] =
+    useState(false);
+
+  const [resetting, setResetting] =
+    useState(false);
+
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const handleReset = async () => {
     setResetting(true);
+
     try {
-      const res = await fetch("/api/profile/reset-data", { method: "POST" });
-      const data = await res.json();
+      const response = await fetch(
+        "/api/profile/reset-data",
+        {
+          method: "POST",
+        }
+      );
+
+      const data = await response.json();
+
       if (data.success) {
         setShowConfirm(false);
-        setMessage({ type: "success", text: "All your data has been reset. Starting fresh." });
+
+        setMessage({
+          type: "success",
+          text: "All your data has been reset. Starting fresh.",
+        });
+
         setTimeout(() => {
           setMessage(null);
           window.location.reload();
         }, 1500);
       } else {
         setShowConfirm(false);
-        setMessage({ type: "error", text: data.error || "Reset failed. Please try again." });
+
+        setMessage({
+          type: "error",
+          text:
+            data.error ||
+            "Unable to reset your data. Please try again.",
+        });
       }
     } catch {
       setShowConfirm(false);
-      setMessage({ type: "error", text: "Network error. Please try again." });
+
+      setMessage({
+        type: "error",
+        text:
+          "Unable to reset your data. Please check your connection.",
+      });
     } finally {
       setResetting(false);
     }
@@ -92,6 +148,16 @@ const ResetDataCard: React.FC = () => {
 
   return (
     <>
+      {message && (
+        <Toast
+          type={message.type}
+          message={message.text}
+          onClose={() =>
+            setMessage(null)
+          }
+        />
+      )}
+
       <ConfirmModal
         isOpen={showConfirm}
         title="Reset All Data?"
@@ -99,35 +165,41 @@ const ResetDataCard: React.FC = () => {
         confirmLabel="Reset"
         confirmColor="red"
         onConfirm={handleReset}
-        onCancel={() => setShowConfirm(false)}
+        onCancel={() =>
+          setShowConfirm(false)
+        }
         loading={resetting}
       />
 
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex items-center space-x-2 pb-4 mb-4 border-b border-red-200 dark:border-red-700/50">
+      <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-4 flex items-center space-x-2 border-b border-red-200 pb-4 dark:border-red-700/50">
           <RotateCcw className="h-5 w-5 text-red-600 dark:text-red-500" />
-          <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">Reset Data</h2>
+
+          <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">
+            Reset Data
+          </h2>
         </div>
+
         <div>
-          {message && (
-            <div
-              className={`text-sm rounded-lg px-4 py-3 border mb-3 ${message.type === "success"
-                  ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700/50 dark:text-green-300"
-                  : "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700/50 dark:text-red-300"
-                }`}
-            >
-              {message.text}
-            </div>
-          )}
           <button
-            onClick={() => setShowConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 transition-colors"
+            type="button"
+            onClick={() =>
+              setShowConfirm(true)
+            }
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-3 font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="h-4 w-4" />
             Reset All Data
           </button>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center leading-relaxed">
-            Permanently deletes all your medicines, medication history, dashboard logs, and statistics. Everything will be cleared — giving you a completely fresh start. Only your profile information will be retained.
+
+          <p className="mt-3 text-center text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            Permanently deletes all your
+            medicines, medication history,
+            dashboard logs, and statistics.
+            Everything will be cleared—giving
+            you a completely fresh start. Only
+            your profile information will be
+            retained.
           </p>
         </div>
       </div>
