@@ -1,96 +1,139 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
-import User from '@/models/User';
-import { generateUniquePatientId } from '@/lib/generatePatientId';
-import { COOKIE_OPTIONS, signToken } from '@/lib/auth';
-import { getAppOrigin } from '@/lib/appUrl';
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+import { connectDB } from "@/lib/mongodb";
+import User from "@/models/User";
+import {
+  COOKIE_OPTIONS,
+  signToken,
+} from "@/lib/auth";
+import { getAppOrigin } from "@/lib/appUrl";
+import {
+  createPendingGoogleAccountToken,
+  GOOGLE_PENDING_ACCOUNT_COOKIE_OPTIONS,
+} from "@/lib/googlePendingAccount";
 import {
   exchangeGoogleCodeForIdentity,
   getGoogleRedirectUri,
   GOOGLE_OAUTH_COOKIE_NAMES,
   GOOGLE_OAUTH_COOKIE_OPTIONS,
   isGoogleAuthConfigured,
-} from '@/lib/googleAuth';
+} from "@/lib/googleAuth";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 function resultUrl(
   request: NextRequest,
   status: string,
-  onboarding?: boolean
+  options?: {
+    onboarding?: boolean;
+    role?: "patient" | "family";
+  }
 ): URL {
   const url = new URL(
-    '/auth/google/callback',
+    "/auth/google/callback",
     getAppOrigin(request)
   );
 
-  url.searchParams.set('status', status);
+  url.searchParams.set("status", status);
 
-  if (onboarding !== undefined) {
+  if (
+    options?.onboarding !== undefined
+  ) {
     url.searchParams.set(
-      'onboarding',
-      onboarding ? 'required' : 'complete'
+      "onboarding",
+      options.onboarding
+        ? "required"
+        : "complete"
+    );
+  }
+
+  if (options?.role) {
+    url.searchParams.set(
+      "role",
+      options.role
     );
   }
 
   return url;
 }
 
-function clearGoogleCookies(response: NextResponse): void {
-  Object.values(GOOGLE_OAUTH_COOKIE_NAMES).forEach((name) => {
+function clearGoogleCookies(
+  response: NextResponse
+): void {
+  Object.values(
+    GOOGLE_OAUTH_COOKIE_NAMES
+  ).forEach((name) => {
     response.cookies.set({
       ...GOOGLE_OAUTH_COOKIE_OPTIONS,
       name,
-      value: '',
+      value: "",
       maxAge: 0,
     });
   });
 }
 
-export async function GET(request: NextRequest) {
-  const oauthError = request.nextUrl.searchParams.get('error');
+export async function GET(
+  request: NextRequest
+) {
+  const oauthError =
+    request.nextUrl.searchParams.get(
+      "error"
+    );
 
   if (oauthError) {
-    const response = NextResponse.redirect(
-      resultUrl(
-        request,
-        oauthError === 'access_denied' ? 'cancelled' : 'error'
-      )
-    );
+    const response =
+      NextResponse.redirect(
+        resultUrl(
+          request,
+          oauthError === "access_denied"
+            ? "cancelled"
+            : "error"
+        )
+      );
 
     clearGoogleCookies(response);
     return response;
   }
 
   if (!isGoogleAuthConfigured()) {
-    const response = NextResponse.redirect(
-      resultUrl(request, 'configuration_error')
-    );
+    const response =
+      NextResponse.redirect(
+        resultUrl(
+          request,
+          "configuration_error"
+        )
+      );
 
     clearGoogleCookies(response);
     return response;
   }
 
   const code =
-    request.nextUrl.searchParams.get('code') || '';
+    request.nextUrl.searchParams.get(
+      "code"
+    ) || "";
 
   const returnedState =
-    request.nextUrl.searchParams.get('state') || '';
+    request.nextUrl.searchParams.get(
+      "state"
+    ) || "";
 
   const storedState =
     request.cookies.get(
       GOOGLE_OAUTH_COOKIE_NAMES.state
-    )?.value || '';
+    )?.value || "";
 
   const verifier =
     request.cookies.get(
       GOOGLE_OAUTH_COOKIE_NAMES.verifier
-    )?.value || '';
+    )?.value || "";
 
   const nonce =
     request.cookies.get(
       GOOGLE_OAUTH_COOKIE_NAMES.nonce
-    )?.value || '';
+    )?.value || "";
 
   if (
     !code ||
@@ -101,11 +144,13 @@ export async function GET(request: NextRequest) {
     !nonce
   ) {
     console.error(
-      '[GOOGLE_AUTH_CALLBACK] Invalid OAuth request:',
+      "[GOOGLE_AUTH_CALLBACK] Invalid OAuth request:",
       {
         hasCode: Boolean(code),
-        hasReturnedState: Boolean(returnedState),
-        hasStoredState: Boolean(storedState),
+        hasReturnedState:
+          Boolean(returnedState),
+        hasStoredState:
+          Boolean(storedState),
         stateMatches:
           Boolean(returnedState) &&
           Boolean(storedState) &&
@@ -115,44 +160,57 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const response = NextResponse.redirect(
-      resultUrl(request, 'invalid_request')
-    );
+    const response =
+      NextResponse.redirect(
+        resultUrl(
+          request,
+          "invalid_request"
+        )
+      );
 
     clearGoogleCookies(response);
     return response;
   }
 
   try {
-    const appOrigin = getAppOrigin(request);
-    const redirectUri = getGoogleRedirectUri(appOrigin);
+    const appOrigin =
+      getAppOrigin(request);
 
-    const identity = await exchangeGoogleCodeForIdentity({
-      code,
-      verifier,
-      nonce,
-      redirectUri,
-    });
+    const redirectUri =
+      getGoogleRedirectUri(appOrigin);
+
+    const identity =
+      await exchangeGoogleCodeForIdentity({
+        code,
+        verifier,
+        nonce,
+        redirectUri,
+      });
 
     await connectDB();
 
     let user = await User.findOne({
       googleSubject: identity.subject,
-    }).select('+googleSubject');
+    }).select("+googleSubject");
 
-    if (user && user.email !== identity.email) {
-      const emailOwner = await User.findOne({
-        email: identity.email,
-      })
-        .select('_id')
-        .lean();
+    if (
+      user &&
+      user.email !== identity.email
+    ) {
+      const emailOwner =
+        await User.findOne({
+          email: identity.email,
+        })
+          .select("_id")
+          .lean();
 
       if (
         emailOwner &&
-        String(emailOwner._id) !== String(user._id)
+        String(emailOwner._id) !==
+          String(user._id)
       ) {
         throw new Error(
-          'The verified Google email is already linked to another account.'
+          "The verified Google email is already linked to another account."
         );
       }
     }
@@ -160,13 +218,17 @@ export async function GET(request: NextRequest) {
     if (!user) {
       user = await User.findOne({
         email: identity.email,
-      }).select('+googleSubject');
+      }).select("+googleSubject");
     }
 
     if (user?.isDeleted) {
-      const response = NextResponse.redirect(
-        resultUrl(request, 'account_deleted')
-      );
+      const response =
+        NextResponse.redirect(
+          resultUrl(
+            request,
+            "account_deleted"
+          )
+        );
 
       clearGoogleCookies(response);
       return response;
@@ -175,70 +237,93 @@ export async function GET(request: NextRequest) {
     if (
       user &&
       user.googleSubject &&
-      user.googleSubject !== identity.subject
+      user.googleSubject !==
+        identity.subject
     ) {
       throw new Error(
-        'This account is already linked to a different Google identity.'
+        "This account is already linked to a different Google identity."
       );
     }
 
     if (user) {
-      user = await User.findByIdAndUpdate(
-        user._id,
-        {
-          $set: {
-            email: identity.email,
-            emailVerified: true,
-            googleSubject: identity.subject,
-            firstName:
-              user.firstName || identity.firstName,
-            lastName:
-              user.lastName || identity.lastName,
+      const storedRole =
+        user.role === "family"
+          ? "family"
+          : "patient";
+
+      user =
+        await User.findByIdAndUpdate(
+          user._id,
+          {
+            $set: {
+              email: identity.email,
+              emailVerified: true,
+              googleSubject:
+                identity.subject,
+              firstName:
+                user.firstName ||
+                identity.firstName,
+              lastName:
+                user.lastName ||
+                identity.lastName,
+              role: storedRole,
+            },
+            $unset: {
+              emailVerificationTokenHash: 1,
+              emailVerificationExpires: 1,
+            },
           },
-          $unset: {
-            emailVerificationTokenHash: 1,
-            emailVerificationExpires: 1,
-          },
-        },
-        {
-          returnDocument: 'after',
-          runValidators: true,
-        }
-      ).select('+googleSubject');
+          {
+            returnDocument: "after",
+            runValidators: true,
+          }
+        ).select("+googleSubject");
     } else {
-      user = await User.create({
-        email: identity.email,
-        emailVerified: true,
-        googleSubject: identity.subject,
-        firstName: identity.firstName,
-        middleName: '',
-        lastName: identity.lastName,
-        onboardingCompleted: false,
-        patientId: await generateUniquePatientId(),
-        monitoredPatients: [],
-        authorizedMonitors: [],
+      const pendingToken =
+        await createPendingGoogleAccountToken(
+          identity
+        );
+
+      const response =
+        NextResponse.redirect(
+          resultUrl(
+            request,
+            "role_required"
+          )
+        );
+
+      response.cookies.set({
+        ...GOOGLE_PENDING_ACCOUNT_COOKIE_OPTIONS,
+        value: pendingToken,
       });
+
+      clearGoogleCookies(response);
+      return response;
     }
 
     if (!user) {
       throw new Error(
-        'Unable to create or link the Google account.'
+        "Unable to create or link the Google account."
       );
     }
 
-    const sessionToken = await signToken({
-      userId: String(user._id),
-      email: String(user.email),
-      emailVerified: true,
-    });
+    const sessionToken =
+      await signToken({
+        userId: String(user._id),
+        email: String(user.email),
+        emailVerified: true,
+        role: user.role,
+      });
 
-    const response = NextResponse.redirect(
-      resultUrl(
-        request,
-        'success',
-        !user.onboardingCompleted
-      )
-    );
+    const response =
+      NextResponse.redirect(
+        resultUrl(request, "success", {
+          onboarding:
+            user.role === "patient" &&
+            !user.onboardingCompleted,
+          role: user.role,
+        })
+      );
 
     response.cookies.set({
       ...COOKIE_OPTIONS,
@@ -248,11 +333,15 @@ export async function GET(request: NextRequest) {
     clearGoogleCookies(response);
     return response;
   } catch (error) {
-    console.error('[GOOGLE_AUTH_CALLBACK]', error);
-
-    const response = NextResponse.redirect(
-      resultUrl(request, 'error')
+    console.error(
+      "[GOOGLE_AUTH_CALLBACK]",
+      error
     );
+
+    const response =
+      NextResponse.redirect(
+        resultUrl(request, "error")
+      );
 
     clearGoogleCookies(response);
     return response;

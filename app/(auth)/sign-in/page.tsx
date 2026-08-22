@@ -32,7 +32,6 @@ const Signin = () => {
     e.preventDefault();
     setError("");
 
-    // ── Client-side validation ──────────────────────────────────────────────
     const validationError = collectErrors({
       email: validateEmail(email),
       password: validatePassword(password),
@@ -59,12 +58,17 @@ const Signin = () => {
         return;
       }
 
-      if (data.data?.user?.onboardingCompleted === false) {
+      if (
+        data.data?.user?.role === "patient" &&
+        data.data?.user?.onboardingCompleted === false
+      ) {
         setShowOnboarding(true);
         return;
       }
 
-      router.push("/");
+      router.push(
+        data.data?.user?.role === "family" ? "/monitor" : "/"
+      );
       router.refresh();
     } catch {
       setError("Network error. Please check your connection.");

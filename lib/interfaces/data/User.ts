@@ -5,6 +5,7 @@ export interface User {
   firstName: string;
   middleName?: string;
   lastName: string;
+  role: 'patient' | 'family';
   patientId?: string;
   createdAt?: Date;
   updatedAt?: Date;

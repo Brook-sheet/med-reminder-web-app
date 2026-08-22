@@ -3,11 +3,11 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import type { AuthPayload } from '@/lib/interfaces/data/Auth';
 
-// Re-export so other files can still import AuthPayload from here if needed
 export type { AuthPayload };
 
 const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'fallback-secret-change-this-in-production-min-32'
+  process.env.JWT_SECRET ||
+    'fallback-secret-change-this-in-production-min-32'
 );
 
 export const COOKIE_NAME = 'med_auth_token';
@@ -25,35 +25,70 @@ export async function signToken(payload: {
   userId: string;
   email: string;
   emailVerified: true;
+  role: 'patient' | 'family';
 }): Promise<string> {
   return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader({
+      alg: 'HS256',
+    })
     .setIssuedAt()
     .setExpirationTime('7d')
     .sign(SECRET);
 }
 
-export async function verifyToken(token: string): Promise<AuthPayload | null> {
+export async function verifyToken(
+  token: string
+): Promise<AuthPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    if (payload.emailVerified !== true) return null;
-    return payload as unknown as AuthPayload;
+    const { payload } = await jwtVerify(
+      token,
+      SECRET
+    );
+
+    if (payload.emailVerified !== true) {
+      return null;
+    }
+
+    return {
+      ...(payload as unknown as AuthPayload),
+      role:
+        payload.role === 'family'
+          ? 'family'
+          : 'patient',
+    };
   } catch {
     return null;
   }
 }
 
-export function getTokenFromRequest(request: NextRequest): string | null {
-  const cookieToken = request.cookies.get(COOKIE_NAME)?.value;
-  if (cookieToken) return cookieToken;
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
+export function getTokenFromRequest(
+  request: NextRequest
+): string | null {
+  const cookieToken =
+    request.cookies.get(COOKIE_NAME)?.value;
+
+  if (cookieToken) {
+    return cookieToken;
+  }
+
+  const authHeader =
+    request.headers.get('Authorization');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
   return null;
 }
 
 export async function getCurrentUser(): Promise<AuthPayload | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  const token =
+    cookieStore.get(COOKIE_NAME)?.value;
+
+  if (!token) {
+    return null;
+  }
+
   return verifyToken(token);
 }

@@ -3,37 +3,67 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import {
+  useRouter,
+  usePathname,
+} from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
-import { CiPill, CiSettings, CiLogout, CiMonitor } from "react-icons/ci";
+import {
+  CiPill,
+  CiSettings,
+  CiLogout,
+  CiMonitor,
+} from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
 import { MessageCircle } from "lucide-react";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
+import { useMonitoringRequestCount } from "@/hooks/useMonitoringRequestCount";
 
-const Navbar = () => {
+interface NavbarProps {
+  role: "patient" | "family";
+}
+
+const Navbar = ({ role }: NavbarProps) => {
   const router = useRouter();
   const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
-  const { unreadCount } = useChatNotifications();
+
+  const { unreadCount } =
+    useChatNotifications();
+
+  const { pendingCount } =
+    useMonitoringRequestCount(
+      role === "patient"
+    );
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", {
+      method: "POST",
+    });
+
     router.push("/sign-in");
     router.refresh();
   };
 
-  const closeSidebar = () => setOpen(false);
+  const closeSidebar = () =>
+    setOpen(false);
 
   return (
     <div>
       <button
         type="button"
-        className="absolute top-4 right-4 inline-flex items-center justify-center rounded-2xl border border-border/80 bg-card p-2 text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900 z-30 md:hidden"
-        onClick={() => setOpen((current) => !current)}
+        className="absolute right-4 top-4 z-30 inline-flex items-center justify-center rounded-2xl border border-border/80 bg-card p-2 text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900 md:hidden"
+        onClick={() =>
+          setOpen((current) => !current)
+        }
         aria-label="Toggle navigation menu"
       >
-        <GiHamburgerMenu className="h-6 w-6" aria-hidden="true" />
+        <GiHamburgerMenu
+          className="h-6 w-6"
+          aria-hidden="true"
+        />
       </button>
 
       {open && (
@@ -47,7 +77,9 @@ const Navbar = () => {
 
       <aside
         className={`fixed top-0 z-20 h-screen w-72 overflow-hidden border-r border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl transition-transform duration-200 ease-out ${
-          open ? "translate-x-0" : "-translate-x-full"
+          open
+            ? "translate-x-0"
+            : "-translate-x-full"
         } md:translate-x-0`}
       >
         <div className="flex h-full flex-col gap-6 p-6">
@@ -62,71 +94,124 @@ const Navbar = () => {
                 priority
               />
             </div>
+
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Med App Reminder</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Health-first medication tracking.</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Med App Reminder
+              </p>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Health-first medication
+                tracking.
+              </p>
             </div>
           </div>
 
           <nav className="space-y-3">
+            {role === "patient" && (
+              <Link
+                href="/"
+                onClick={closeSidebar}
+                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+              >
+                <MdOutlineSpaceDashboard className="h-6 w-6" />
+
+                <span className="font-semibold">
+                  Dashboard
+                </span>
+              </Link>
+            )}
+
+            {role === "family" && (
+              <Link
+                href="/monitor"
+                onClick={closeSidebar}
+                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+              >
+                <CiMonitor className="h-6 w-6" />
+
+                <span className="font-semibold">
+                  Patient Monitoring
+                </span>
+              </Link>
+            )}
+
             <Link
-              href="/"
+              href="/chats"
+              onClick={closeSidebar}
+              className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
+                pathname === "/chats"
+                  ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
+                  : ""
+              }`}
+            >
+              <span className="relative">
+                <MessageCircle className="h-6 w-6" />
+
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {unreadCount > 99
+                      ? "99+"
+                      : unreadCount}
+                  </span>
+                )}
+              </span>
+
+              <span className="font-semibold">
+                Chats
+              </span>
+            </Link>
+
+            {role === "patient" && (
+              <Link
+                href="/medicines"
+                onClick={closeSidebar}
+                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+              >
+                <CiPill className="h-6 w-6" />
+
+                <span className="font-semibold">
+                  Medicines
+                </span>
+              </Link>
+            )}
+
+            {role === "patient" && (
+              <Link
+                href="/history"
+                onClick={closeSidebar}
+                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+              >
+                <GoHistory className="h-6 w-6" />
+
+                <span className="font-semibold">
+                  History
+                </span>
+              </Link>
+            )}
+
+            <Link
+              href="/settings"
               onClick={closeSidebar}
               className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
             >
-            <MdOutlineSpaceDashboard className="h-6 w-6" />
-            <span className="font-semibold">Dashboard</span>
-          </Link>
-          <Link
-            href="/monitor"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-          >
-            <CiMonitor className="h-6 w-6" />
-            <span className="font-semibold">Patient Monitoring</span>
-          </Link>
-          <Link
-            href="/chats"
-            onClick={closeSidebar}
-            className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
-              pathname === "/chats" ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900" : ""
-            }`}
-          >
-            <span className="relative">
-              <MessageCircle className="h-6 w-6" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </span>
-            <span className="font-semibold">Chats</span>
-          </Link>
-          <Link
-            href="/medicines"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-          >
-            <CiPill className="h-6 w-6" />
-            <span className="font-semibold">Medicines</span>
-          </Link>
-          <Link
-            href="/history"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-          >
-            <GoHistory className="h-6 w-6" />
-            <span className="font-semibold">History</span>
-          </Link>
-          <Link
-            href="/settings"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-          >
-            <CiSettings className="h-6 w-6" />
-            <span className="font-semibold">Settings</span>
-          </Link>
-        </nav>
+              <span className="relative">
+                <CiSettings className="h-6 w-6" />
+
+                {pendingCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {pendingCount > 99
+                      ? "99+"
+                      : pendingCount}
+                  </span>
+                )}
+              </span>
+
+              <span className="font-semibold">
+                Settings
+              </span>
+            </Link>
+          </nav>
 
           <div className="mt-auto">
             <button

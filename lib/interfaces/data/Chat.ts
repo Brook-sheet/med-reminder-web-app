@@ -1,6 +1,10 @@
-// lib/interfaces/data/Chat.ts
+export type MessageStatus =
+  | 'sending'
+  | 'sent'
+  | 'delivered'
+  | 'read'
+  | 'failed';
 
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 export type MessageType = 'text' | 'attachment';
 
 export interface MessageAttachment {
@@ -28,18 +32,19 @@ export interface ChatMessage {
   attachment?: MessageAttachment | null;
   status: MessageStatus;
   createdAt: string;
-  clientId?: string; // used client-side for optimistic messages before server confirms
-  uploadProgress?: number; // 0-100, only set while an attachment is uploading
-  localPreviewUrl?: string; // client-only object URL for instant image preview pre-upload
-  unsent?: boolean; // true once "unsent for everyone" — render as a tombstone
-  replyTo?: MessageReplyPreview | null; // quoted preview of the message this one replies to, if any
+  clientId?: string;
+  uploadProgress?: number;
+  localPreviewUrl?: string;
+  unsent?: boolean;
+  replyTo?: MessageReplyPreview | null;
 }
 
 export interface ConversationParticipant {
   userId: string;
   name: string;
   patientId: string;
-  avatarUrl: string | null; // data URI the current user set for this contact, if any
+  role: 'patient' | 'family';
+  avatarUrl: string | null;
 }
 
 export interface ConversationSummary {

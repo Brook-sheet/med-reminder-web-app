@@ -7,10 +7,11 @@ export interface UserDoc extends Document {
   googleSubject?: string;
   emailVerificationTokenHash?: string;
   emailVerificationExpires?: Date;
+  role: 'patient' | 'family';
   firstName: string;
   middleName?: string;
   lastName: string;
-  patientId: string;
+  patientId?: string;
   condition?: string;
   age?: number;
   onboardingCompleted: boolean;
