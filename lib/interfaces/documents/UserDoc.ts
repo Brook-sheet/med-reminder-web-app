@@ -2,7 +2,11 @@ import { Document } from 'mongoose';
 
 export interface UserDoc extends Document {
   email: string;
-  password: string;
+  password?: string;
+  emailVerified: boolean;
+  googleSubject?: string;
+  emailVerificationTokenHash?: string;
+  emailVerificationExpires?: Date;
   firstName: string;
   middleName?: string;
   lastName: string;

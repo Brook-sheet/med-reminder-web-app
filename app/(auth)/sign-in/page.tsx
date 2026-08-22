@@ -2,14 +2,23 @@
 
 import React, { useState } from "react";
 import {
-  Card, CardHeader, CardDescription, CardContent, CardTitle,
+  Card,
+  CardHeader,
+  CardDescription,
+  CardContent,
+  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import OnboardingDialog from "@/components/OnboardingDialog";
-import { validateEmail, validatePassword, collectErrors } from "@/lib/validations";
+import {
+  validateEmail,
+  validatePassword,
+  collectErrors,
+} from "@/lib/validations";
+import { FcGoogle } from "react-icons/fc";
 
 const Signin = () => {
   const router = useRouter();
@@ -33,7 +42,6 @@ const Signin = () => {
       setError(validationError);
       return;
     }
-    // ───────────────────────────────────────────────────────────────────────
 
     setLoading(true);
 
@@ -73,15 +81,23 @@ const Signin = () => {
 
   return (
     <div className="relative w-full">
-      <OnboardingDialog isOpen={showOnboarding} onComplete={handleOnboardingComplete} />
+      <OnboardingDialog
+        isOpen={showOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
 
       <Card className="w-full overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/95 shadow-[0_28px_56px_rgba(15,23,42,0.08)]">
         <CardHeader className="px-6 pt-8">
-          <CardTitle className="text-center text-2xl font-semibold text-slate-900">Welcome back</CardTitle>
+          <CardTitle className="text-center text-2xl font-semibold text-slate-900">
+            Welcome back
+          </CardTitle>
+
           <CardDescription className="mx-auto mt-2 max-w-xs text-center text-sm leading-6 text-slate-500">
-            Sign in to manage your medication reminders and stay on track with your daily schedule.
+            Sign in to manage your medication reminders and stay on track with
+            your daily schedule.
           </CardDescription>
         </CardHeader>
+
         <CardContent className="px-6 pb-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -89,6 +105,7 @@ const Signin = () => {
                 {error}
               </div>
             )}
+
             <Input
               type="email"
               value={email}
@@ -98,6 +115,7 @@ const Signin = () => {
               disabled={loading}
               className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
+
             <Input
               type="password"
               value={password}
@@ -107,21 +125,45 @@ const Signin = () => {
               disabled={loading}
               className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
+
             <div className="flex justify-end">
-              <a href="/forgot-password" className="text-sm font-semibold text-sky-600 hover:text-sky-700">
+              <a
+                href="/forgot-password"
+                className="text-sm font-semibold text-sky-600 hover:text-sky-700"
+              >
                 Forgot password?
               </a>
             </div>
-            <Button className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200" type="submit" disabled={loading}>
+
+            <Button
+              className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200"
+              type="submit"
+              disabled={loading}
+            >
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
           <Separator className="my-6" />
 
-          <p className="text-sm text-center text-slate-500">
+          <a
+            href="/api/auth/google"
+            className="flex w-full items-center justify-center gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+          >
+            <FcGoogle className="h-5 w-5" aria-hidden="true" />
+            Continue with Google
+          </a>
+
+          <Separator className="my-6" />
+
+          <p className="text-center text-sm text-slate-500">
             New to Med App Reminder?{" "}
-            <a href="/sign-up" className="font-semibold text-sky-600 hover:text-sky-700">Create an account</a>
+            <a
+              href="/sign-up"
+              className="font-semibold text-sky-600 hover:text-sky-700"
+            >
+              Create an account
+            </a>
           </p>
         </CardContent>
       </Card>

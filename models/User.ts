@@ -7,7 +7,11 @@ export interface IUser extends Document {
   middleName?: string;
   lastName: string;
   email: string;
-  password: string;
+  password?: string;
+  emailVerified: boolean;
+  googleSubject?: string;
+  emailVerificationTokenHash?: string;
+  emailVerificationExpires?: Date;
   age?: number;
   condition?: string;
   onboardingCompleted: boolean;
@@ -27,7 +31,30 @@ const UserSchema = new Schema<IUser>(
     middleName: { type: String, default: '', trim: true },
     lastName:   { type: String, default: '', trim: true },
     email:      { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password:   { type: String, required: true },
+    // Google-only accounts intentionally have no local password hash.
+    // Credential registration enforces and stores a password in its API route.
+    password: { type: String },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    googleSubject: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      select: false,
+    },
+    emailVerificationTokenHash: {
+      type: String,
+      select: false,
+      index: true,
+    },
+    emailVerificationExpires: {
+      type: Date,
+      select: false,
+    },
     age: {
       type: Number,
       default: null,

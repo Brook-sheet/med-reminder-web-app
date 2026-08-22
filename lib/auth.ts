@@ -21,7 +21,11 @@ export const COOKIE_OPTIONS = {
   path: '/',
 };
 
-export async function signToken(payload: { userId: string; email: string }): Promise<string> {
+export async function signToken(payload: {
+  userId: string;
+  email: string;
+  emailVerified: true;
+}): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -32,6 +36,7 @@ export async function signToken(payload: { userId: string; email: string }): Pro
 export async function verifyToken(token: string): Promise<AuthPayload | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
+    if (payload.emailVerified !== true) return null;
     return payload as unknown as AuthPayload;
   } catch {
     return null;

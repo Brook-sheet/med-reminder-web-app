@@ -2,22 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
-import { signToken, COOKIE_OPTIONS } from '@/lib/auth';
 import { validateEmail } from '@/lib/emailValidation';
+import { generateUniquePatientId } from '@/lib/generatePatientId';
+import {
+  createEmailVerificationToken,
+  EMAIL_VERIFICATION_TTL_HOURS,
+} from '@/lib/emailVerification';
+import { sendEmailVerificationEmail } from '@/lib/email';
+import { checkAndRecordAttempt, getClientIp } from '@/lib/rateLimit';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
-
-async function generateUniquePatientId(): Promise<string> {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  for (let attempt = 0; attempt < 10; attempt++) {
-    let id = 'PT-';
-    for (let i = 0; i < 6; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const existing = await User.findOne({ patientId: id }).select('_id').lean();
-    if (!existing) return id;
-  }
-  throw new Error('Failed to generate unique Patient ID');
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,21 +19,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, confirmPassword, firstName, middleName, lastName } = body;
 
-    // ── Validation ────────────────────────────────────────────────────────
-    if (!email || !password || !confirmPassword) {
+    if (!email || !password || !confirmPassword || !firstName || !lastName) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'All fields are required.' },
+        { success: false, error: 'Please fill in all required fields.' },
         { status: 400 }
       );
     }
 
-    // A valid, reachable email is required so the account can receive
-    // verification and password-reset emails. This goes beyond a plain
-    // format check: it also rejects disposable/throwaway domains, obviously
-    // fake addresses, and domains that don't even have an MX record (i.e.
-    // can't receive mail at all) — while still allowing legitimate
-    // providers like Gmail, Yahoo, Outlook, etc. See lib/emailValidation.ts.
-    const emailCheck = await validateEmail(String(email).trim());
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const emailCheck = await validateEmail(normalizedEmail);
     if (!emailCheck.valid) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: emailCheck.error || 'Please enter a valid email address.' },
@@ -62,83 +49,126 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hasLetter = /[a-zA-Z]/.test(password);
-    const hasNumber  = /[0-9]/.test(password);
-
-    if (!hasLetter || !hasNumber) {
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Password must contain at least one letter and one number.' },
         { status: 400 }
       );
     }
 
-    // ── Duplicate check ───────────────────────────────────────────────────
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const limit = await checkAndRecordAttempt({
+      type: 'email-verification',
+      email: normalizedEmail,
+      ip: getClientIp(request),
+      perEmail: { windowMinutes: 15, max: 3 },
+      perIp: { windowMinutes: 15, max: 10 },
+    });
+
+    if (limit.limited) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: 'Too many registration attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(limit.retryAfterMinutes * 60) },
+        }
+      );
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail })
+      .select('+googleSubject')
+      .lean();
+
     if (existingUser) {
+      if (!existingUser.emailVerified && !existingUser.isDeleted) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            code: 'EMAIL_NOT_VERIFIED',
+            error: 'An account with this email is waiting for verification.',
+            data: { email: normalizedEmail },
+          },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: existingUser.googleSubject
+            ? 'This email is already connected to Google. Continue with Google to sign in.'
+            : 'An account with this email already exists.',
+        },
+        { status: 409 }
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const patientId = await generateUniquePatientId();
+    const verification = createEmailVerificationToken();
+
+    const user = await User.create({
+      email: normalizedEmail,
+      password: hashedPassword,
+      firstName: String(firstName).trim(),
+      middleName: String(middleName || '').trim(),
+      lastName: String(lastName).trim(),
+      emailVerified: false,
+      emailVerificationTokenHash: verification.tokenHash,
+      emailVerificationExpires: verification.expiresAt,
+      onboardingCompleted: false,
+      patientId,
+      monitoredPatients: [],
+      authorizedMonitors: [],
+    });
+
+    const emailSent = await sendEmailVerificationEmail({
+      to: user.email,
+      firstName: user.firstName,
+      token: verification.token,
+      expiresInHours: EMAIL_VERIFICATION_TTL_HOURS,
+    });
+
+    if (!emailSent) {
+      await User.deleteOne({ _id: user._id, emailVerified: false });
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: 'Unable to send the verification email. Please try again in a moment.',
+        },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json<ApiResponse>(
+      {
+        success: true,
+        message: 'Account created. Check your inbox to verify your email.',
+        data: { email: user.email },
+      },
+      { status: 201 }
+    );
+  } catch (error: unknown) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      Number((error as { code?: unknown }).code) === 11000
+    ) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'An account with this email already exists.' },
         { status: 409 }
       );
     }
 
-    // ── Hash password ─────────────────────────────────────────────────────
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // ── Generate Patient ID ───────────────────────────────────────────────
-    const patientId = await generateUniquePatientId();
-
-    // ── Create user ───────────────────────────────────────────────────────
-    const user = await User.create({
-      email:               email.toLowerCase(),
-      password:            hashedPassword,
-      firstName:           firstName   || '',
-      middleName:          middleName  || '',
-      lastName:            lastName    || '',
-      onboardingCompleted: false,
-      patientId,
-      monitoredPatients:  [],
-      authorizedMonitors: [],
-      // condition is intentionally omitted here —
-      // it will be set during onboarding
-    });
-
-    // ── Sign token ────────────────────────────────────────────────────────
-    const token = await signToken({
-      userId: user._id.toString(),
-      email:  user.email,
-    });
-
-    const response = NextResponse.json<ApiResponse>(
-      {
-        success: true,
-        message: 'Account created successfully.',
-        data: {
-          user: {
-            id:                  user._id.toString(),
-            email:               user.email,
-            firstName:           user.firstName,
-            middleName:          user.middleName,
-            lastName:            user.lastName,
-            onboardingCompleted: false,
-            patientId:           user.patientId,
-          },
-        },
-      },
-      { status: 201 }
-    );
-
-    response.cookies.set({ ...COOKIE_OPTIONS, value: token });
-    return response;
-
-  } catch (error: unknown) {
     if (error instanceof Error) {
       console.error('[REGISTER] ERROR:', error.message);
       console.error('[REGISTER] STACK:', error.stack);
     } else {
       console.error('[REGISTER] UNKNOWN ERROR:', error);
     }
+
     return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Internal server error.' },
+      { success: false, error: 'Unable to create your account. Please try again.' },
       { status: 500 }
     );
   }

@@ -27,24 +27,24 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { email, password } = body;
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
 
     if (!email || !password) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Email and password are required' },
+        { success: false, error: 'Email and password are required.' },
         { status: 400 }
       );
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
+    const user = await User.findOne({ email });
+    if (!user || !user.password) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Invalid email or password' },
+        { success: false, error: 'Invalid email or password.' },
         { status: 401 }
       );
     }
 
-    // Block soft-deleted accounts
     if (user.isDeleted) {
       return NextResponse.json<ApiResponse>(
         {
@@ -58,16 +58,32 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Invalid email or password' },
+        { success: false, error: 'Invalid email or password.' },
         { status: 401 }
       );
     }
 
-    const token = await signToken({ userId: user._id.toString(), email: user.email });
+    if (user.emailVerified !== true) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          code: 'EMAIL_NOT_VERIFIED',
+          error: 'Verify your email before signing in.',
+          data: { email: user.email },
+        },
+        { status: 403 }
+      );
+    }
+
+    const token = await signToken({
+      userId: user._id.toString(),
+      email: user.email,
+      emailVerified: true,
+    });
 
     const response = NextResponse.json<ApiResponse>({
       success: true,
-      message: 'Logged in successfully',
+      message: 'Signed in successfully.',
       data: {
         user: {
           id: user._id.toString(),
@@ -96,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Something went wrong. Please try again.' },
       { status: 500 }
     );
   }

@@ -35,7 +35,21 @@ function getTransporter(): Transporter | null {
 }
 
 function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;',
+    };
+
+    return entities[character];
+  });
 }
 
 interface SendResetCodeParams {
@@ -122,6 +136,84 @@ export async function sendPasswordResetEmail({ to, firstName, code, expiresInMin
     return true;
   } catch (error) {
     console.error('[email] Failed to send password reset email:', error);
+    logSmtpAuthGuidance(error);
+    return false;
+  }
+}
+
+interface SendVerificationEmailParams {
+  to: string;
+  firstName: string;
+  token: string;
+  expiresInHours: number;
+}
+
+export async function sendEmailVerificationEmail({
+  to,
+  firstName,
+  token,
+  expiresInHours,
+}: SendVerificationEmailParams): Promise<boolean> {
+  const verificationLink = `${getAppUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+  const greetingName = firstName?.trim() || 'there';
+  const safeGreetingName = escapeHtml(greetingName);
+
+  const subject = 'Verify your Med App Reminder email';
+  const text = [
+    `Hi ${greetingName},`,
+    '',
+    'Verify your email address to activate your Med App Reminder account:',
+    '',
+    verificationLink,
+    '',
+    `This link expires in ${expiresInHours} hours and can only be used once.`,
+    '',
+    "If you didn't create this account, you can safely ignore this email.",
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; color: #0f172a;">
+      <h2 style="margin-bottom: 4px;">Verify your email</h2>
+      <p style="color: #475569; line-height: 1.6;">Hi ${safeGreetingName},</p>
+      <p style="color: #475569; line-height: 1.6;">
+        Confirm that you can access this email address to activate your Med App Reminder account.
+      </p>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${verificationLink}" style="background: #0284c7; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 28px; border-radius: 999px; display: inline-block;">
+          Verify Email Address
+        </a>
+      </div>
+      <p style="color: #64748b; font-size: 13px; line-height: 1.6;">
+        This link expires in ${expiresInHours} hours and can only be used once. If you didn't create this account, you can safely ignore this email.
+      </p>
+    </div>
+  `;
+
+  const transporter = getTransporter();
+
+  if (!transporter) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        `[email] SMTP is not configured — email verification link for ${to}: ${verificationLink}`
+      );
+      return true;
+    }
+
+    console.error('[email] SMTP is not configured; cannot send verification email in production.');
+    return false;
+  }
+
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to,
+      subject,
+      text,
+      html,
+    });
+    return true;
+  } catch (error) {
+    console.error('[email] Failed to send email verification message:', error);
     logSmtpAuthGuidance(error);
     return false;
   }

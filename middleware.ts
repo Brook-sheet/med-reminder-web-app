@@ -11,7 +11,13 @@ const SECRET = new TextEncoder().encode(
 );
 
 // Pages that do NOT require login
-const PUBLIC_ROUTES = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password'];
+const PUBLIC_ROUTES = [
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/auth/google/callback',
+];
 
 // Of those, which ones a LOGGED-IN user should still be bounced away from
 // (signing in/up again makes no sense once authenticated). Forgot/reset
@@ -71,6 +77,7 @@ export async function middleware(request: NextRequest) {
   const isPublicPage = PUBLIC_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
+
   const isAuthOnlyPage = AUTH_ONLY_ROUTES.some((route) =>
     pathname.startsWith(route)
   );

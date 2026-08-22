@@ -1,12 +1,12 @@
 // models/PasswordResetAttempt.ts
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-// A lightweight, append-only log of every forgot-password / verify-code hit,
+// A lightweight, append-only log of password-reset and email-verification hits,
 // keyed by both the submitted email and the requester's IP. Rate limiting
 // reads from this collection instead of an in-memory counter because the app
 // may run as multiple serverless instances — an in-process counter would
 // reset per-instance and not actually protect anything.
-export type PasswordResetAttemptType = 'request' | 'verify';
+export type PasswordResetAttemptType = 'request' | 'verify' | 'email-verification';
 
 export interface IPasswordResetAttemptDocument extends Document {
   _id: mongoose.Types.ObjectId;
@@ -18,7 +18,7 @@ export interface IPasswordResetAttemptDocument extends Document {
 
 const PasswordResetAttemptSchema = new Schema<IPasswordResetAttemptDocument>(
   {
-    type: { type: String, enum: ['request', 'verify'], required: true },
+    type: { type: String, enum: ['request', 'verify', 'email-verification'], required: true },
     email: { type: String, required: true, lowercase: true, trim: true, index: true },
     ip: { type: String, required: true, index: true },
   },

@@ -77,10 +77,10 @@ export interface CooldownResult {
 }
 
 /**
- * Enforces the 120-second resend cooldown for password-reset code requests.
+ * Enforces the 120-second resend cooldown for password-reset or email-verification requests.
  *
  * This reads from the SAME append-only PasswordResetAttempt log that
- * checkAndRecordAttempt() writes to (type: 'request'), so it applies
+ * checkAndRecordAttempt() writes to, so it applies
  * identically whether the email belongs to a real account or not — keeping
  * the endpoint safe from account enumeration via response-timing/shape
  * differences. It's a dedicated, tighter check layered underneath the
@@ -93,8 +93,11 @@ export interface CooldownResult {
  * call checkAndRecordAttempt() (which does write one) when not on cooldown,
  * so the timestamp used here is always up to date for the next check.
  */
-export async function checkResendCooldown(email: string): Promise<CooldownResult> {
-  const lastAttempt = await PasswordResetAttempt.findOne({ type: 'request', email })
+export async function checkResendCooldown(
+  email: string,
+  type: PasswordResetAttemptType = 'request'
+): Promise<CooldownResult> {
+  const lastAttempt = await PasswordResetAttempt.findOne({ type, email })
     .sort({ createdAt: -1 })
     .select('createdAt')
     .lean();

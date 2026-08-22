@@ -67,7 +67,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Prevent using the same password
-    const isSamePassword = await bcrypt.compare(newPassword, existingUser.password);
+    const isSamePassword = existingUser.password
+      ? await bcrypt.compare(newPassword, existingUser.password)
+      : false;
     if (isSamePassword) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'New password must be different from the current password.' },
