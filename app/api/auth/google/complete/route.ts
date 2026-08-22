@@ -8,6 +8,7 @@ import {
   signToken,
 } from "@/lib/auth";
 import { generateUniquePatientId } from "@/lib/generatePatientId";
+import { generateUniqueFamilyId } from "@/lib/generateFamilyId";
 import {
   GOOGLE_PENDING_ACCOUNT_COOKIE,
   GOOGLE_PENDING_ACCOUNT_COOKIE_OPTIONS,
@@ -84,7 +85,10 @@ export async function POST(
           }
         );
 
-      clearPendingAccountCookie(response);
+      clearPendingAccountCookie(
+        response
+      );
+
       return response;
     }
 
@@ -115,7 +119,10 @@ export async function POST(
           }
         );
 
-      clearPendingAccountCookie(response);
+      clearPendingAccountCookie(
+        response
+      );
+
       return response;
     }
 
@@ -136,15 +143,19 @@ export async function POST(
           }
         );
 
-      clearPendingAccountCookie(response);
+      clearPendingAccountCookie(
+        response
+      );
+
       return response;
     }
 
     if (user) {
-      const storedRole: ApplicationRole =
-        user.role === "family"
-          ? "family"
-          : "patient";
+      const storedRole:
+        ApplicationRole =
+          user.role === "family"
+            ? "family"
+            : "patient";
 
       user =
         await User.findByIdAndUpdate(
@@ -169,7 +180,8 @@ export async function POST(
             },
           },
           {
-            returnDocument: "after",
+            returnDocument:
+              "after",
             runValidators: true,
           }
         ).select("+googleSubject");
@@ -179,17 +191,26 @@ export async function POST(
           ? await generateUniquePatientId()
           : undefined;
 
+      const familyId =
+        role === "family"
+          ? await generateUniqueFamilyId()
+          : undefined;
+
       user = await User.create({
         email: identity.email,
         emailVerified: true,
-        googleSubject: identity.subject,
-        firstName: identity.firstName,
+        googleSubject:
+          identity.subject,
+        firstName:
+          identity.firstName,
         middleName: "",
-        lastName: identity.lastName,
+        lastName:
+          identity.lastName,
         role,
         onboardingCompleted:
           role === "family",
         patientId,
+        familyId,
         monitoredPatients: [],
         authorizedMonitors: [],
       });
@@ -201,10 +222,11 @@ export async function POST(
       );
     }
 
-    const storedRole: ApplicationRole =
-      user.role === "family"
-        ? "family"
-        : "patient";
+    const storedRole:
+      ApplicationRole =
+        user.role === "family"
+          ? "family"
+          : "patient";
 
     const onboardingRequired =
       storedRole === "patient" &&
@@ -232,7 +254,9 @@ export async function POST(
       value: sessionToken,
     });
 
-    clearPendingAccountCookie(response);
+    clearPendingAccountCookie(
+      response
+    );
 
     return response;
   } catch (error) {

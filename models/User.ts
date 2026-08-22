@@ -20,6 +20,7 @@ export interface IUser
   condition?: string;
   onboardingCompleted: boolean;
   patientId?: string;
+  familyId?: string;
   monitoredPatients: string[];
   authorizedMonitors: string[];
   isDeleted?: boolean;
@@ -123,6 +124,13 @@ const UserSchema =
         type: String,
         unique: true,
         sparse: true,
+      },
+
+      familyId: {
+        type: String,
+        unique: true,
+        sparse: true,
+        trim: true,
       },
 
       monitoredPatients: {

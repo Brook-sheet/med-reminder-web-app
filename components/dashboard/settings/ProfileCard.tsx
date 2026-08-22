@@ -11,15 +11,17 @@ import Toast from "@/components/ui/Toast";
 import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
 import {
   AlertTriangle,
+  Check,
+  Copy,
   User,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
+  collectErrors,
+  validateAge,
+  validateEmail,
   validateName,
   validateOptionalName,
-  validateEmail,
-  validateAge,
-  collectErrors,
 } from "@/lib/validations";
 
 const CONDITIONS = [
@@ -55,20 +57,26 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel: string;
+  confirmColor:
+    | "red"
+    | "orange";
   onConfirm: () => void;
   onCancel: () => void;
   loading?: boolean;
 }
 
-const ConfirmModal = ({
+const ConfirmModal: React.FC<
+  ConfirmModalProps
+> = ({
   isOpen,
   title,
   message,
   confirmLabel,
+  confirmColor,
   onConfirm,
   onCancel,
   loading,
-}: ConfirmModalProps) => {
+}) => {
   if (!isOpen) {
     return null;
   }
@@ -111,7 +119,11 @@ const ConfirmModal = ({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 rounded-xl bg-red-600 py-2.5 font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
+            className={`flex-1 rounded-xl py-2.5 font-semibold text-white transition-colors disabled:opacity-50 ${
+              confirmColor === "red"
+                ? "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
+            }`}
           >
             {loading
               ? "Processing..."
@@ -167,11 +179,13 @@ const ProfileCard = () => {
   const [saving, setSaving] =
     useState(false);
 
-  const [message, setMessage] =
-    useState<{
-      type: "success" | "error";
-      text: string;
-    } | null>(null);
+  const [
+    message,
+    setMessage,
+  ] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [
     previousCondition,
@@ -191,20 +205,45 @@ const ProfileCard = () => {
     setShowPasswordModal,
   ] = useState(false);
 
+  const [
+    patientIdCopied,
+    setPatientIdCopied,
+  ] = useState(false);
+
+  const copyPatientId =
+    async () => {
+      if (!patientId) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(
+        patientId
+      );
+
+      setPatientIdCopied(true);
+
+      window.setTimeout(
+        () =>
+          setPatientIdCopied(false),
+        2000
+      );
+    };
+
   const fetchProfile =
     useCallback(async () => {
       try {
-        const response = await fetch(
-          "/api/profile",
-          {
-            cache: "no-store",
-          }
-        );
+        const response =
+          await fetch(
+            "/api/profile",
+            {
+              cache: "no-store",
+            }
+          );
 
         const data =
           await response.json();
 
-        if (!response.ok || !data.success) {
+        if (!data.success) {
           setMessage({
             type: "error",
             text:
@@ -321,39 +360,42 @@ const ProfileCard = () => {
     setSaving(true);
 
     try {
-      const response = await fetch(
-        "/api/profile",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            firstName,
-            middleName,
-            lastName,
-            email,
-            ...(role === "patient"
-              ? {
-                  condition,
-                  age:
-                    age === ""
-                      ? null
-                      : Number(age),
-                }
-              : {}),
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/profile",
+          {
+            method: "PUT",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              firstName,
+              middleName,
+              lastName,
+              email,
+
+              ...(role === "patient"
+                ? {
+                    condition,
+                    age:
+                      age === ""
+                        ? null
+                        : Number(
+                            age
+                          ),
+                  }
+                : {}),
+            }),
+          }
+        );
 
       const data =
         await response.json();
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
+      if (!data.success) {
         setMessage({
           type: "error",
           text:
@@ -364,7 +406,11 @@ const ProfileCard = () => {
         return;
       }
 
-      if (role === "family") {
+      if (
+        role === "family" ||
+        condition ===
+          previousCondition
+      ) {
         setMessage({
           type: "success",
           text:
@@ -380,25 +426,14 @@ const ProfileCard = () => {
             item.value === condition
         )?.label || condition;
 
-      if (
-        condition ===
-        previousCondition
-      ) {
-        setMessage({
-          type: "success",
-          text:
-            "Profile updated successfully!",
-        });
-      } else {
-        setMessage({
-          type: "success",
-          text: `Profile updated successfully! Condition set to: ${conditionLabel}`,
-        });
+      setMessage({
+        type: "success",
+        text: `Profile updated successfully! Condition set to: ${conditionLabel}`,
+      });
 
-        setPreviousCondition(
-          condition
-        );
-      }
+      setPreviousCondition(
+        condition
+      );
     } catch {
       setMessage({
         type: "error",
@@ -420,12 +455,13 @@ const ProfileCard = () => {
       setDeleting(true);
 
       try {
-        const response = await fetch(
-          "/api/profile/delete-account",
-          {
-            method: "DELETE",
-          }
-        );
+        const response =
+          await fetch(
+            "/api/profile/delete-account",
+            {
+              method: "DELETE",
+            }
+          );
 
         const data =
           await response.json();
@@ -437,6 +473,7 @@ const ProfileCard = () => {
 
           router.push("/sign-in");
           router.refresh();
+
           return;
         }
 
@@ -465,17 +502,21 @@ const ProfileCard = () => {
     return (
       <div className="animate-pulse rounded-xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="space-y-4">
-          {[1, 2, 3, 4].map(
-            (item) => (
-              <div
-                key={item}
-                className="space-y-1"
-              >
-                <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700" />
-                <div className="h-9 rounded bg-gray-100 dark:bg-gray-600" />
-              </div>
-            )
-          )}
+          {[
+            1,
+            2,
+            3,
+            4,
+            5,
+          ].map((item) => (
+            <div
+              key={item}
+              className="space-y-1"
+            >
+              <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+              <div className="h-9 rounded bg-gray-100 dark:bg-gray-600" />
+            </div>
+          ))}
 
           <div className="mt-6 h-10 rounded bg-gray-200 dark:bg-gray-700" />
         </div>
@@ -497,15 +538,20 @@ const ProfileCard = () => {
       )}
 
       <ConfirmModal
-        isOpen={showDeleteConfirm}
+        isOpen={
+          showDeleteConfirm
+        }
         title="Delete Account and Data?"
         message="Are you sure you want to delete your account? This action will permanently remove your account and all associated data. You will be logged out immediately, and your data cannot be recovered."
         confirmLabel="Delete Account"
+        confirmColor="red"
         onConfirm={
           handleDeleteAccount
         }
         onCancel={() =>
-          setShowDeleteConfirm(false)
+          setShowDeleteConfirm(
+            false
+          )
         }
         loading={deleting}
       />
@@ -616,85 +662,124 @@ const ProfileCard = () => {
           </div>
 
           {role === "patient" && (
-            <>
-              <div>
-                <label
-                  htmlFor="patientId"
-                  className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Patient ID
-                </label>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+              <label
+                htmlFor="patientId"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Patient ID
+              </label>
 
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   id="patientId"
                   type="text"
                   value={patientId}
                   readOnly
-                  disabled
-                  className="rounded-lg border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  aria-label="Patient ID"
+                  className="min-h-12 flex-1 rounded-xl border-blue-200 bg-white font-mono text-base font-bold tracking-[0.14em] text-gray-900 dark:border-blue-900 dark:bg-slate-950 dark:text-gray-100"
                 />
-              </div>
 
-              <div>
-                <label
-                  htmlFor="age"
-                  className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Age{" "}
-                  <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
-                    (optional)
-                  </span>
-                </label>
-
-                <Input
-                  id="age"
-                  type="number"
-                  value={age}
-                  onChange={(event) =>
-                    setAge(
-                      event.target.value
-                    )
+                <button
+                  type="button"
+                  onClick={() =>
+                    void copyPatientId()
                   }
-                  placeholder="Enter your age"
-                  min="1"
-                  max="120"
-                  disabled={saving}
-                  className="rounded-lg border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="condition"
-                  className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Condition Managing
-                </label>
-
-                <select
-                  id="condition"
-                  value={condition}
-                  onChange={(event) =>
-                    setCondition(
-                      event.target.value
-                    )
+                  disabled={
+                    !patientId
                   }
-                  disabled={saving}
-                  className="h-9 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-blue-800"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  aria-label="Copy Patient ID"
                 >
-                  {CONDITIONS.map(
-                    (item) => (
-                      <option
-                        key={item.value}
-                        value={item.value}
-                      >
-                        {item.label}
-                      </option>
-                    )
+                  {patientIdCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
                   )}
-                </select>
+
+                  {patientIdCopied
+                    ? "Copied!"
+                    : "Copy"}
+                </button>
               </div>
-            </>
+
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Share this only when a
+                trusted Family member
+                needs to identify your
+                Patient account.
+              </p>
+            </div>
+          )}
+
+          {role === "patient" && (
+            <div>
+              <label
+                htmlFor="age"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Age{" "}
+                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
+                  (optional)
+                </span>
+              </label>
+
+              <Input
+                id="age"
+                type="number"
+                value={age}
+                onChange={(event) =>
+                  setAge(
+                    event.target.value
+                  )
+                }
+                placeholder="Enter your age"
+                min="1"
+                max="120"
+                disabled={saving}
+                className="rounded-lg border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
+              />
+            </div>
+          )}
+
+          {role === "patient" && (
+            <div>
+              <label
+                htmlFor="condition"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Condition Managing
+              </label>
+
+              <select
+                id="condition"
+                value={condition}
+                onChange={(event) =>
+                  setCondition(
+                    event.target.value
+                  )
+                }
+                disabled={saving}
+                className="h-9 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-blue-800"
+              >
+                {CONDITIONS.map(
+                  (item) => (
+                    <option
+                      key={
+                        item.value
+                      }
+                      value={
+                        item.value
+                      }
+                    >
+                      {
+                        item.label
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
           )}
 
           <Button
@@ -711,7 +796,9 @@ const ProfileCard = () => {
           <Button
             type="button"
             onClick={() =>
-              setShowPasswordModal(true)
+              setShowPasswordModal(
+                true
+              )
             }
             disabled={saving}
             className="mt-2 w-full rounded-lg bg-slate-700 text-white hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-700"
@@ -722,7 +809,9 @@ const ProfileCard = () => {
           <button
             type="button"
             onClick={() =>
-              setShowDeleteConfirm(true)
+              setShowDeleteConfirm(
+                true
+              )
             }
             disabled={saving}
             className="w-full rounded-lg border-2 border-red-200 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
@@ -735,7 +824,9 @@ const ProfileCard = () => {
       <UpdatePasswordModal
         isOpen={showPasswordModal}
         onClose={() =>
-          setShowPasswordModal(false)
+          setShowPasswordModal(
+            false
+          )
         }
       />
     </>

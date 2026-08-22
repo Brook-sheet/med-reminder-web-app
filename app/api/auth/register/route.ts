@@ -1,25 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import { connectDB } from '@/lib/mongodb';
-import User from '@/models/User';
-import { validateEmail } from '@/lib/emailValidation';
-import { generateUniquePatientId } from '@/lib/generatePatientId';
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+import bcrypt from "bcryptjs";
+import { connectDB } from "@/lib/mongodb";
+import User from "@/models/User";
+import { validateEmail } from "@/lib/emailValidation";
+import { generateUniquePatientId } from "@/lib/generatePatientId";
+import { generateUniqueFamilyId } from "@/lib/generateFamilyId";
 import {
   createEmailVerificationToken,
   EMAIL_VERIFICATION_TTL_HOURS,
-} from '@/lib/emailVerification';
-import { sendEmailVerificationEmail } from '@/lib/email';
+} from "@/lib/emailVerification";
+import { sendEmailVerificationEmail } from "@/lib/email";
 import {
   checkAndRecordAttempt,
   getClientIp,
-} from '@/lib/rateLimit';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
+} from "@/lib/rateLimit";
+import type { ApiResponse } from "@/lib/interfaces/data/Api";
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
     await connectDB();
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
     const {
       email,
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            'Please fill in all required fields.',
+            "Please fill in all required fields.",
         },
         {
           status: 400,
@@ -51,14 +58,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (
-      role !== 'patient' &&
-      role !== 'family'
+      role !== "patient" &&
+      role !== "family"
     ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
           error:
-            'Please select either Patient or Family.',
+            "Please select either Patient or Family.",
         },
         {
           status: 400,
@@ -66,12 +73,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedEmail = String(email)
-      .trim()
-      .toLowerCase();
+    const normalizedEmail =
+      String(email)
+        .trim()
+        .toLowerCase();
 
     const emailCheck =
-      await validateEmail(normalizedEmail);
+      await validateEmail(
+        normalizedEmail
+      );
 
     if (!emailCheck.valid) {
       return NextResponse.json<ApiResponse>(
@@ -79,7 +89,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error:
             emailCheck.error ||
-            'Please enter a valid email address.',
+            "Please enter a valid email address.",
         },
         {
           status: 400,
@@ -87,11 +97,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password !== confirmPassword) {
+    if (
+      password !== confirmPassword
+    ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Passwords do not match.',
+          error:
+            "Passwords do not match.",
         },
         {
           status: 400,
@@ -104,7 +117,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            'Password must be at least 6 characters.',
+            "Password must be at least 6 characters.",
         },
         {
           status: 400,
@@ -120,7 +133,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            'Password must contain at least one letter and one number.',
+            "Password must contain at least one letter and one number.",
         },
         {
           status: 400,
@@ -130,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     const limit =
       await checkAndRecordAttempt({
-        type: 'email-verification',
+        type: "email-verification",
         email: normalizedEmail,
         ip: getClientIp(request),
         perEmail: {
@@ -148,13 +161,14 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            'Too many registration attempts. Please try again later.',
+            "Too many registration attempts. Please try again later.",
         },
         {
           status: 429,
           headers: {
-            'Retry-After': String(
-              limit.retryAfterMinutes * 60
+            "Retry-After": String(
+              limit.retryAfterMinutes *
+                60
             ),
           },
         }
@@ -165,7 +179,7 @@ export async function POST(request: NextRequest) {
       await User.findOne({
         email: normalizedEmail,
       })
-        .select('+googleSubject')
+        .select("+googleSubject")
         .lean();
 
     if (existingUser) {
@@ -176,11 +190,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            code: 'EMAIL_NOT_VERIFIED',
+            code:
+              "EMAIL_NOT_VERIFIED",
             error:
-              'An account with this email is waiting for verification.',
+              "An account with this email is waiting for verification.",
             data: {
-              email: normalizedEmail,
+              email:
+                normalizedEmail,
             },
           },
           {
@@ -192,9 +208,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: existingUser.googleSubject
-            ? 'This email is already connected to Google. Continue with Google to sign in.'
-            : 'An account with this email already exists.',
+          error:
+            existingUser.googleSubject
+              ? "This email is already connected to Google. Continue with Google to sign in."
+              : "An account with this email already exists.",
         },
         {
           status: 409,
@@ -203,45 +220,61 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword =
-      await bcrypt.hash(password, 12);
+      await bcrypt.hash(
+        password,
+        12
+      );
 
     const patientId =
-      role === 'patient'
+      role === "patient"
         ? await generateUniquePatientId()
+        : undefined;
+
+    const familyId =
+      role === "family"
+        ? await generateUniqueFamilyId()
         : undefined;
 
     const verification =
       createEmailVerificationToken();
 
-    const user = await User.create({
-      email: normalizedEmail,
-      password: hashedPassword,
-      firstName: String(firstName).trim(),
-      middleName: String(
-        middleName || ''
-      ).trim(),
-      lastName: String(lastName).trim(),
-      role,
-      emailVerified: false,
-      emailVerificationTokenHash:
-        verification.tokenHash,
-      emailVerificationExpires:
-        verification.expiresAt,
-      onboardingCompleted:
-        role === 'family',
-      patientId,
-      monitoredPatients: [],
-      authorizedMonitors: [],
-    });
+    const user =
+      await User.create({
+        email: normalizedEmail,
+        password: hashedPassword,
+        firstName:
+          String(firstName).trim(),
+        middleName: String(
+          middleName || ""
+        ).trim(),
+        lastName:
+          String(lastName).trim(),
+        role,
+        emailVerified: false,
+        emailVerificationTokenHash:
+          verification.tokenHash,
+        emailVerificationExpires:
+          verification.expiresAt,
+        onboardingCompleted:
+          role === "family",
+        patientId,
+        familyId,
+        monitoredPatients: [],
+        authorizedMonitors: [],
+      });
 
     const emailSent =
-      await sendEmailVerificationEmail({
-        to: user.email,
-        firstName: user.firstName,
-        token: verification.token,
-        expiresInHours:
-          EMAIL_VERIFICATION_TTL_HOURS,
-      });
+      await sendEmailVerificationEmail(
+        {
+          to: user.email,
+          firstName:
+            user.firstName,
+          token:
+            verification.token,
+          expiresInHours:
+            EMAIL_VERIFICATION_TTL_HOURS,
+        }
+      );
 
     if (!emailSent) {
       await User.deleteOne({
@@ -253,7 +286,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            'Unable to send the verification email. Please try again in a moment.',
+            "Unable to send the verification email. Please try again in a moment.",
         },
         {
           status: 503,
@@ -265,7 +298,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message:
-          'Account created. Check your inbox to verify your email.',
+          "Account created. Check your inbox to verify your email.",
         data: {
           email: user.email,
         },
@@ -277,17 +310,21 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (
       error &&
-      typeof error === 'object' &&
-      'code' in error &&
+      typeof error === "object" &&
+      "code" in error &&
       Number(
-        (error as { code?: unknown }).code
+        (
+          error as {
+            code?: unknown;
+          }
+        ).code
       ) === 11000
     ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
           error:
-            'An account with this email already exists.',
+            "An account with this email already exists.",
         },
         {
           status: 409,
@@ -297,17 +334,17 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Error) {
       console.error(
-        '[REGISTER] ERROR:',
+        "[REGISTER] ERROR:",
         error.message
       );
 
       console.error(
-        '[REGISTER] STACK:',
+        "[REGISTER] STACK:",
         error.stack
       );
     } else {
       console.error(
-        '[REGISTER] UNKNOWN ERROR:',
+        "[REGISTER] UNKNOWN ERROR:",
         error
       );
     }
@@ -316,7 +353,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error:
-          'Unable to create your account. Please try again.',
+          "Unable to create your account. Please try again.",
       },
       {
         status: 500,

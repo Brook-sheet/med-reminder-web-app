@@ -1,17 +1,19 @@
-import { Document } from 'mongoose';
+import { Document } from "mongoose";
 
-export interface UserDoc extends Document {
+export interface UserDoc
+  extends Document {
   email: string;
   password?: string;
   emailVerified: boolean;
   googleSubject?: string;
   emailVerificationTokenHash?: string;
   emailVerificationExpires?: Date;
-  role: 'patient' | 'family';
+  role: "patient" | "family";
   firstName: string;
   middleName?: string;
   lastName: string;
   patientId?: string;
+  familyId?: string;
   condition?: string;
   age?: number;
   onboardingCompleted: boolean;

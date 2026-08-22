@@ -5,8 +5,9 @@ export interface User {
   firstName: string;
   middleName?: string;
   lastName: string;
-  role: 'patient' | 'family';
+  role: "patient" | "family";
   patientId?: string;
+  familyId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
