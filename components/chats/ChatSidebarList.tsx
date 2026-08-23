@@ -2,7 +2,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { MessageCircle, Search, Trash2 } from 'lucide-react';
+import {
+  MessageCircle,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import type { ConversationSummary } from '@/lib/interfaces/data/Chat';
 
 function initials(name: string) {
@@ -19,7 +23,9 @@ function initials(name: string) {
 function formatTimestamp(iso: string) {
   const date = new Date(iso);
   const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
+
+  const sameDay =
+    date.toDateString() === now.toDateString();
 
   if (sameDay) {
     return date.toLocaleTimeString([], {
@@ -29,7 +35,8 @@ function formatTimestamp(iso: string) {
   }
 
   const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / 86_400_000
+    (now.getTime() - date.getTime()) /
+      86_400_000
   );
 
   if (diffDays < 7) {
@@ -62,13 +69,22 @@ export default function ChatSidebarList({
   onDeleteContact,
 }: ChatSidebarListProps) {
   const [query, setQuery] = useState('');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const filtered = conversations.filter((conversation) =>
-    conversation.contact.name
-      .toLowerCase()
-      .includes(query.trim().toLowerCase())
+  const [
+    confirmDeleteId,
+    setConfirmDeleteId,
+  ] = useState<string | null>(null);
+
+  const pressTimer =
+    useRef<NodeJS.Timeout | null>(null);
+
+  const filtered = conversations.filter(
+    (conversation) =>
+      conversation.contact.name
+        .toLowerCase()
+        .includes(
+          query.trim().toLowerCase()
+        )
   );
 
   const startPress = (id: string) => {
@@ -93,7 +109,10 @@ export default function ChatSidebarList({
       return;
     }
 
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (
+      event.key === 'Enter' ||
+      event.key === ' '
+    ) {
       event.preventDefault();
       onSelect(id);
     }
@@ -113,7 +132,9 @@ export default function ChatSidebarList({
 
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) =>
+              setQuery(event.target.value)
+            }
             placeholder="Search conversations"
             aria-label="Search conversations"
             className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
@@ -122,48 +143,59 @@ export default function ChatSidebarList({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4">
-        {loading && conversations.length === 0 && (
-          <div className="space-y-2 px-2 pt-2">
-            {[...Array(4)].map((_, index) => (
-              <div
-                key={index}
-                className="h-16 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800/60"
-              />
-            ))}
-          </div>
-        )}
-
-        {!loading && error && conversations.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-red-500">
-            {error}
-          </div>
-        )}
-
-        {!loading && !error && filtered.length === 0 && (
-          <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-500 dark:bg-blue-900/20">
-              <MessageCircle className="h-7 w-7" />
+        {loading &&
+          conversations.length === 0 && (
+            <div className="space-y-2 px-2 pt-2">
+              {[...Array(4)].map(
+                (_, index) => (
+                  <div
+                    key={index}
+                    className="h-16 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800/60"
+                  />
+                )
+              )}
             </div>
+          )}
 
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {conversations.length === 0
-                ? 'No conversations yet. Chat becomes available after monitoring access is approved.'
-                : 'No conversations match your search.'}
-            </p>
-          </div>
-        )}
+        {!loading &&
+          error &&
+          conversations.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-red-500">
+              {error}
+            </div>
+          )}
+
+        {!loading &&
+          !error &&
+          filtered.length === 0 && (
+            <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-500 dark:bg-blue-900/20">
+                <MessageCircle className="h-7 w-7" />
+              </div>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {conversations.length === 0
+                  ? 'No conversations yet. Accepted Message Requests will appear here.'
+                  : 'No conversations match your search.'}
+              </p>
+            </div>
+          )}
 
         <ul className="space-y-1">
           {filtered.map((conversation) => {
             const isSelected =
-              conversation.conversationId === selectedId;
+              conversation.conversationId ===
+              selectedId;
 
             const isConfirming =
-              confirmDeleteId === conversation.conversationId;
+              confirmDeleteId ===
+              conversation.conversationId;
 
             return (
               <li
-                key={conversation.conversationId}
+                key={
+                  conversation.conversationId
+                }
                 className="group relative"
               >
                 <div
@@ -171,7 +203,9 @@ export default function ChatSidebarList({
                   tabIndex={0}
                   onClick={() => {
                     if (!isConfirming) {
-                      onSelect(conversation.conversationId);
+                      onSelect(
+                        conversation.conversationId
+                      );
                     }
                   }}
                   onKeyDown={(event) =>
@@ -183,10 +217,15 @@ export default function ChatSidebarList({
                   }
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    setConfirmDeleteId(conversation.conversationId);
+
+                    setConfirmDeleteId(
+                      conversation.conversationId
+                    );
                   }}
                   onTouchStart={() =>
-                    startPress(conversation.conversationId)
+                    startPress(
+                      conversation.conversationId
+                    )
                   }
                   onTouchEnd={cancelPress}
                   onTouchCancel={cancelPress}
@@ -199,15 +238,24 @@ export default function ChatSidebarList({
                 >
                   <div className="relative shrink-0">
                     <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
-                      {conversation.contact.avatarUrl ? (
+                      {conversation.contact
+                        .avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={conversation.contact.avatarUrl}
-                          alt={conversation.contact.name}
+                          src={
+                            conversation.contact
+                              .avatarUrl
+                          }
+                          alt={
+                            conversation.contact
+                              .name
+                          }
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        initials(conversation.contact.name)
+                        initials(
+                          conversation.contact.name
+                        )
                       )}
                     </div>
 
@@ -219,14 +267,19 @@ export default function ChatSidebarList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                        {conversation.contact.name}
+                        {
+                          conversation.contact
+                            .name
+                        }
                       </p>
 
                       <div className="flex h-5 shrink-0 items-center">
                         {conversation.lastMessage && (
                           <span className="text-[11px] text-slate-400 sm:group-hover:hidden">
                             {formatTimestamp(
-                              conversation.lastMessage.createdAt
+                              conversation
+                                .lastMessage
+                                .createdAt
                             )}
                           </span>
                         )}
@@ -235,6 +288,7 @@ export default function ChatSidebarList({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
+
                             setConfirmDeleteId(
                               conversation.conversationId
                             );
@@ -253,20 +307,25 @@ export default function ChatSidebarList({
                         className={`truncate text-xs ${
                           conversation.isTyping
                             ? 'font-medium text-emerald-600 dark:text-emerald-400'
-                            : conversation.unreadCount > 0
+                            : conversation.unreadCount >
+                                0
                               ? 'font-medium text-slate-700 dark:text-slate-200'
                               : 'text-slate-500 dark:text-slate-400'
                         }`}
                       >
                         {conversation.isTyping
                           ? 'Typing…'
-                          : conversation.lastMessage?.text ||
+                          : conversation
+                              .lastMessage
+                              ?.text ||
                             'Say hello 👋'}
                       </p>
 
-                      {conversation.unreadCount > 0 && (
+                      {conversation.unreadCount >
+                        0 && (
                         <span className="ml-2 flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-bold text-white">
-                          {conversation.unreadCount > 99
+                          {conversation.unreadCount >
+                          99
                             ? '99+'
                             : conversation.unreadCount}
                         </span>
@@ -278,13 +337,22 @@ export default function ChatSidebarList({
                 {isConfirming && (
                   <div className="absolute inset-0 z-10 flex items-center justify-between gap-2 rounded-2xl bg-card/95 px-3 shadow-lg ring-1 ring-red-200 dark:ring-red-900/40">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Remove {conversation.contact.name}?
+                      Remove{' '}
+                      {
+                        conversation.contact
+                          .name
+                      }
+                      ?
                     </span>
 
                     <div className="flex shrink-0 items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteId(null)}
+                        onClick={() =>
+                          setConfirmDeleteId(
+                            null
+                          )
+                        }
                         className="rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
                         Cancel
@@ -293,8 +361,13 @@ export default function ChatSidebarList({
                       <button
                         type="button"
                         onClick={() => {
-                          onDeleteContact(conversation.conversationId);
-                          setConfirmDeleteId(null);
+                          onDeleteContact(
+                            conversation.conversationId
+                          );
+
+                          setConfirmDeleteId(
+                            null
+                          );
                         }}
                         className="flex items-center gap-1 rounded-xl bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
                       >

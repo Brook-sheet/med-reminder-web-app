@@ -110,50 +110,6 @@ export function useConversations() {
       0
     );
 
-  const addContact =
-    useCallback(
-      async (
-        familyId: string,
-        contactName?: string
-      ) => {
-        const response =
-          await fetch(
-            "/api/chats",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body: JSON.stringify({
-                familyId,
-                contactName,
-              }),
-            }
-          );
-
-        const result =
-          await response.json();
-
-        if (result.success) {
-          await fetchConversations({
-            silent: true,
-          });
-        }
-
-        return result as {
-          success: boolean;
-          error?: string;
-          data?: {
-            conversationId: string;
-          };
-        };
-      },
-      [fetchConversations]
-    );
-
   const removeContact =
     useCallback(
       async (
@@ -178,6 +134,12 @@ export function useConversations() {
                   conversation.conversationId !==
                   conversationId
               )
+          );
+
+          window.dispatchEvent(
+            new Event(
+              "chat-relationships-updated"
+            )
           );
         }
 
@@ -279,7 +241,6 @@ export function useConversations() {
     totalUnread,
     refresh:
       fetchConversations,
-    addContact,
     removeContact,
     updateContact,
   };

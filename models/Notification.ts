@@ -11,7 +11,13 @@ export interface INotificationDocument extends Document {
     | 'due_alarm'
     | 'intake_confirmed'
     | 'adherence_alert'
-    | 'monitoring_request';
+    | 'monitoring_request'
+    | 'monitoring_approved'
+    | 'monitoring_declined'
+    | 'monitoring_revoked'
+    | 'chat_request'
+    | 'chat_request_accepted'
+    | 'chat_request_declined';
   title: string;
   message: string;
   medicineId?: mongoose.Types.ObjectId;
@@ -19,6 +25,7 @@ export interface INotificationDocument extends Document {
   riskLevel?: 'Low' | 'Moderate' | 'High';
   adherenceRate?: number;
   monitoringRequestId?: mongoose.Types.ObjectId;
+  chatRequestId?: mongoose.Types.ObjectId;
   read: boolean;
   createdAt: Date;
 }
@@ -40,6 +47,12 @@ const NotificationSchema =
           'intake_confirmed',
           'adherence_alert',
           'monitoring_request',
+          'monitoring_approved',
+          'monitoring_declined',
+          'monitoring_revoked',
+          'chat_request',
+          'chat_request_accepted',
+          'chat_request_declined',
         ],
         required: true,
       },
@@ -72,6 +85,11 @@ const NotificationSchema =
       monitoringRequestId: {
         type: Schema.Types.ObjectId,
         ref: 'MonitoringRequest',
+        default: null,
+      },
+      chatRequestId: {
+        type: Schema.Types.ObjectId,
+        ref: 'ChatRequest',
         default: null,
       },
       read: {

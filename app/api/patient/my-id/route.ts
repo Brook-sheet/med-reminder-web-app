@@ -14,6 +14,7 @@ async function getAuthUser(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthUser(request);
+
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
@@ -24,16 +25,28 @@ export async function GET(request: NextRequest) {
     await connectDB();
 
     const user = await User.findById(auth.userId).select(
-      'patientId firstName lastName'
+      'role patientId firstName lastName isDeleted'
     );
-    if (!user) {
+
+    if (!user || user.isDeleted) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'User not found' },
         { status: 404 }
       );
     }
 
-    // Backfill patientId for existing users who registered before this feature
+    if (user.role !== 'patient') {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'Patient IDs are available only to Patient accounts.',
+        },
+        { status: 403 }
+      );
+    }
+
+    // Backfill patientId for existing users.
     if (!user.patientId) {
       const patientId = await generateUniquePatientId();
       user.patientId = patientId;
@@ -49,6 +62,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[GET /api/patient/my-id]', error);
+
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
       { status: 500 }

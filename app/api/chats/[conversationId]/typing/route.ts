@@ -33,7 +33,11 @@ export async function POST(
 
     await connectDB();
 
-    const conversation = await Conversation.findOne({ _id: conversationId, participants: auth.userId });
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: auth.userId,
+      deletedFor: { $size: 0 },
+    });
     if (!conversation) {
       return NextResponse.json<ApiResponse>({ success: false, error: 'Conversation not found' }, { status: 404 });
     }

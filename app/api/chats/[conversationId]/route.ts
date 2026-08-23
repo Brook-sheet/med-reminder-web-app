@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
 import Conversation from '@/models/Conversation';
-import Message from '@/models/Message';
-import Attachment from '@/models/Attachment';
+import ChatRequest from '@/models/ChatRequest';
+import Notification from '@/models/Notification';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
+import { makeParticipantKey } from '@/lib/chatRelationship';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
 // Data-URI avatars are stored inline on the Conversation document, so cap
@@ -77,6 +78,7 @@ export async function PATCH(
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: auth.userId,
+      deletedFor: { $size: 0 },
     });
 
     if (!conversation) {
@@ -109,9 +111,10 @@ export async function PATCH(
   }
 }
 
-// ── DELETE /api/chats/[conversationId] — remove a contact from *my* chat list
-// Only hides the conversation for the requesting user. Messages/history are
-// only permanently deleted once BOTH participants have removed it.
+// ── DELETE /api/chats/[conversationId] — remove an active chat contact ───
+// Chat access is a shared relationship, so removing the contact deactivates
+// it for both participants. The conversation history remains stored and is
+// restored only if a new Message Request is accepted later.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> }
@@ -138,23 +141,34 @@ export async function DELETE(
       return NextResponse.json<ApiResponse>({ success: false, error: 'Conversation not found' }, { status: 404 });
     }
 
-    if (!conversation.deletedFor.some((id) => id.toString() === auth.userId)) {
-      conversation.deletedFor.push(new mongoose.Types.ObjectId(auth.userId));
-    }
+    conversation.deletedFor = [...conversation.participants];
+    conversation.typing.clear();
+    await conversation.save();
 
-    const bothDeleted = conversation.participants.every((p) =>
-      conversation.deletedFor.some((d) => d.toString() === p.toString())
+    const pairKey = makeParticipantKey(
+      conversation.participants[0],
+      conversation.participants[1]
     );
 
-    if (bothDeleted) {
-      await Message.deleteMany({ conversationId: conversation._id });
-      await Attachment.deleteMany({ conversationId: conversation._id });
-      await Conversation.deleteOne({ _id: conversation._id });
-    } else {
-      await conversation.save();
+    const removedRequest = await ChatRequest.findOneAndDelete({ pairKey });
+
+    if (removedRequest) {
+      await Notification.deleteMany({
+        chatRequestId: removedRequest._id,
+      });
     }
 
-    return NextResponse.json<ApiResponse>({ success: true, message: 'Contact removed' });
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message: 'Chat contact removed.',
+      data: {
+        conversationId: conversation._id.toString(),
+        relationship: {
+          status: 'none',
+          conversationId: null,
+        },
+      },
+    });
   } catch (error) {
     console.error('[DELETE /api/chats/[conversationId]]', error);
     return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });

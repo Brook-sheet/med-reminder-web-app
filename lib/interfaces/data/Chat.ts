@@ -42,7 +42,7 @@ export interface ChatMessage {
 export interface ConversationParticipant {
   userId: string;
   name: string;
-  patientId: string;
+  identifier: string;
   role: 'patient' | 'family';
   avatarUrl: string | null;
 }
@@ -58,4 +58,25 @@ export interface ConversationSummary {
   unreadCount: number;
   updatedAt: string;
   isTyping: boolean;
+}
+
+export type ChatRequestStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined';
+
+export interface ChatRequestUser {
+  userId: string;
+  name: string;
+  role: 'patient' | 'family';
+  identifier: string;
+}
+
+export interface ChatRequestSummary {
+  requestId: string;
+  user: ChatRequestUser;
+  status: ChatRequestStatus;
+  direction: 'received' | 'sent';
+  createdAt: string;
+  respondedAt: string | null;
 }

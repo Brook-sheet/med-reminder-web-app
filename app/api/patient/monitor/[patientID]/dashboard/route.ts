@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
+import MonitoringRequest from '@/models/MonitoringRequest';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
@@ -18,6 +19,7 @@ export async function GET(
 ) {
   try {
     const auth = await getAuthUser(request);
+
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
@@ -27,11 +29,28 @@ export async function GET(
 
     await connectDB();
 
-    const currentUser = await User.findById(auth.userId).select('monitoredPatients');
+    const currentUser = await User.findById(auth.userId).select(
+      'role monitoredPatients isDeleted'
+    );
+
     if (!currentUser) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'User not found' },
         { status: 404 }
+      );
+    }
+
+    if (
+      currentUser.isDeleted ||
+      currentUser.role !== 'family'
+    ) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'Only Family accounts can view Patient monitoring data.',
+        },
+        { status: 403 }
       );
     }
 
@@ -45,20 +64,14 @@ export async function GET(
       );
     }
 
-    const monitoredNormalized = currentUser.monitoredPatients.map((id: string) =>
-      id.trim().toUpperCase()
-    );
-
-    if (!monitoredNormalized.includes(normalizedId)) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Access denied. You are not authorized to monitor this patient.' },
-        { status: 403 }
-      );
-    }
-
-    const patient = await User.findOne({ patientId: normalizedId }).select(
+    const patient = await User.findOne({
+      patientId: normalizedId,
+      role: 'patient',
+      isDeleted: { $ne: true },
+    }).select(
       'firstName lastName condition patientId createdAt'
     );
+
     if (!patient) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Patient not found' },
@@ -66,26 +79,87 @@ export async function GET(
       );
     }
 
-    const logs = await MedicationLog.find({ userId: patient._id })
-      .sort({ scheduledDate: -1, scheduledTime: -1 })
+    const relationship = await MonitoringRequest.findOne({
+      patientId: patient._id,
+      familyId: currentUser._id,
+    });
+
+    if (
+      relationship &&
+      relationship.status !== 'approved'
+    ) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'Access denied. Monitoring approval is not active.',
+        },
+        { status: 403 }
+      );
+    }
+
+    if (!relationship) {
+      // Compatibility backfill for relationships created by the
+      // previous monitoredPatients array implementation.
+      const monitoredNormalized =
+        currentUser.monitoredPatients.map((id: string) =>
+          id.trim().toUpperCase()
+        );
+
+      if (!monitoredNormalized.includes(normalizedId)) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error:
+              'Access denied. You are not authorized to monitor this Patient.',
+          },
+          { status: 403 }
+        );
+      }
+
+      await MonitoringRequest.findOneAndUpdate(
+        {
+          patientId: patient._id,
+          familyId: currentUser._id,
+        },
+        {
+          $setOnInsert: {
+            status: 'approved',
+            respondedAt: new Date(),
+          },
+        },
+        {
+          upsert: true,
+          runValidators: true,
+        }
+      );
+    }
+
+    const logs = await MedicationLog.find({
+      userId: patient._id,
+    })
+      .sort({
+        scheduledDate: -1,
+        scheduledTime: -1,
+      })
       .lean();
 
-    const rawLogs = logs.map((l) => ({
-      status: String(l.status),
-      scheduledDate: String(l.scheduledDate),
-      scheduledTime: String(l.scheduledTime),
-      takenAt: l.takenAt ?? null,
+    const rawLogs = logs.map((log) => ({
+      status: String(log.status),
+      scheduledDate: String(log.scheduledDate),
+      scheduledTime: String(log.scheduledTime),
+      takenAt: log.takenAt ?? null,
     }));
 
     const analysis = analyzeAdherence(rawLogs);
 
-    const recentLogs = logs.slice(0, 30).map((l) => ({
-      medicineName: l.medicineName,
-      scheduledDate: l.scheduledDate,
-      scheduledTime: l.scheduledTime,
-      status: l.status,
-      takenAt: l.takenAt,
-      dosage: l.dosage,
+    const recentLogs = logs.slice(0, 30).map((log) => ({
+      medicineName: log.medicineName,
+      scheduledDate: log.scheduledDate,
+      scheduledTime: log.scheduledTime,
+      status: log.status,
+      takenAt: log.takenAt,
+      dosage: log.dosage,
     }));
 
     return NextResponse.json<ApiResponse>({
@@ -101,15 +175,22 @@ export async function GET(
           riskLevel: analysis.finalRiskLevel,
           ruleBasedRisk: analysis.ruleBased.riskLevel,
           mlRisk: analysis.mlPrediction.riskLevel,
-          mlConfidence: Math.round(analysis.mlPrediction.confidence * 100),
+          mlConfidence: Math.round(
+            analysis.mlPrediction.confidence * 100
+          ),
           adherenceRate: analysis.features.adherenceRate,
           totalScheduled: logs.length,
-          totalTaken: logs.filter((l) => l.status === 'taken').length,
+          totalTaken: logs.filter(
+            (log) => log.status === 'taken'
+          ).length,
           totalMissed: analysis.features.missedDoses,
-          consecutiveMissed: analysis.features.consecutiveMissed,
+          consecutiveMissed:
+            analysis.features.consecutiveMissed,
           delayedDoses: analysis.features.delayedDoses,
-          avgDelayMinutes: analysis.features.avgDelayMinutes,
-          recentRate: analysis.features.recentAdherenceRate,
+          avgDelayMinutes:
+            analysis.features.avgDelayMinutes,
+          recentRate:
+            analysis.features.recentAdherenceRate,
           weeklyTrend: analysis.features.trend,
           insight: analysis.insight,
           recommendation: analysis.recommendation,
@@ -119,7 +200,11 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('[GET /api/patient/monitor/[patientID]/dashboard]', error);
+    console.error(
+      '[GET /api/patient/monitor/[patientID]/dashboard]',
+      error
+    );
+
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
       { status: 500 }

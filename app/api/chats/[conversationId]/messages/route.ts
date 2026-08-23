@@ -41,6 +41,7 @@ async function loadConversation(conversationId: string, userId: string) {
   const conversation = await Conversation.findOne({
     _id: conversationId,
     participants: userId,
+    deletedFor: { $size: 0 },
   });
   return conversation;
 }
@@ -68,13 +69,12 @@ async function resolveReplyTarget(
   return { id: ref._id, preview: buildReplyPreview(ref) };
 }
 
-// Applies the bookkeeping shared by every new message (text or attachment):
-// bump the conversation preview, clear the sender's typing flag, and revive
-// the conversation for a recipient who had previously removed it.
+// Applies the bookkeeping shared by every new message (text or attachment).
+// Removed contacts are rejected by loadConversation and are never restored
+// automatically by sending a message.
 async function applyConversationSideEffects(
   conversation: IConversationDocument,
   senderId: string,
-  recipientId: mongoose.Types.ObjectId,
   previewText: string,
   createdAt: Date
 ) {
@@ -82,7 +82,6 @@ async function applyConversationSideEffects(
   conversation.lastMessageAt = createdAt;
   conversation.lastMessageSenderId = new mongoose.Types.ObjectId(senderId);
   conversation.typing.delete(senderId);
-  conversation.deletedFor = conversation.deletedFor.filter((id) => id.toString() !== recipientId.toString());
   await conversation.save();
 }
 
@@ -284,7 +283,7 @@ export async function POST(
       });
 
       const preview = mimeType.startsWith('image/') ? '📷 Photo' : `📎 ${fileName}`;
-      await applyConversationSideEffects(conversation, auth.userId, recipientId, preview, message.createdAt);
+      await applyConversationSideEffects(conversation, auth.userId, preview, message.createdAt);
 
       // Non-null: a message the sender just created is never in its own
       // deletedFor list and is never already unsent.
@@ -319,7 +318,7 @@ export async function POST(
       replyToMessageId: replyTarget.id ?? null,
     });
 
-    await applyConversationSideEffects(conversation, auth.userId, recipientId, text, message.createdAt);
+    await applyConversationSideEffects(conversation, auth.userId, text, message.createdAt);
 
     return NextResponse.json<ApiResponse>(
       { success: true, data: serializeMessageForUser(message, auth.userId, replyTarget.preview)! },

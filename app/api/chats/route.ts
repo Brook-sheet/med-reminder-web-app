@@ -2,11 +2,14 @@ import {
   NextRequest,
   NextResponse,
 } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 import User from "@/models/User";
 import MonitoringRequest from "@/models/MonitoringRequest";
+import ChatRequest from "@/models/ChatRequest";
+import Notification from "@/models/Notification";
 import {
   getTokenFromRequest,
   verifyToken,
@@ -14,9 +17,10 @@ import {
 import type { ApiResponse } from "@/lib/interfaces/data/Api";
 import type { ConversationSummary } from "@/lib/interfaces/data/Chat";
 import {
-  ensureApprovedConversation,
-  getApprovedConversationIdsForUser,
-} from "@/lib/monitoringAuthorization";
+  findPairConversation,
+  isConversationActiveForPair,
+  makeParticipantKey,
+} from "@/lib/chatRelationship";
 
 const TYPING_TTL_MS = 6000;
 
@@ -54,15 +58,11 @@ export async function GET(
 
     await connectDB();
 
-    const approvedConversationIds =
-      await getApprovedConversationIdsForUser(
-        auth.userId
-      );
-
     const conversations =
       await Conversation.find({
-        _id: {
-          $in: approvedConversationIds,
+        participants: auth.userId,
+        deletedFor: {
+          $ne: auth.userId,
         },
       })
         .sort({
@@ -71,7 +71,7 @@ export async function GET(
         })
         .populate(
           "participants",
-          "firstName lastName patientId role"
+          "firstName lastName patientId familyId role"
         )
         .lean();
 
@@ -89,6 +89,7 @@ export async function GET(
               firstName?: string;
               lastName?: string;
               patientId?: string;
+              familyId?: string;
               role?:
                 | "patient"
                 | "family";
@@ -204,9 +205,10 @@ export async function GET(
                   fallbackName ||
                   "Unknown user",
 
-                patientId:
-                  other?.patientId ??
-                  "",
+                identifier:
+                  other?.role === "family"
+                    ? other.familyId ?? ""
+                    : other?.patientId ?? "",
 
                 role:
                   other?.role ??
@@ -281,10 +283,6 @@ export async function GET(
   }
 }
 
-// A Patient enters a Family ID.
-// This Patient-initiated action is the
-// explicit authorization for monitoring
-// and chat access.
 export async function POST(
   request: NextRequest
 ) {
@@ -304,33 +302,24 @@ export async function POST(
       );
     }
 
-    const body =
-      await request.json();
-
-    const familyId =
-      typeof body.familyId ===
-      "string"
-        ? body.familyId
-            .trim()
-            .toUpperCase()
+    const body = await request.json().catch(() => ({}));
+    const identifier =
+      typeof body.identifier === "string"
+        ? body.identifier.trim().toUpperCase()
         : "";
-
+    const monitoringRequestId =
+      typeof body.monitoringRequestId === "string"
+        ? body.monitoringRequestId.trim()
+        : "";
     const contactName =
-      typeof body.contactName ===
-      "string"
-        ? body.contactName.trim()
+      typeof body.contactName === "string"
+        ? body.contactName.trim().slice(0, 80)
         : "";
 
-    if (!familyId) {
+    if (!identifier && !monitoringRequestId) {
       return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Family ID is required",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "An account ID is required." },
+        { status: 400 }
       );
     }
 
@@ -339,11 +328,9 @@ export async function POST(
     const currentUser =
       await User.findById(
         auth.userId
-      ).select(
-        "role patientId firstName lastName"
-      );
+      ).select("role patientId familyId firstName lastName isDeleted");
 
-    if (!currentUser) {
+    if (!currentUser || currentUser.isDeleted) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -355,39 +342,72 @@ export async function POST(
       );
     }
 
-    if (
-      currentUser.role !==
-      "patient"
-    ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Only Patient accounts can invite a Family member by Family ID.",
-        },
-        {
-          status: 403,
-        }
+    let targetUser = null;
+
+    if (monitoringRequestId) {
+      if (!mongoose.Types.ObjectId.isValid(monitoringRequestId)) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: "Invalid monitoring request ID." },
+          { status: 400 }
+        );
+      }
+
+      const monitoring = await MonitoringRequest.findOne({
+        _id: monitoringRequestId,
+        status: "approved",
+        $or: [
+          { patientId: currentUser._id },
+          { familyId: currentUser._id },
+        ],
+      }).lean();
+
+      if (!monitoring) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "An approved monitoring relationship is required for this action.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const targetId =
+        monitoring.patientId.toString() === currentUser._id.toString()
+          ? monitoring.familyId
+          : monitoring.patientId;
+
+      targetUser = await User.findById(targetId).select(
+        "_id firstName lastName patientId familyId role isDeleted"
       );
+    } else {
+      const isPatient = currentUser.role === "patient";
+      const expectedPrefix = isPatient ? "FM-" : "PT-";
+
+      if (!identifier.startsWith(expectedPrefix)) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: isPatient
+              ? "Enter a valid Family ID beginning with FM-."
+              : "Enter a valid Patient ID beginning with PT-.",
+          },
+          { status: 400 }
+        );
+      }
+
+      targetUser = await User.findOne({
+        ...(isPatient ? { familyId: identifier } : { patientId: identifier }),
+        role: isPatient ? "family" : "patient",
+        isDeleted: { $ne: true },
+      }).select("_id firstName lastName patientId familyId role isDeleted");
     }
 
-    const targetUser =
-      await User.findOne({
-        familyId,
-        role: "family",
-        isDeleted: {
-          $ne: true,
-        },
-      }).select(
-        "_id firstName lastName familyId role"
-      );
-
-    if (!targetUser) {
+    if (!targetUser || targetUser.isDeleted) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
           error:
-            "No Family account was found with this ID.",
+            "No matching account was found with this ID.",
         },
         {
           status: 404,
@@ -395,73 +415,117 @@ export async function POST(
       );
     }
 
-    await MonitoringRequest.findOneAndUpdate(
-      {
-        patientId:
-          currentUser._id,
-        familyId:
-          targetUser._id,
-      },
-      {
-        $set: {
-          status: "approved",
-          respondedAt:
-            new Date(),
-        },
-      },
-      {
-        upsert: true,
-        new: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      }
-    );
-
-    const conversation =
-      await ensureApprovedConversation(
-        currentUser._id.toString(),
-        targetUser._id.toString()
+    if (targetUser._id.toString() === currentUser._id.toString()) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "You cannot send a Message Request to yourself." },
+        { status: 400 }
       );
+    }
 
-    const defaultName =
-      `${targetUser.firstName ?? ""} ${
-        targetUser.lastName ?? ""
-      }`.trim() ||
-      "Family member";
+    if (targetUser.role === currentUser.role) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Chat requests are available only between Patient and Family accounts." },
+        { status: 403 }
+      );
+    }
 
-    conversation.contactNames.set(
-      auth.userId,
-      contactName || defaultName
-    );
+    const pairKey = makeParticipantKey(currentUser._id, targetUser._id);
+    let chatRequest = await ChatRequest.findOne({ pairKey });
 
-    await conversation.save();
+    if (chatRequest?.status === "accepted") {
+      const conversation = await findPairConversation(currentUser._id, targetUser._id);
+
+      if (
+        isConversationActiveForPair(
+          conversation,
+          currentUser._id,
+          targetUser._id
+        )
+      ) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: "This person is already an accepted Chat contact.",
+            data: {
+              status: "accepted",
+              conversationId: conversation?._id.toString() ?? null,
+            },
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    if (chatRequest?.status === "pending") {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "A Message Request is already pending between these accounts.",
+          data: { status: "pending", requestId: chatRequest._id.toString() },
+        },
+        { status: 409 }
+      );
+    }
+
+    if (chatRequest) {
+      chatRequest.requesterId = currentUser._id;
+      chatRequest.recipientId = targetUser._id;
+      chatRequest.status = "pending";
+      chatRequest.respondedAt = null;
+      chatRequest.requestedContactName = contactName;
+      await chatRequest.save();
+    } else {
+      try {
+        chatRequest = await ChatRequest.create({
+          requesterId: currentUser._id,
+          recipientId: targetUser._id,
+          pairKey,
+          status: "pending",
+          requestedContactName: contactName,
+        });
+      } catch (error: unknown) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          Number((error as { code?: unknown }).code) === 11000
+        ) {
+          return NextResponse.json<ApiResponse>(
+            { success: false, error: "A Message Request already exists between these accounts." },
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
+    }
+
+    await Notification.deleteMany({
+      userId: targetUser._id,
+      type: "chat_request",
+      chatRequestId: chatRequest._id,
+    });
+
+    const senderName =
+      `${currentUser.firstName ?? ""} ${currentUser.lastName ?? ""}`.trim() ||
+      "A user";
+
+    await Notification.create({
+      userId: targetUser._id,
+      type: "chat_request",
+      title: "New Message Request",
+      message: `${senderName} wants to connect with you through Chat.`,
+      chatRequestId: chatRequest._id,
+      read: false,
+    });
 
     return NextResponse.json<ApiResponse>(
       {
         success: true,
         data: {
-          conversationId:
-            conversation._id.toString(),
-
-          contact: {
-            userId:
-              targetUser._id.toString(),
-
-            name:
-              contactName ||
-              defaultName,
-
-            patientId: "",
-
-            role:
-              targetUser.role,
-
-            avatarUrl: null,
-          },
+          requestId: chatRequest._id.toString(),
+          status: chatRequest.status,
         },
-
-        message:
-          "Family member connected. Monitoring access and chat are now available.",
+        message: "Message Request sent. Chat will be available after the recipient accepts.",
       },
       {
         status: 201,
