@@ -4,328 +4,177 @@ import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import type {
-  DashboardStats,
-  WeeklyDayData,
-  ScheduleItem,
-} from '@/lib/interfaces/data/Dashboard';
+import type { DashboardStats, ScheduleItem, WeeklyDayData } from '@/lib/interfaces/data/Dashboard';
+import {
+  analyzeAdherence,
+  evaluateMedicationLog,
+  parseTimeToMinutes,
+  type RawLog,
+} from '@/lib/adherenceEngine';
+import {
+  ensureMedicationLogsForDate,
+  ensureMedicationLogsForRange,
+  finalizeExpiredMedicationLogs,
+} from '@/lib/medicationVerification';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
-  if (!token) return null;
-  return verifyToken(token);
+  return token ? verifyToken(token) : null;
 }
 
-function timeToMinutes(timeStr: string): number {
-  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return 0;
-
-  let h = parseInt(match[1]);
-  const m = parseInt(match[2]);
-  const ampm = match[3].toUpperCase();
-
-  if (ampm === 'PM' && h !== 12) h += 12;
-  if (ampm === 'AM' && h === 12) h = 0;
-
-  return h * 60 + m;
+function localDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-/**
- * Weighted Adherence Rate (cumulative, only for due doses):
- * ((1.0 × On-Time) + (0.5 × Delayed)) / Total Due Scheduled Doses × 100
- *
- * Rules:
- * - On-time: status === 'taken' AND takenAt within 30 min of scheduled
- * - Delayed: status === 'taken' AND takenAt > 30 min after scheduled
- * - Missed: not confirmed AND scheduled time + 120 min has passed
- * - Pending (not yet due): EXCLUDED from calculation
- */
-function computeWeightedAdherence(
-  logs: Array<{
-    status: string;
-    scheduledDate: string;
-    scheduledTime: string;
-    takenAt?: Date | null;
-  }>
-): number {
-  const now = new Date();
-
-  let onTime = 0;
-  let delayed = 0;
-  let totalDue = 0;
-
-  for (const log of logs) {
-    const scheduledMinutes = timeToMinutes(log.scheduledTime);
-    const scheduledDateTime = new Date(
-      `${log.scheduledDate}T00:00:00`
-    );
-
-    scheduledDateTime.setMinutes(
-      scheduledDateTime.getMinutes() + scheduledMinutes
-    );
-
-    // Only evaluate doses that are already due.
-    if (scheduledDateTime > now) continue;
-
-    totalDue++;
-
-    if (log.status === 'taken' || log.status === 'late') {
-      if (log.takenAt) {
-        const diffMinutes = Math.round(
-          (
-            new Date(log.takenAt).getTime() -
-            scheduledDateTime.getTime()
-          ) / 60_000
-        );
-
-        if (diffMinutes <= 30) {
-          onTime++;
-        } else {
-          delayed++;
-        }
-      } else {
-        // No takenAt timestamp means it is treated as on-time.
-        onTime++;
-      }
-    }
-  }
-
-  if (totalDue === 0) return 0;
-
-  const weightedScore =
-    (1.0 * onTime + 0.5 * delayed) / totalDue * 100;
-
-  return Math.round(Math.min(weightedScore, 100));
+function toRawLog(log: {
+  _id: { toString(): string };
+  medicineId?: { toString(): string } | null;
+  medicineName: string;
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  takenAt?: Date | null;
+  lateAfterMinutes?: number;
+  windowAfterMinutes?: number;
+  expectedChamberId?: number | null;
+  detectedChamberId?: number | null;
+  countsTowardAdherence?: boolean;
+}): RawLog {
+  return {
+    id: log._id.toString(),
+    medicineId: log.medicineId?.toString() ?? null,
+    medicineName: log.medicineName,
+    status: String(log.status),
+    scheduledDate: String(log.scheduledDate),
+    scheduledTime: String(log.scheduledTime),
+    takenAt: log.takenAt ?? null,
+    lateAfterMinutes: log.lateAfterMinutes,
+    windowAfterMinutes: log.windowAfterMinutes,
+    expectedChamberId: log.expectedChamberId ?? null,
+    detectedChamberId: log.detectedChamberId ?? null,
+    countsTowardAdherence: log.countsTowardAdherence !== false,
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
-
-    if (!user) {
+    const auth = await getAuthUser(request);
+    if (!auth) {
       return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'Unauthorized',
-        },
-        { status: 401 }
+        { success: false, error: 'Unauthorized' },
+        { status: 401 },
       );
     }
 
     await connectDB();
+    const now = new Date();
+    const today = localDateString(now);
+    const sixDaysAgo = new Date(now);
+    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
 
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const nowMinutes =
-      today.getHours() * 60 + today.getMinutes();
+    await ensureMedicationLogsForDate(auth.userId, today);
+    await ensureMedicationLogsForRange(auth.userId, localDateString(sixDaysAgo), today);
+    await finalizeExpiredMedicationLogs(auth.userId, now);
 
-    const medicines = await Medicine.find({
-      userId: user.userId,
-      isActive: true,
-    });
-
-    const activeMedicineIds = medicines.map(
-      (med) => med._id
-    );
-
-    // Notes continue to come from the Medicine record rather than being
-    // duplicated into each medication log.
+    const medicines = await Medicine.find({ userId: auth.userId, isActive: true }).lean();
+    const activeMedicineIds = medicines.map((medicine) => medicine._id);
     const medicineNotes = new Map(
-      medicines.map((med) => [
-        med._id.toString(),
-        typeof med.notes === 'string'
-          ? med.notes.trim()
-          : '',
-      ])
+      medicines.map((medicine) => [
+        medicine._id.toString(),
+        typeof medicine.notes === 'string' ? medicine.notes.trim() : '',
+      ]),
     );
-
-    // Auto-create today's logs if missing.
-    for (const med of medicines) {
-      for (const time of med.scheduledTimes) {
-        const existing = await MedicationLog.findOne({
-          userId: user.userId,
-          medicineId: med._id,
-          scheduledDate: todayStr,
-          scheduledTime: time,
-        });
-
-        if (!existing) {
-          await MedicationLog.create({
-            userId: user.userId,
-            medicineId: med._id,
-            medicineName: med.name,
-            dosage: med.dosage,
-            scheduledDate: todayStr,
-            scheduledTime: time,
-            status: 'pending',
-            source: 'auto',
-            eventType: 'SCHEDULED',
-            expectedChamberId: med.chamberId ?? null,
-            expectedChamberIds: med.chamberId ? [med.chamberId] : [],
-            windowBeforeMinutes: med.windowBeforeMinutes ?? 30,
-            windowAfterMinutes: med.windowAfterMinutes ?? 90,
-            lateAfterMinutes: med.lateAfterMinutes ?? 30,
-            countsTowardAdherence: true,
-          });
-        }
-      }
-    }
 
     const todayLogs = await MedicationLog.find({
-      userId: user.userId,
-      scheduledDate: todayStr,
-      medicineId: {
-        $in: activeMedicineIds,
-      },
-    });
-
-    todayLogs.sort(
-      (a, b) =>
-        timeToMinutes(a.scheduledTime) -
-        timeToMinutes(b.scheduledTime)
-    );
-
-    const todaySchedule: ScheduleItem[] = todayLogs.map(
-      (log) => {
-        const logMinutes = timeToMinutes(
-          log.scheduledTime
-        );
-
-        const DUE_WINDOW_MINUTES = 15;
-
-        let status: ScheduleItem['status'] = 'Scheduled';
-
-        if (log.status === 'taken' || log.status === 'late') {
-          status = 'Taken';
-        } else if (log.status === 'missed') {
-          status = 'Missed';
-        } else if (
-          nowMinutes >= logMinutes &&
-          nowMinutes < logMinutes + DUE_WINDOW_MINUTES
-        ) {
-          status = 'Now';
-        } else if (logMinutes > nowMinutes) {
-          status = 'Upcoming';
-        } else {
-          status = 'Scheduled';
-        }
-
-        const medicineId = log.medicineId?.toString() ?? '';
-
-        return {
-          medicineId,
-          name: `${log.medicineName} ${log.dosage}`,
-          dosage: log.dosage,
-          notes: medicineNotes.get(medicineId) || '',
-          time: log.scheduledTime,
-          status,
-          logId: log._id.toString(),
-        };
-      }
-    );
-
-    const todayTaken = todayLogs.filter(
-      (log) => ['taken', 'late'].includes(log.status)
-    ).length;
-
-    const todayTotal = todayLogs.length;
-
-    const upcomingLogs = todayLogs
-      .filter(
-        (log) =>
-          log.status === 'pending' &&
-          timeToMinutes(log.scheduledTime) > nowMinutes
-      )
-      .sort(
-        (a, b) =>
-          timeToMinutes(a.scheduledTime) -
-          timeToMinutes(b.scheduledTime)
-      );
-
-    const nextLog = upcomingLogs[0] ?? null;
-
-    const nextReminder = nextLog
-      ? {
-          time: nextLog.scheduledTime,
-          medicineName:
-            `${nextLog.medicineName} ${nextLog.dosage}`,
-        }
-      : null;
-
-    const days = [
-      'Sun',
-      'Mon',
-      'Tue',
-      'Wed',
-      'Thu',
-      'Fri',
-      'Sat',
-    ];
-
-    const weeklyData: WeeklyDayData[] = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-
-      const dateStr = d.toISOString().split('T')[0];
-
-      const dayLogs = await MedicationLog.find({
-        userId: user.userId,
-        scheduledDate: dateStr,
-      });
-
-      const taken = dayLogs.filter(
-        (log) => ['taken', 'late'].includes(log.status)
-      ).length;
-
-      const total = dayLogs.length;
-
-      weeklyData.push({
-        day: days[d.getDay()],
-        taken,
-        total,
-      });
-    }
-
-    const allLogs = await MedicationLog.find({
-      userId: user.userId,
+      userId: auth.userId,
+      scheduledDate: today,
+      medicineId: { $in: activeMedicineIds },
       countsTowardAdherence: { $ne: false },
     }).lean();
 
-    const adherenceRate = computeWeightedAdherence(
-      allLogs.map((log) => ({
-        status: String(log.status),
-        scheduledDate: String(log.scheduledDate),
-        scheduledTime: String(log.scheduledTime),
-        takenAt: log.takenAt ?? null,
-      }))
+    todayLogs.sort(
+      (first, second) => parseTimeToMinutes(first.scheduledTime) - parseTimeToMinutes(second.scheduledTime),
     );
 
+    const evaluatedToday = todayLogs.map((log) => ({
+      log,
+      evaluated: evaluateMedicationLog(toRawLog(log), now),
+    }));
+
+    const todaySchedule: ScheduleItem[] = evaluatedToday.map(({ log, evaluated }) => {
+      let status: ScheduleItem['status'] = 'Scheduled';
+      if (evaluated.lifecycle === 'taken' || evaluated.lifecycle === 'late') status = 'Taken';
+      if (evaluated.lifecycle === 'missed') status = 'Missed';
+      if (evaluated.lifecycle === 'due') status = 'Now';
+      if (evaluated.lifecycle === 'upcoming') status = 'Upcoming';
+      const medicineId = log.medicineId?.toString() ?? '';
+      return {
+        medicineId,
+        name: `${log.medicineName} ${log.dosage}`.trim(),
+        dosage: log.dosage,
+        notes: medicineNotes.get(medicineId) || '',
+        time: log.scheduledTime,
+        status,
+        logId: log._id.toString(),
+      };
+    });
+
+    const next = evaluatedToday
+      .filter(({ evaluated }) => evaluated.lifecycle === 'upcoming')
+      .sort((a, b) => a.evaluated.scheduledAt.getTime() - b.evaluated.scheduledAt.getTime())[0];
+
+    const weeklyLogs = await MedicationLog.find({
+      userId: auth.userId,
+      scheduledDate: { $gte: localDateString(sixDaysAgo), $lte: today },
+    }).lean();
+    const weeklyRaw = weeklyLogs.map(toRawLog);
+    const weeklyData: WeeklyDayData[] = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - offset);
+      const key = localDateString(date);
+      const dayAnalysis = analyzeAdherence(
+        weeklyRaw.filter((log) => log.scheduledDate === key),
+        now,
+      );
+      weeklyData.push({
+        day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        taken: dayAnalysis.features.totalTaken,
+        total: dayAnalysis.features.totalDue,
+      });
+    }
+
+    const allLogs = await MedicationLog.find({ userId: auth.userId }).lean();
+    const analysis = analyzeAdherence(allLogs.map(toRawLog), now);
     const stats: DashboardStats = {
-      adherenceRate,
+      adherenceRate: analysis.features.hasSufficientData
+        ? analysis.features.adherenceRate
+        : null,
       todayProgress: {
-        taken: todayTaken,
-        total: todayTotal,
+        taken: evaluatedToday.filter(({ evaluated }) =>
+          evaluated.lifecycle === 'taken' || evaluated.lifecycle === 'late',
+        ).length,
+        total: evaluatedToday.length,
       },
-      nextReminder,
+      nextReminder: next
+        ? {
+            time: next.log.scheduledTime,
+            medicineName: `${next.log.medicineName} ${next.log.dosage}`.trim(),
+          }
+        : null,
       weeklyData,
       todaySchedule,
     };
 
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: stats,
-    });
+    return NextResponse.json<ApiResponse>({ success: true, data: stats });
   } catch (error) {
     console.error('[GET /api/dashboard]', error);
-
     return NextResponse.json<ApiResponse>(
-      {
-        success: false,
-        error: 'Internal server error',
-      },
-      { status: 500 }
+      { success: false, error: 'Internal server error' },
+      { status: 500 },
     );
   }
 }

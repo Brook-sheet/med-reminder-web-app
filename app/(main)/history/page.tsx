@@ -14,7 +14,7 @@ import {
 import StatCard from "@/components/dashboard/StatCard";
 
 type Range = "today" | "week" | "month" | "custom";
-type Status = "pending" | "taken" | "late" | "missed" | "unverified" | "incorrect_chamber";
+type Status = "upcoming" | "due" | "pending" | "taken" | "late" | "missed" | "unverified" | "incorrect_chamber";
 
 interface LogEntry {
   _id: string;
@@ -43,7 +43,7 @@ interface MedicineStat {
   late: number;
   missed: number;
   incorrectChamber: number;
-  adherenceRate: number;
+  adherenceRate: number | null;
 }
 
 interface HistoryData {
@@ -55,7 +55,7 @@ interface HistoryData {
     missed: number;
     unverified: number;
     incorrectChamber: number;
-    adherenceRate: number;
+    adherenceRate: number | null;
   };
   byMedicine: MedicineStat[];
   logs: LogEntry[];
@@ -69,6 +69,18 @@ const FILTERS: Array<{ value: Range; label: string }> = [
 ];
 
 const STATUS = {
+  upcoming: {
+    label: "Upcoming",
+    Icon: Clock,
+    badge: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    border: "border-l-blue-400",
+  },
+  due: {
+    label: "Due / Pending",
+    Icon: Clock,
+    badge: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
+    border: "border-l-amber-500",
+  },
   taken: {
     label: "Verified",
     Icon: Check,
@@ -287,7 +299,7 @@ export default function HistoryPage() {
         )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Adherence" value={loading ? "—" : `${summary?.adherenceRate ?? 0}%`} subtitle="Late doses receive half credit" />
+          <StatCard title="Adherence" value={loading || summary?.adherenceRate == null ? "—" : `${summary.adherenceRate}%`} subtitle={summary?.adherenceRate == null ? "No completed medication events yet" : "Late doses receive half credit"} />
           <StatCard title="Verified" value={loading ? "—" : String(summary?.verified ?? 0)} subtitle={`${summary?.onTime ?? 0} on time · ${summary?.late ?? 0} late`} />
           <StatCard title="Missed" value={loading ? "—" : String(summary?.missed ?? 0)} subtitle={`${summary?.totalScheduled ?? 0} scheduled doses evaluated`} />
           <StatCard title="Verification Issues" value={loading ? "—" : String((summary?.incorrectChamber ?? 0) + (summary?.unverified ?? 0))} subtitle={`${summary?.incorrectChamber ?? 0} incorrect chamber · ${summary?.unverified ?? 0} unverified`} />
@@ -300,7 +312,7 @@ export default function HistoryPage() {
               <div key={medicine.medicineId || medicine.medicineName} className="rounded-2xl border border-border/60 bg-background/60 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold text-gray-900 dark:text-white">{medicine.medicineName}</p>
-                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{medicine.adherenceRate}%</span>
+                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{medicine.adherenceRate == null ? "—" : `${medicine.adherenceRate}%`}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs text-gray-500 dark:text-gray-400">
                   <span><b className="block text-base text-gray-900 dark:text-white">{medicine.scheduled}</b>Due</span>

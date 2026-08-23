@@ -10,9 +10,12 @@ import {
   processMedicationEvent,
   scheduledDateTime,
 } from '@/lib/medicationVerification';
+import { evaluateMedicationLog } from '@/lib/adherenceEngine';
 
 type ReportRange = 'today' | 'week' | 'month' | 'custom';
 type ReportStatus =
+  | 'upcoming'
+  | 'due'
   | 'pending'
   | 'taken'
   | 'late'
@@ -72,6 +75,8 @@ function normalizeStatus(log: {
   scheduledTime: string;
   takenAt?: Date | null;
   lateAfterMinutes?: number;
+  windowAfterMinutes?: number;
+  countsTowardAdherence?: boolean;
 }): { status: ReportStatus; delayMinutes: number | null } {
   if (log.status === 'incorrect_chamber') return { status: 'incorrect_chamber', delayMinutes: null };
   if (log.status === 'unverified') return { status: 'unverified', delayMinutes: null };
@@ -91,6 +96,18 @@ function normalizeStatus(log: {
       ? { status: 'late', delayMinutes: delay }
       : { status: 'taken', delayMinutes: delay };
   }
+  const evaluated = evaluateMedicationLog({
+    status: log.status,
+    scheduledDate: log.scheduledDate,
+    scheduledTime: log.scheduledTime,
+    takenAt: log.takenAt,
+    lateAfterMinutes: log.lateAfterMinutes,
+    windowAfterMinutes: log.windowAfterMinutes,
+    countsTowardAdherence: log.countsTowardAdherence,
+  });
+  if (evaluated.lifecycle === 'upcoming') return { status: 'upcoming', delayMinutes: null };
+  if (evaluated.lifecycle === 'due') return { status: 'due', delayMinutes: null };
+  if (evaluated.lifecycle === 'missed') return { status: 'missed', delayMinutes: null };
   return { status: 'pending', delayMinutes: null };
 }
 
@@ -124,6 +141,8 @@ export async function GET(request: NextRequest) {
         scheduledTime: String(log.scheduledTime),
         takenAt: log.takenAt ?? null,
         lateAfterMinutes: log.lateAfterMinutes,
+        windowAfterMinutes: log.windowAfterMinutes,
+        countsTowardAdherence: log.countsTowardAdherence !== false,
       });
       return {
         _id: log._id.toString(),
@@ -147,19 +166,18 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const now = new Date();
     const scheduledLogs = logs.filter((log) => log.countsTowardAdherence);
     const dueLogs = scheduledLogs.filter((log) =>
-      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now,
+      ['taken', 'late', 'missed'].includes(log.status),
     );
     const onTime = dueLogs.filter((log) => log.status === 'taken').length;
     const late = dueLogs.filter((log) => log.status === 'late').length;
     const missed = dueLogs.filter((log) => log.status === 'missed').length;
     const unverified = logs.filter((log) => log.status === 'unverified').length;
     const incorrectChamber = logs.filter((log) => log.status === 'incorrect_chamber').length;
-    const adherenceRate = dueLogs.length > 0
+    const adherenceRate: number | null = dueLogs.length > 0
       ? Math.round(((onTime + late * 0.5) / dueLogs.length) * 100)
-      : 0;
+      : null;
 
     const medicineMap = new Map<string, {
       medicineId: string | null;
@@ -184,7 +202,7 @@ export async function GET(request: NextRequest) {
         missed: 0,
         incorrectChamber: 0,
       };
-      if (log.countsTowardAdherence && scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now) {
+      if (log.countsTowardAdherence && ['taken', 'late', 'missed'].includes(log.status)) {
         item.scheduled += 1;
         if (log.status === 'taken') item.onTime += 1;
         if (log.status === 'late') item.late += 1;
@@ -201,7 +219,7 @@ export async function GET(request: NextRequest) {
         ...item,
         adherenceRate: item.scheduled > 0
           ? Math.round(((item.onTime + item.late * 0.5) / item.scheduled) * 100)
-          : 0,
+          : null,
       }))
       .sort((a, b) => a.medicineName.localeCompare(b.medicineName));
 

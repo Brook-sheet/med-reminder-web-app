@@ -53,25 +53,71 @@ export interface AdaptiveIntervention {
   escalationMessage: string | null;
 }
 
-export interface AdherenceData {
-  riskLevel: 'Low' | 'Moderate' | 'High';
-  ruleBasedRisk: 'Low' | 'Moderate' | 'High';
-  mlRisk: 'Low' | 'Moderate' | 'High';
-  mlConfidence: number;
+export interface BehavioralInsight {
+  id: string;
+  tone: 'positive' | 'warning' | 'critical' | 'neutral';
+  title: string;
+  detail: string;
+}
+
+export interface DailyAdherence {
+  date: string;
+  label: string;
+  eligible: number;
+  taken: number;
+  adherenceRate: number | null;
+}
+
+export interface TimePattern {
+  period: 'Morning' | 'Afternoon' | 'Evening';
+  eligible: number;
+  taken: number;
+  missed: number;
+  late: number;
   adherenceRate: number;
+}
+
+export interface MedicationPattern {
+  medicineId: string | null;
+  medicineName: string;
+  eligible: number;
+  taken: number;
+  missed: number;
+  late: number;
+  incorrectChamber: number;
+  adherenceRate: number;
+}
+
+export interface AdherenceData {
+  analysisType: 'rule_based_behavioral';
+  hasSufficientData: boolean;
+  riskLevel: 'Low' | 'Moderate' | 'High';
+  adherenceRate: number;
+  totalEligible: number;
   totalScheduled: number;
   totalTaken: number;
   totalMissed: number;
   totalPending: number;
+  totalUpcoming: number;
   consecutiveMissed: number;
+  consecutiveVerified: number;
   delayedDoses: number;
   avgDelayMinutes: number;
+  incorrectChamberEvents: number;
+  unverifiedEvents: number;
   recentRate: number;
+  previousRate: number;
   weeklyTrend: 'improving' | 'declining' | 'stable';
-  ruleReasons: string[];
-  mlPrediction: string;
-  featureImportance: Record<string, number>;
-  aiInsight: string;
+  trendAvailable: boolean;
+  riskReasons: string[];
+  insight: string;
+  recommendation: string;
+  behavioral: {
+    timeOfDay: TimePattern[];
+    byMedication: MedicationPattern[];
+    dailyTrend: DailyAdherence[];
+    insights: BehavioralInsight[];
+  };
   adaptiveIntervention: AdaptiveIntervention;
 }
 
@@ -84,7 +130,7 @@ interface UseAdherenceOptions {
 // Shared state for adherence data across all hook instances
 let sharedAdherenceData: AdherenceData | null = null;
 let sharedAdherenceError: string | null = null;
-let sharedAdherenceLoading = false;
+const sharedAdherenceLoading = false;
 let sharedAdherenceFetching = false;
 const adherenceSubscribers = new Set<(data: AdherenceData | null) => void>();
 
@@ -195,8 +241,13 @@ export function useAdherence(
   // Initial load on mount
   useEffect(() => {
     if (!initialLoad) return;
-
-    refetch();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) refetch().catch(console.error);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [initialLoad, refetch]);
 
   // Listen for medicine schedule changes and refresh adherence

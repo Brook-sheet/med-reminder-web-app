@@ -9,6 +9,7 @@ import {
 import StatCard from "@/components/dashboard/StatCard";
 import ScheduleList from "@/components/dashboard/Schedule/ScheduleList";
 import UpcomingList from "@/components/dashboard/Upcoming/UpcomingList";
+import AdherenceCard from "@/components/dashboard/AdherenceCard";
 import type { DashboardStats } from "@/lib/interfaces/data/Dashboard";
 import { toast } from "@/components/ui/Toast";
 
@@ -107,9 +108,9 @@ export default function Home() {
     };
   }, [fetchDashboard]);
 
-  const adherenceValue = loading
+  const adherenceValue = loading || stats?.adherenceRate == null
     ? "—"
-    : `${stats?.adherenceRate ?? 0}%`;
+    : `${stats.adherenceRate}%`;
 
   const progressValue = loading
     ? "—"
@@ -195,6 +196,10 @@ export default function Home() {
           </h2>
 
           <UpcomingList />
+        </div>
+
+        <div className="mb-6">
+          <AdherenceCard />
         </div>
       </div>
     </div>

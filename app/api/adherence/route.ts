@@ -1,238 +1,168 @@
-// app/api/adherence/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import MedicationLog from '@/models/MedicationLog';
-import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import User from '@/models/User';
+import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 import { analyzeAdherence, type RawLog } from '@/lib/adherenceEngine';
 import {
   analyzeAdaptiveIntervention,
-  generateMotivationalMessage,
   generateEscalationMessage,
+  generateMotivationalMessage,
   type RawLogForBehavior,
 } from '@/lib/adaptiveIntervention';
+import {
+  ensureMedicationLogsForRange,
+  finalizeExpiredMedicationLogs,
+} from '@/lib/medicationVerification';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
-  if (!token) return null;
-  return verifyToken(token);
+  return token ? verifyToken(token) : null;
+}
+
+function localDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
-    if (!user) {
+    const auth = await getAuthUser(request);
+    if (!auth) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     await connectDB();
-
-    const userDoc = await User.findById(user.userId).select(
-      'firstName lastName condition lastRiskLevel'
+    const now = new Date();
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - 13);
+    await ensureMedicationLogsForRange(
+      auth.userId,
+      localDateString(fromDate),
+      localDateString(now),
     );
-    const patientName = userDoc?.firstName
-      ? `${userDoc.firstName} ${userDoc.lastName || ''}`.trim()
-      : undefined;
+    await finalizeExpiredMedicationLogs(auth.userId, now);
 
-    // Previous risk level for escalation detection
-    const previousRiskLevel = userDoc?.lastRiskLevel as
-      | 'Low'
-      | 'Moderate'
-      | 'High'
-      | undefined;
+    const user = await User.findById(auth.userId).select(
+      'firstName lastName lastRiskLevel dataResetAt',
+    );
+    const query: Record<string, unknown> = { userId: auth.userId };
+    if (user?.dataResetAt) query.createdAt = { $gt: user.dataResetAt };
 
-    const allLogs = await MedicationLog.find({
-      userId: user.userId,
-      countsTowardAdherence: { $ne: false },
-    }).lean();
+    const logs = await MedicationLog.find(query)
+      .sort({ scheduledDate: 1, scheduledTime: 1, createdAt: 1 })
+      .lean();
 
-    const rawLogs: RawLog[] = allLogs.map((l) => ({
-      status: String(l.status),
-      scheduledDate: String(l.scheduledDate),
-      scheduledTime: String(l.scheduledTime),
-      takenAt: l.takenAt ?? null,
-      countsTowardAdherence: l.countsTowardAdherence !== false,
+    const rawLogs: RawLog[] = logs.map((log) => ({
+      id: log._id.toString(),
+      medicineId: log.medicineId?.toString() ?? null,
+      medicineName: log.medicineName,
+      status: String(log.status),
+      scheduledDate: String(log.scheduledDate),
+      scheduledTime: String(log.scheduledTime),
+      takenAt: log.takenAt ?? null,
+      lateAfterMinutes: log.lateAfterMinutes,
+      windowAfterMinutes: log.windowAfterMinutes,
+      expectedChamberId: log.expectedChamberId ?? null,
+      detectedChamberId: log.detectedChamberId ?? null,
+      countsTowardAdherence: log.countsTowardAdherence !== false,
     }));
 
-    // Full adherence analysis (Rule-Based + Random Forest)
-    const analysis = analyzeAdherence(rawLogs);
-    const { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation } =
-      analysis;
+    const analysis = analyzeAdherence(rawLogs, now);
+    const { features } = analysis;
+    const previousRiskLevel = user?.lastRiskLevel as 'Low' | 'Moderate' | 'High' | undefined;
 
-    const totalScheduled = allLogs.length;
-    const totalTaken = allLogs.filter((l) => ['taken', 'late'].includes(l.status)).length;
-    const totalMissed = features.missedDoses;
+    const behaviorLogs: RawLogForBehavior[] = rawLogs
+      .filter((log) => log.countsTowardAdherence !== false)
+      .map((log) => ({
+        status: log.status,
+        scheduledDate: log.scheduledDate,
+        scheduledTime: log.scheduledTime,
+        takenAt: log.takenAt ? new Date(log.takenAt) : null,
+      }));
 
-    // Adaptive Intervention Engine
-    const behaviorLogs: RawLogForBehavior[] = allLogs.map((l) => ({
-      status: String(l.status),
-      scheduledDate: String(l.scheduledDate),
-      scheduledTime: String(l.scheduledTime),
-      takenAt: l.takenAt ?? null,
-    }));
-
-    const adaptiveResult = analyzeAdaptiveIntervention(
+    // Adaptive reminders remain available, but the public risk result is the
+    // explainable behavioral rule set above—not a simulated ML prediction.
+    const adaptive = analyzeAdaptiveIntervention(
       behaviorLogs,
       features,
-      finalRiskLevel,
-      mlPrediction.riskLevel,
-      mlPrediction.confidence * 100,
-      previousRiskLevel
+      analysis.finalRiskLevel,
+      analysis.finalRiskLevel,
+      features.hasSufficientData ? Math.min(95, 40 + features.totalDue * 5) : 0,
+      previousRiskLevel,
     );
 
-    // Persist the new risk level so next call can detect escalation
-    if (finalRiskLevel !== previousRiskLevel) {
-      await User.findByIdAndUpdate(user.userId, {
-        lastRiskLevel: finalRiskLevel,
+    if (
+      features.hasSufficientData &&
+      analysis.finalRiskLevel !== previousRiskLevel
+    ) {
+      await User.findByIdAndUpdate(auth.userId, {
+        lastRiskLevel: analysis.finalRiskLevel,
       });
     }
 
-    // Motivational message
-    const motivationalMessage = generateMotivationalMessage(
-      finalRiskLevel,
-      features.trend,
-      features.adherenceRate
-    );
-
-    // Escalation message
-    const escalationMessage = adaptiveResult.reminderConfig.escalationEnabled
-      ? generateEscalationMessage(
-          adaptiveResult.reminderConfig.escalationPriority,
-          features,
-          patientName
+    const patientName = user?.firstName
+      ? `${user.firstName} ${user.lastName || ''}`.trim()
+      : undefined;
+    const motivationalMessage = features.hasSufficientData
+      ? generateMotivationalMessage(
+          analysis.finalRiskLevel,
+          features.trend,
+          features.adherenceRate,
         )
-      : null;
-
-    // AI insight via Claude
-    let aiInsight = `${insight} ${recommendation}`;
-
-    try {
-      const prompt = `You are an AI adherence analyst for a medication reminder system for patients managing hypertension and/or diabetes.
-
-Patient adherence data:
-- Weighted adherence rate: ${features.adherenceRate}% (clinical benchmark: ≥80%)
-- Total due doses evaluated: ${features.totalDue}
-- Missed doses: ${features.missedDoses}
-- Delayed doses: ${features.delayedDoses} (avg delay: ${features.avgDelayMinutes} min)
-- Consecutive missed: ${features.consecutiveMissed}
-- Recent 7-day adherence: ${features.recentAdherenceRate}%
-- Trend: ${features.trend}
-- Behavioral delay profile: ${adaptiveResult.behavioralPattern.delayProfile}
-- Average intake delay: ${adaptiveResult.behavioralPattern.avgIntakeDelayMinutes} min
-- Clustered misses: ${adaptiveResult.behavioralPattern.hasClusteredMisses}
-
-Rule-based classification: ${ruleBased.riskLevel} Risk
-ML (Random Forest) prediction: ${mlPrediction.riskLevel} Risk (confidence: ${Math.round(mlPrediction.confidence * 100)}%)
-Final classification: ${finalRiskLevel} Risk
-
-Adaptive Intervention Active:
-- Reminder lead time: ${adaptiveResult.reminderConfig.leadTimeMinutes} min
-- Behavioral bonus: +${adaptiveResult.reminderConfig.behavioralLeadTimeBonus} min
-- Follow-ups: ${adaptiveResult.reminderConfig.followUpCount} × every ${adaptiveResult.reminderConfig.followUpIntervalMinutes} min
-- Escalation: ${adaptiveResult.reminderConfig.escalationPriority}
-- Intensity: ${adaptiveResult.reminderConfig.intensity}
-
-Key signals: ${adaptiveResult.keySignals.join('; ') || 'None'}
-
-Provide a concise 2-sentence clinical insight and 1 actionable recommendation suitable for a patient with hypertension or diabetes.
-Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendation":"..."}`;
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 300,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.content?.[0]?.text || '';
-        const clean = text.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(clean);
-        const rec = parsed.recommendation || '';
-        aiInsight = (parsed.insight || insight) + (rec ? ` ${rec}` : '');
-      }
-    } catch (aiError) {
-      console.warn('[AI adherence] Claude call failed, using rule+ML analysis:', aiError);
-    }
+      : 'Medication behavior will appear after a dose is completed or its medication window ends.';
+    const escalationMessage =
+      features.hasSufficientData && adaptive.reminderConfig.escalationEnabled
+        ? generateEscalationMessage(
+            adaptive.reminderConfig.escalationPriority,
+            features,
+            patientName,
+          )
+        : null;
 
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
-        // Risk levels
-        riskLevel: finalRiskLevel,
-        ruleBasedRisk: ruleBased.riskLevel,
-        mlRisk: mlPrediction.riskLevel,
-        mlConfidence: Math.round(mlPrediction.confidence * 100),
-
-        // Core metrics
+        analysisType: 'rule_based_behavioral',
+        hasSufficientData: features.hasSufficientData,
+        riskLevel: analysis.finalRiskLevel,
         adherenceRate: features.adherenceRate,
-        totalScheduled,
-        totalTaken,
-        totalMissed,
-        totalPending: allLogs.filter((l) => l.status === 'pending').length,
-
-        // Behavioral features
+        totalEligible: features.totalDue,
+        totalScheduled: features.totalDue,
+        totalTaken: features.totalTaken,
+        totalMissed: features.missedDoses,
+        totalPending: features.duePending,
+        totalUpcoming: features.upcomingDoses,
         consecutiveMissed: features.consecutiveMissed,
+        consecutiveVerified: features.consecutiveVerified,
         delayedDoses: features.delayedDoses,
         avgDelayMinutes: features.avgDelayMinutes,
-
-        // Trend
+        incorrectChamberEvents: features.incorrectChamberEvents,
+        unverifiedEvents: features.unverifiedEvents,
         recentRate: features.recentAdherenceRate,
+        previousRate: features.previousAdherenceRate,
         weeklyTrend: features.trend,
-
-        // Rule-based explanation
-        ruleReasons: ruleBased.reasons,
-
-        // ML explanation
-        mlPrediction: mlPrediction.prediction,
-        featureImportance: mlPrediction.featureImportance,
-
-        // AI insight
-        aiInsight,
-
-        // Adaptive Intervention Data
+        trendAvailable: features.trendAvailable,
+        riskReasons: analysis.riskReasons,
+        insight: analysis.insight,
+        recommendation: analysis.recommendation,
+        behavioral: analysis.behavioral,
         adaptiveIntervention: {
-          behavioralPattern: {
-            avgIntakeDelayMinutes: adaptiveResult.behavioralPattern.avgIntakeDelayMinutes,
-            delayProfile: adaptiveResult.behavioralPattern.delayProfile,
-            hasClusteredMisses: adaptiveResult.behavioralPattern.hasClusteredMisses,
-            delayTrend: adaptiveResult.behavioralPattern.delayTrend,
-            currentMissStreak: adaptiveResult.behavioralPattern.currentMissStreak,
-            maxHistoricalMissStreak: adaptiveResult.behavioralPattern.maxHistoricalMissStreak,
-            peakMissHour: adaptiveResult.behavioralPattern.peakMissHour,
-          },
-          reminderConfig: {
-            leadTimeMinutes: adaptiveResult.reminderConfig.leadTimeMinutes,
-            followUpCount: adaptiveResult.reminderConfig.followUpCount,
-            followUpIntervalMinutes: adaptiveResult.reminderConfig.followUpIntervalMinutes,
-            intensity: adaptiveResult.reminderConfig.intensity,
-            messageTone: adaptiveResult.reminderConfig.messageTone,
-            highSensitivityMode: adaptiveResult.reminderConfig.highSensitivityMode,
-            escalationEnabled: adaptiveResult.reminderConfig.escalationEnabled,
-            escalationPriority: adaptiveResult.reminderConfig.escalationPriority,
-            motivationalMessagingEnabled:
-              adaptiveResult.reminderConfig.motivationalMessagingEnabled,
-            behavioralLeadTimeBonus: adaptiveResult.reminderConfig.behavioralLeadTimeBonus,
-          },
-          interventionSummary: adaptiveResult.interventionSummary,
-          isEscalation: adaptiveResult.isEscalation,
-          drivingRiskLevel: adaptiveResult.drivingRiskLevel,
-          interventionConfidence: adaptiveResult.interventionConfidence,
-          keySignals: adaptiveResult.keySignals,
-          interventionReason: adaptiveResult.reminderConfig.interventionReason,
-          clinicalActionSuggestion: adaptiveResult.reminderConfig.clinicalActionSuggestion,
+          behavioralPattern: adaptive.behavioralPattern,
+          reminderConfig: adaptive.reminderConfig,
+          interventionSummary: adaptive.interventionSummary,
+          isEscalation: features.hasSufficientData && adaptive.isEscalation,
+          drivingRiskLevel: adaptive.drivingRiskLevel,
+          interventionConfidence: adaptive.interventionConfidence,
+          keySignals: adaptive.keySignals,
+          interventionReason: adaptive.reminderConfig.interventionReason,
+          clinicalActionSuggestion: adaptive.reminderConfig.clinicalActionSuggestion,
           motivationalMessage,
           escalationMessage,
         },
@@ -242,7 +172,7 @@ Respond ONLY as valid JSON: {"riskLevel":"Low Risk","insight":"...","recommendat
     console.error('[GET /api/adherence]', error);
     return NextResponse.json<ApiResponse>(
       { success: false, error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

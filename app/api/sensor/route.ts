@@ -190,8 +190,10 @@ export async function POST(
         eventType:
           sensorEvent ===
           'pill_dispensed'
-            ? 'MISSED'
-            : 'CHAMBER_OPENED',
+            ? 'MEDICATION_DISPENSED'
+            : sensorEvent === 'pill_taken'
+              ? 'MEDICATION_CONFIRMED'
+              : 'CHAMBER_OPENED',
         timestamp,
         chamberId,
         medicineId:

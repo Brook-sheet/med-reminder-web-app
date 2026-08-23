@@ -11,6 +11,7 @@ export type MedicationEventSource =
 
 export type MedicationEventType =
   | 'CHAMBER_OPENED'
+  | 'MEDICATION_DISPENSED'
   | 'MEDICATION_CONFIRMED'
   | 'MISSED';
 
@@ -28,6 +29,7 @@ export interface MedicationEventInput {
 export interface VerificationResult {
   verified: boolean;
   status:
+    | 'dispensed'
     | 'taken'
     | 'late'
     | 'missed'
@@ -700,7 +702,9 @@ export async function processMedicationEvent(
     );
 
   const status =
-    input.eventType ===
+    input.eventType === 'MEDICATION_DISPENSED'
+      ? 'dispensed'
+      : input.eventType ===
     'MISSED'
       ? 'missed'
       : delayMinutes >
@@ -728,7 +732,7 @@ export async function processMedicationEvent(
         $set: {
           status,
           takenAt:
-            status === 'missed'
+            status === 'missed' || status === 'dispensed'
               ? null
               : eventAt,
           source:
@@ -743,7 +747,9 @@ export async function processMedicationEvent(
             null,
           expectedChamberIds,
           verificationNote:
-            status === 'late'
+            status === 'dispensed'
+              ? 'Medication was dispensed and is waiting for intake confirmation.'
+              : status === 'late'
               ? `Medication access was verified ${delayMinutes} minutes after the scheduled time.`
               : status ===
                   'missed'

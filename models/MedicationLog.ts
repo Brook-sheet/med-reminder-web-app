@@ -30,6 +30,7 @@ export interface IMedicationLogDocument
     | 'auto';
   eventType?:
     | 'CHAMBER_OPENED'
+    | 'MEDICATION_DISPENSED'
     | 'MEDICATION_CONFIRMED'
     | 'MISSED'
     | 'SCHEDULED';
@@ -110,6 +111,7 @@ const MedicationLogSchema =
         type: String,
         enum: [
           'CHAMBER_OPENED',
+          'MEDICATION_DISPENSED',
           'MEDICATION_CONFIRMED',
           'MISSED',
           'SCHEDULED',

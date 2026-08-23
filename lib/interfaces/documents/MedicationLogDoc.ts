@@ -10,7 +10,7 @@ export interface MedicationLogDoc extends Document {
   takenAt?: Date;
   status: 'pending' | 'dispensed' | 'taken' | 'missed' | 'late' | 'unverified' | 'incorrect_chamber' | 'reminder';
   source: 'manual' | 'sensor' | 'system' | 'auto';
-  eventType?: 'CHAMBER_OPENED' | 'MEDICATION_CONFIRMED' | 'MISSED' | 'SCHEDULED';
+  eventType?: 'CHAMBER_OPENED' | 'MEDICATION_DISPENSED' | 'MEDICATION_CONFIRMED' | 'MISSED' | 'SCHEDULED';
   expectedChamberId?: number | null;
   detectedChamberId?: number | null;
   expectedChamberIds: number[];

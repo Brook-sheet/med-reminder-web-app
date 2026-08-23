@@ -11,6 +11,7 @@ import {
 const SENSOR_API_KEY = process.env.SENSOR_API_KEY || 'dev-sensor-key-change-me';
 const EVENT_TYPES: MedicationEventType[] = [
   'CHAMBER_OPENED',
+  'MEDICATION_DISPENSED',
   'MEDICATION_CONFIRMED',
   'MISSED',
 ];

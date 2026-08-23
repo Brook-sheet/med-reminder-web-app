@@ -5,11 +5,14 @@ import MonitoringRequest from '@/models/MonitoringRequest';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import { analyzeAdherence } from '@/lib/adherenceEngine';
+import {
+  analyzeAdherence,
+  evaluateMedicationLog,
+  type RawLog,
+} from '@/lib/adherenceEngine';
 import {
   ensureMedicationLogsForRange,
   finalizeExpiredMedicationLogs,
-  scheduledDateTime,
 } from '@/lib/medicationVerification';
 
 async function getAuthUser(request: NextRequest) {
@@ -162,16 +165,25 @@ export async function GET(
       })
       .lean();
 
-    const adherenceLogs = logs.filter((log) => log.countsTowardAdherence !== false);
-    const rawLogs = adherenceLogs.map((log) => ({
+    const rawLogs: RawLog[] = logs.map((log) => ({
+      id: log._id.toString(),
+      medicineId: log.medicineId?.toString() ?? null,
+      medicineName: log.medicineName,
       status: String(log.status),
       scheduledDate: String(log.scheduledDate),
       scheduledTime: String(log.scheduledTime),
       takenAt: log.takenAt ?? null,
-      countsTowardAdherence: true,
+      lateAfterMinutes: log.lateAfterMinutes,
+      windowAfterMinutes: log.windowAfterMinutes,
+      expectedChamberId: log.expectedChamberId ?? null,
+      detectedChamberId: log.detectedChamberId ?? null,
+      countsTowardAdherence: log.countsTowardAdherence !== false,
     }));
 
-    const analysis = analyzeAdherence(rawLogs);
+    const analysis = analyzeAdherence(rawLogs, now);
+    const evaluatedById = new Map(
+      rawLogs.map((log) => [log.id, evaluateMedicationLog(log, now)]),
+    );
 
     const recentLogs = logs.slice(0, 30).map((log) => ({
       medicineName: log.medicineName,
@@ -185,31 +197,38 @@ export async function GET(
       detectedChamberId: log.detectedChamberId ?? null,
       expectedChamberIds: log.expectedChamberIds ?? [],
       verificationNote: log.verificationNote ?? '',
+      lifecycle: evaluatedById.get(log._id.toString())?.lifecycle ?? 'audit',
     }));
 
-    const dueLogs = adherenceLogs.filter((log) =>
-      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now
+    const adherenceLogs = logs.filter((log) => log.countsTowardAdherence !== false);
+    const eligibleLogs = adherenceLogs.filter((log) =>
+      evaluatedById.get(log._id.toString())?.eligible,
     );
-    const todayLogs = adherenceLogs.filter((log) => log.scheduledDate === today);
-    const todayDue = todayLogs.filter((log) =>
-      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now
-    );
+    const todayEligible = eligibleLogs.filter((log) => log.scheduledDate === today);
     const verifiedStatuses = ['taken', 'late'];
     const reportSummary = {
       range,
       from,
       to: today,
-      scheduled: dueLogs.length,
-      verified: dueLogs.filter((log) => verifiedStatuses.includes(log.status)).length,
-      missed: dueLogs.filter((log) => log.status === 'missed').length,
-      late: dueLogs.filter((log) => log.status === 'late').length,
+      scheduled: eligibleLogs.length,
+      verified: eligibleLogs.filter((log) => verifiedStatuses.includes(log.status)).length,
+      missed: eligibleLogs.filter((log) =>
+        evaluatedById.get(log._id.toString())?.lifecycle === 'missed',
+      ).length,
+      late: eligibleLogs.filter((log) =>
+        evaluatedById.get(log._id.toString())?.lifecycle === 'late',
+      ).length,
       incorrectChamber: logs.filter((log) => log.status === 'incorrect_chamber').length,
       unverified: logs.filter((log) => log.status === 'unverified').length,
       today: {
-        scheduled: todayDue.length,
-        verified: todayDue.filter((log) => verifiedStatuses.includes(log.status)).length,
-        missed: todayDue.filter((log) => log.status === 'missed').length,
-        late: todayDue.filter((log) => log.status === 'late').length,
+        scheduled: todayEligible.length,
+        verified: todayEligible.filter((log) => verifiedStatuses.includes(log.status)).length,
+        missed: todayEligible.filter((log) =>
+          evaluatedById.get(log._id.toString())?.lifecycle === 'missed',
+        ).length,
+        late: todayEligible.filter((log) =>
+          evaluatedById.get(log._id.toString())?.lifecycle === 'late',
+        ).length,
         incorrectChamber: logs.filter(
           (log) => log.scheduledDate === today && log.status === 'incorrect_chamber'
         ).length,
@@ -226,18 +245,14 @@ export async function GET(
           memberSince: patient.createdAt,
         },
         adherence: {
+          hasSufficientData: analysis.features.hasSufficientData,
           riskLevel: analysis.finalRiskLevel,
-          ruleBasedRisk: analysis.ruleBased.riskLevel,
-          mlRisk: analysis.mlPrediction.riskLevel,
-          mlConfidence: Math.round(
-            analysis.mlPrediction.confidence * 100
-          ),
           adherenceRate: analysis.features.adherenceRate,
-          totalScheduled: adherenceLogs.length,
-          totalTaken: adherenceLogs.filter(
-            (log) => verifiedStatuses.includes(log.status)
-          ).length,
+          totalScheduled: analysis.features.totalDue,
+          totalTaken: analysis.features.totalTaken,
           totalMissed: analysis.features.missedDoses,
+          totalPending: analysis.features.duePending,
+          totalUpcoming: analysis.features.upcomingDoses,
           consecutiveMissed:
             analysis.features.consecutiveMissed,
           delayedDoses: analysis.features.delayedDoses,
@@ -246,6 +261,11 @@ export async function GET(
           recentRate:
             analysis.features.recentAdherenceRate,
           weeklyTrend: analysis.features.trend,
+          trendAvailable: analysis.features.trendAvailable,
+          previousRate: analysis.features.previousAdherenceRate,
+          incorrectChamberEvents: analysis.features.incorrectChamberEvents,
+          riskReasons: analysis.riskReasons,
+          behavioral: analysis.behavioral,
           insight: analysis.insight,
           recommendation: analysis.recommendation,
         },

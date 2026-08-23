@@ -1,5 +1,5 @@
 export interface DashboardStats {
-  adherenceRate: number;
+  adherenceRate: number | null;
   todayProgress: { taken: number; total: number };
   nextReminder: { time: string; medicineName: string } | null;
   weeklyData: WeeklyDayData[];
