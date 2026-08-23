@@ -6,6 +6,10 @@ export interface MedicineDoc extends Document {
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  chamberId?: number | null;
+  windowBeforeMinutes: number;
+  windowAfterMinutes: number;
+  lateAfterMinutes: number;
   notes: string;
   isActive: boolean;
   createdAt: Date;

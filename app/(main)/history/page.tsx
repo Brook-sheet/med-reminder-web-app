@@ -1,417 +1,342 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { Check, X, Clock, AlertTriangle, Pill } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Check,
+  Clock,
+  Cpu,
+  Pill,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import StatCard from "@/components/dashboard/StatCard";
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type ClassifiedStatus = "taken" | "delayed" | "missed";
+type Range = "today" | "week" | "month" | "custom";
+type Status = "pending" | "taken" | "late" | "missed" | "unverified" | "incorrect_chamber";
 
 interface LogEntry {
   _id: string;
+  medicineId: string | null;
   medicineName: string;
   dosage: string;
-  scheduledTime: string;
   scheduledDate: string;
-  status: string;
-  classifiedStatus: ClassifiedStatus;
+  scheduledTime: string;
+  actualTime?: string | null;
+  status: Status;
   delayMinutes: number | null;
-  source: string;
-  takenAt?: string | null;
+  source: "manual" | "sensor" | "system";
+  verificationMethod: string;
+  expectedChamberId: number | null;
+  detectedChamberId: number | null;
+  expectedChamberIds: number[];
+  verificationNote: string;
 }
 
-interface HistorySummary {
-  /**
-   * totalTaken = onTime + totalDelayed  (all confirmed doses, used as card headline)
-   * onTime     = confirmed within 30-min grace window
-   * totalDelayed = confirmed after 30 min but within 2 hrs
-   */
-  totalTaken: number;
+interface MedicineStat {
+  medicineId: string | null;
+  medicineName: string;
+  scheduled: number;
+  verified: number;
   onTime: number;
-  totalDelayed: number;
-  totalMissed: number;
-  totalRecords: number;
-  successRate: number;
+  late: number;
+  missed: number;
+  incorrectChamber: number;
+  adherenceRate: number;
 }
 
 interface HistoryData {
-  summary: HistorySummary;
-  today: LogEntry[];
-  thisWeek: LogEntry[];
-  thisMonth: LogEntry[];
-  earlier: LogEntry[];
+  summary: {
+    totalScheduled: number;
+    verified: number;
+    onTime: number;
+    late: number;
+    missed: number;
+    unverified: number;
+    incorrectChamber: number;
+    adherenceRate: number;
+  };
+  byMedicine: MedicineStat[];
+  logs: LogEntry[];
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+const FILTERS: Array<{ value: Range; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "custom", label: "Custom Range" },
+];
 
-function formatScheduledTime(timeStr: string): string {
-  if (!timeStr) return "";
-  const ampm = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (ampm) return timeStr.trim();
-  const plain = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (plain) {
-    const h = parseInt(plain[1]);
-    const m = plain[2];
-    const period = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${h12}:${m} ${period}`;
-  }
-  return timeStr;
+const STATUS = {
+  taken: {
+    label: "Verified",
+    Icon: Check,
+    badge: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
+    border: "border-l-green-500",
+  },
+  late: {
+    label: "Late",
+    Icon: Clock,
+    badge: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
+    border: "border-l-amber-500",
+  },
+  missed: {
+    label: "Missed",
+    Icon: X,
+    badge: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
+    border: "border-l-red-500",
+  },
+  incorrect_chamber: {
+    label: "Incorrect Chamber",
+    Icon: ShieldAlert,
+    badge: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
+    border: "border-l-red-500",
+  },
+  unverified: {
+    label: "Unverified",
+    Icon: AlertTriangle,
+    badge: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+    border: "border-l-gray-400",
+  },
+  pending: {
+    label: "Pending",
+    Icon: Clock,
+    badge: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    border: "border-l-blue-400",
+  },
+} satisfies Record<Status, {
+  label: string;
+  Icon: typeof Check;
+  badge: string;
+  border: string;
+}>;
+
+function todayString(): string {
+  return new Date().toISOString().split("T")[0];
 }
 
-function formatTakenAt(takenAt: string | null | undefined): string {
-  if (!takenAt) return "";
-  const d = new Date(takenAt);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-US", {
+function monthStart(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+}
+
+function actualTime(value?: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 }
 
-function formatDateHeading(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
+function dateHeading(value: string): string {
+  if (value === todayString()) return "Today";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
 }
 
-/** Groups logs by scheduledDate, most recent date first. */
-function groupByDate(logs: LogEntry[]): { date: string; entries: LogEntry[] }[] {
-  const map = new Map<string, LogEntry[]>();
-  for (const log of logs) {
-    const existing = map.get(log.scheduledDate) ?? [];
-    existing.push(log);
-    map.set(log.scheduledDate, existing);
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([date, entries]) => ({ date, entries }));
-}
-
-/** Formats delayMinutes into a human-readable string like "47 minutes" or "1h 12m". */
-function formatDelay(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  return `${m} minute${m !== 1 ? "s" : ""}`;
-}
-
-// ── Status Config ──────────────────────────────────────────────────────────
-// Single source of truth for badge/border/icon per status.
-
-const STATUS_CONFIG: Record<
-  ClassifiedStatus,
-  {
-    label: string;
-    badgeClass: string;
-    iconClass: string;
-    borderClass: string;
-    Icon: React.ComponentType<{ className?: string }>;
-  }
-> = {
-  taken: {
-    label: "Taken",
-    badgeClass:
-      "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800",
-    iconClass: "text-green-500 dark:text-green-400",
-    borderClass: "border-l-green-500",
-    Icon: Check,
-  },
-  delayed: {
-    label: "Delayed",
-    badgeClass:
-      "bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600",
-    iconClass: "text-gray-400 dark:text-gray-500",
-    borderClass: "border-l-gray-400",
-    Icon: AlertTriangle,
-  },
-  missed: {
-    label: "Missed",
-    badgeClass:
-      "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800",
-    iconClass: "text-red-500 dark:text-red-400",
-    borderClass: "border-l-red-500",
-    Icon: X,
-  },
-};
-
-// ── Medication History Card ────────────────────────────────────────────────
-
-function MedCard({ log }: { log: LogEntry }) {
-  // Always derive display from classifiedStatus — never from raw log.status
-  const cfg = STATUS_CONFIG[log.classifiedStatus];
-  const { Icon } = cfg;
-  const takenTime = formatTakenAt(log.takenAt);
-
-  // Build the human-readable detail line
-  let detail = "";
-  if (log.classifiedStatus === "taken") {
-    detail = takenTime ? `Taken at ${takenTime}` : "Intake confirmed";
-  } else if (log.classifiedStatus === "delayed") {
-    const delayStr =
-      log.delayMinutes !== null && log.delayMinutes !== undefined
-        ? formatDelay(log.delayMinutes)
-        : null;
-    if (takenTime && delayStr) {
-      detail = `Taken at ${takenTime} — Delayed by ${delayStr}`;
-    } else if (delayStr) {
-      detail = `Delayed by ${delayStr}`;
-    } else {
-      detail = "Taken outside scheduled window";
-    }
-  } else {
-    // missed
-    detail = "Dose not taken";
-  }
+function LogCard({ log }: { log: LogEntry }) {
+  const config = STATUS[log.status];
+  const Icon = config.Icon;
+  const chamberText = log.status === "incorrect_chamber"
+    ? `Detected ${log.detectedChamberId ?? "—"} · Expected ${log.expectedChamberIds.join(", ") || log.expectedChamberId || "—"}`
+    : log.expectedChamberId
+      ? `Chamber ${log.expectedChamberId}`
+      : "No chamber assigned";
 
   return (
-    <div
-      className={`
-        flex items-center gap-3 px-4 py-3
-        bg-card border border-border/70 border-l-4 ${cfg.borderClass}
-        rounded-[16px] shadow-sm transition-shadow hover:shadow-md
-      `}
-    >
-      {/* Status icon circle */}
-      <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-background border border-border/50">
-        <Icon className={`w-4 h-4 ${cfg.iconClass}`} />
-      </div>
-
-      {/* Text content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">
-            {log.medicineName}
-          </span>
-          <span className="text-xs text-gray-400 dark:text-gray-500 font-normal">
-            {log.dosage}
-          </span>
+    <div className={`rounded-[18px] border border-border/70 border-l-4 ${config.border} bg-card p-4 shadow-sm`}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background">
+          <Icon className="h-4 w-4 text-gray-500 dark:text-gray-300" />
         </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">
+                {log.medicineName} <span className="font-normal text-gray-400">{log.dosage}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                Scheduled {log.scheduledTime} · Actual {actualTime(log.actualTime)}
+              </p>
+            </div>
+            <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${config.badge}`}>
+              {config.label}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-          <Clock className="w-3 h-3 text-gray-400 dark:text-gray-500 shrink-0" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            Scheduled {formatScheduledTime(log.scheduledTime)}
-          </span>
-          {detail && (
-            <>
-              <span className="text-gray-300 dark:text-gray-600 text-xs">·</span>
-              <span
-                className={`text-xs font-medium ${
-                  log.classifiedStatus === "taken"
-                    ? "text-green-600 dark:text-green-400"
-                    : log.classifiedStatus === "delayed"
-                    ? "text-gray-500 dark:text-gray-400"
-                    : "text-red-500 dark:text-red-400"
-                }`}
-              >
-                {detail}
-              </span>
-            </>
-          )}
-          {log.source === "sensor" && (
-            <>
-              <span className="text-gray-300 dark:text-gray-600 text-xs">·</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 dark:text-blue-400">
-                Sensor
-              </span>
-            </>
+          <div className="mt-3 grid gap-2 text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-2">
+            <span className="flex items-center gap-1.5"><Pill className="h-3.5 w-3.5" />{chamberText}</span>
+            <span className="flex items-center gap-1.5"><Cpu className="h-3.5 w-3.5" />{log.verificationMethod}</span>
+          </div>
+          {log.verificationNote && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{log.verificationNote}</p>
           )}
         </div>
       </div>
-
-      {/* Status badge — always uses classifiedStatus, never raw status */}
-      <span
-        className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badgeClass}`}
-      >
-        <Icon className="w-3 h-3" />
-        {cfg.label}
-      </span>
     </div>
   );
 }
 
-// ── Date Group ─────────────────────────────────────────────────────────────
-
-function DateGroup({ date, entries }: { date: string; entries: LogEntry[] }) {
-  const todayStr = new Date().toISOString().split("T")[0];
-  const heading = date === todayStr ? "Today" : formatDateHeading(date);
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-1">
-        {heading}
-      </p>
-      {entries.map((log) => (
-        <MedCard key={String(log._id)} log={log} />
-      ))}
-    </div>
-  );
-}
-
-// ── Section ────────────────────────────────────────────────────────────────
-
-function Section({
-  title,
-  logs,
-  emptyMessage,
-  loading,
-}: {
-  title: string;
-  logs: LogEntry[];
-  emptyMessage: string;
-  loading: boolean;
-}) {
-  const groups = groupByDate(logs);
-
-  return (
-    <div className="bg-card border border-border/80 shadow-sm shadow-slate-900/10 rounded-[28px] p-6">
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{title}</h2>
-
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-14 bg-gray-100 dark:bg-gray-700 rounded-[16px] animate-pulse"
-            />
-          ))}
-        </div>
-      ) : logs.length === 0 ? (
-        <div className="flex items-center gap-3 py-4 px-3 rounded-2xl border border-dashed border-border/60 text-gray-400 dark:text-gray-500">
-          <Pill className="w-4 h-4 shrink-0 opacity-50" />
-          <p className="text-sm">{emptyMessage}</p>
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {groups.map(({ date, entries }) => (
-            <DateGroup key={date} date={date} entries={entries} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────
-
-const History = () => {
+export default function HistoryPage() {
+  const [range, setRange] = useState<Range>("month");
+  const [from, setFrom] = useState(monthStart());
+  const [to, setTo] = useState(todayString());
   const [data, setData] = useState<HistoryData | null>(null);
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [error, setError] = useState("");
 
   const fetchHistory = useCallback(async () => {
+    if (range === "custom" && (!from || !to || from > to)) return;
+    setLoading(true);
+    setError("");
     try {
-      const res = await fetch("/api/history");
-      const json = await res.json();
-      if (json.success) setData(json.data);
-    } catch (err) {
-      console.error("Failed to fetch history:", err);
+      const query = new URLSearchParams({ range });
+      if (range === "custom") {
+        query.set("from", from);
+        query.set("to", to);
+      }
+      const response = await fetch(`/api/history?${query.toString()}`, { cache: "no-store" });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || "Failed to load history.");
+      setData(json.data);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Failed to load history.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [from, range, to]);
 
   useEffect(() => {
     fetchHistory();
-    intervalRef.current = setInterval(fetchHistory, 30_000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
   }, [fetchHistory]);
 
-  const s = data?.summary;
+  const groupedLogs = useMemo(() => {
+    const groups = new Map<string, LogEntry[]>();
+    for (const log of data?.logs ?? []) {
+      groups.set(log.scheduledDate, [...(groups.get(log.scheduledDate) ?? []), log]);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data]);
 
-  // ── "Total Taken" card ──────────────────────────────────────────────────
-  // Headline: totalTaken = onTime + delayed (ALL confirmed doses)
-  // Subtitle breakdown: "X on time · Y delayed"  (correct math)
-  const takenValue = loading ? "—" : String(s?.totalTaken ?? 0);
-
-  const takenSubtitle = (() => {
-    if (loading) return "Loading…";
-    if (!s) return "";
-    if (s.totalDelayed === 0) return "All doses taken on time";
-    // onTime = totalTaken - totalDelayed  (never show wrong numbers)
-    const onTime = s.onTime;
-    return `${onTime} on time · ${s.totalDelayed} delayed`;
-  })();
+  const summary = data?.summary;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto">
-
-        {/* Page header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+      <div className="mx-auto max-w-7xl space-y-7">
+        <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">History</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
-            View your medication intake history
+          <p className="mt-2 text-gray-600 dark:text-gray-300">
+            Medication verification records and adherence reporting
           </p>
         </div>
 
-        {/* ── 3 summary stat cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Card 1: Total Taken (on-time + delayed) with breakdown subtitle */}
-          <StatCard
-            title="Total Taken"
-            value={takenValue}
-            subtitle={takenSubtitle}
-            className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg"
-          />
+        <div className="rounded-[20px] border border-border/70 bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            {FILTERS.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setRange(filter.value)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  range === filter.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
 
-          {/* Card 2: Total Missed */}
-          <StatCard
-            title="Total Missed"
-            value={loading ? "—" : String(s?.totalMissed ?? 0)}
-            subtitle="Overall missed medication records"
-            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
-          />
-
-          {/* Card 3: Success Rate */}
-          <StatCard
-            title="Success Rate"
-            value={loading ? "—" : `${s?.successRate ?? 0}%`}
-            subtitle="Medication adherence rate"
-            className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
-          />
+          {range === "custom" && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-gray-600 dark:text-gray-300">
+                From
+                <input
+                  type="date"
+                  value={from}
+                  max={to}
+                  onChange={(event) => setFrom(event.target.value)}
+                  className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
+                />
+              </label>
+              <label className="text-sm text-gray-600 dark:text-gray-300">
+                To
+                <input
+                  type="date"
+                  value={to}
+                  min={from}
+                  max={todayString()}
+                  onChange={(event) => setTo(event.target.value)}
+                  className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
-        {/* ── History sections — always rendered ── */}
-        <div className="space-y-8">
-          <Section
-            title="Today"
-            logs={data?.today ?? []}
-            emptyMessage="No finalized medication records for today yet."
-            loading={loading}
-          />
-          <Section
-            title="This Week"
-            logs={data?.thisWeek ?? []}
-            emptyMessage="No medication records in the past 7 days."
-            loading={loading}
-          />
-          {/* Always visible even when empty */}
-          <Section
-            title="This Month"
-            logs={data?.thisMonth ?? []}
-            emptyMessage="No medication records this month yet."
-            loading={loading}
-          />
-          {/* Always visible even when empty */}
-          <Section
-            title="Earlier Records"
-            logs={data?.earlier ?? []}
-            emptyMessage="No earlier medication records available."
-            loading={loading}
-          />
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Adherence" value={loading ? "—" : `${summary?.adherenceRate ?? 0}%`} subtitle="Late doses receive half credit" />
+          <StatCard title="Verified" value={loading ? "—" : String(summary?.verified ?? 0)} subtitle={`${summary?.onTime ?? 0} on time · ${summary?.late ?? 0} late`} />
+          <StatCard title="Missed" value={loading ? "—" : String(summary?.missed ?? 0)} subtitle={`${summary?.totalScheduled ?? 0} scheduled doses evaluated`} />
+          <StatCard title="Verification Issues" value={loading ? "—" : String((summary?.incorrectChamber ?? 0) + (summary?.unverified ?? 0))} subtitle={`${summary?.incorrectChamber ?? 0} incorrect chamber · ${summary?.unverified ?? 0} unverified`} />
         </div>
+
+        <section className="rounded-[28px] border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Medication Performance</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {(data?.byMedicine ?? []).map((medicine) => (
+              <div key={medicine.medicineId || medicine.medicineName} className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-gray-900 dark:text-white">{medicine.medicineName}</p>
+                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{medicine.adherenceRate}%</span>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs text-gray-500 dark:text-gray-400">
+                  <span><b className="block text-base text-gray-900 dark:text-white">{medicine.scheduled}</b>Due</span>
+                  <span><b className="block text-base text-green-600">{medicine.verified}</b>Verified</span>
+                  <span><b className="block text-base text-amber-600">{medicine.late}</b>Late</span>
+                  <span><b className="block text-base text-red-600">{medicine.missed}</b>Missed</span>
+                </div>
+              </div>
+            ))}
+            {!loading && (data?.byMedicine.length ?? 0) === 0 && (
+              <p className="text-sm text-gray-500">No medication performance data for this range.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-blue-600" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Medication Activity</h2>
+          </div>
+          <div className="mt-5 space-y-6">
+            {groupedLogs.map(([date, logs]) => (
+              <div key={date} className="space-y-2">
+                <p className="px-1 text-xs font-semibold uppercase tracking-wider text-gray-400">{dateHeading(date)}</p>
+                {logs.map((log) => <LogCard key={log._id} log={log} />)}
+              </div>
+            ))}
+            {!loading && groupedLogs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-gray-500">
+                No medication activity for this range.
+              </div>
+            )}
+            {loading && <p className="text-sm text-gray-500">Loading medication records…</p>}
+          </div>
+        </section>
       </div>
     </div>
   );
-};
-
-export default History;
+}

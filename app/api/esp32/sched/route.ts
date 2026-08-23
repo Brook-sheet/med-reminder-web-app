@@ -85,6 +85,9 @@ export async function GET(req: NextRequest) {
       medicineId: string;
       medicineName: string;
       dosage: string;
+      chamberId: number | null;
+      windowBeforeMinutes: number;
+      windowAfterMinutes: number;
     }> = [];
 
     for (const med of medicines) {
@@ -97,6 +100,9 @@ export async function GET(req: NextRequest) {
             medicineId: (med._id as { toString(): string }).toString(),
             medicineName: med.name as string,
             dosage: med.dosage as string,
+            chamberId: med.chamberId ?? null,
+            windowBeforeMinutes: med.windowBeforeMinutes ?? 30,
+            windowAfterMinutes: med.windowAfterMinutes ?? 90,
           });
         }
       }
@@ -105,21 +111,13 @@ export async function GET(req: NextRequest) {
     // Sort by time ascending (same order the ESP32 assigns alarmIndex)
     alarms.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
 
-    // Remove exact duplicates (same hour+minute from multiple medicines)
-    // keeping the richer object so the dashboard can still read medicineId
-    const seen = new Set<string>();
-    const deduplicated = alarms.filter((a) => {
-      const key = `${a.hour}:${a.minute}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log(`[ESP32 Sched] Returning ${deduplicated.length} alarm(s)`);
+    // Do not deduplicate by time. Two medicines scheduled at 8:00 AM are
+    // separate expected chamber events and must both reach the device.
+    console.log(`[ESP32 Sched] Returning ${alarms.length} alarm(s)`);
 
     // The ESP32 only reads "hour" and "minute"; the extra fields are ignored
     // by the firmware but useful for debugging from a browser.
-    return NextResponse.json(deduplicated);
+    return NextResponse.json(alarms);
   } catch (err) {
     console.error('[GET /api/esp32/sched]', err);
     return NextResponse.json(

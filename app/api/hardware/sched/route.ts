@@ -70,6 +70,9 @@ export async function GET(request: NextRequest) {
       medicineId: string;
       medicineName: string;
       dosage: string;
+      chamberId: number | null;
+      windowBeforeMinutes: number;
+      windowAfterMinutes: number;
     }> = [];
 
     for (const med of medicines) {
@@ -82,6 +85,9 @@ export async function GET(request: NextRequest) {
             medicineId: med._id.toString(),
             medicineName: med.name,
             dosage: med.dosage,
+            chamberId: med.chamberId ?? null,
+            windowBeforeMinutes: med.windowBeforeMinutes ?? 30,
+            windowAfterMinutes: med.windowAfterMinutes ?? 90,
           });
         }
       }

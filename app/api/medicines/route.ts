@@ -61,7 +61,18 @@ interface ValidationResult {
 }
 
 function validateMedicinePayload(body: Record<string, unknown>): ValidationResult {
-  const { name, dosage, frequency, scheduledTimes, startDate, endDate } = body;
+  const {
+    name,
+    dosage,
+    frequency,
+    scheduledTimes,
+    startDate,
+    endDate,
+    chamberId,
+    windowBeforeMinutes,
+    windowAfterMinutes,
+    lateAfterMinutes,
+  } = body;
 
   // ── name ──────────────────────────────────────────────────────────────
   const cleanName = sanitizeMedicineName(name);
@@ -134,6 +145,34 @@ function validateMedicinePayload(body: Record<string, unknown>): ValidationResul
     }
   }
 
+  if (chamberId !== undefined && chamberId !== null && chamberId !== '') {
+    const chamber = Number(chamberId);
+    if (!Number.isInteger(chamber) || chamber < 1 || chamber > 3) {
+      return { valid: false, error: 'Chamber must be 1, 2, or 3.' };
+    }
+  }
+
+  for (const [field, value] of Object.entries({
+    windowBeforeMinutes,
+    windowAfterMinutes,
+    lateAfterMinutes,
+  })) {
+    if (value !== undefined && value !== null && value !== '') {
+      const minutes = Number(value);
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 720) {
+        return { valid: false, error: `${field} must be a whole number from 0 to 720.` };
+      }
+    }
+  }
+
+  if (
+    lateAfterMinutes !== undefined &&
+    windowAfterMinutes !== undefined &&
+    Number(lateAfterMinutes) > Number(windowAfterMinutes)
+  ) {
+    return { valid: false, error: 'Late threshold cannot be longer than the after-window.' };
+  }
+
   return { valid: true };
 }
 
@@ -145,7 +184,11 @@ async function createLogsFromStartDate(
   medicineName: string,
   dosage: string,
   scheduledTimes: string[],
-  startDate: string
+  startDate: string,
+  chamberId: number | null,
+  windowBeforeMinutes: number,
+  windowAfterMinutes: number,
+  lateAfterMinutes: number,
 ) {
   const today = new Date().toISOString().split('T')[0];
   const start = startDate <= today ? startDate : today;
@@ -167,6 +210,13 @@ async function createLogsFromStartDate(
         scheduledTime: time,
         status: 'pending',
         source: 'auto',
+        eventType: 'SCHEDULED',
+        expectedChamberId: chamberId,
+        expectedChamberIds: chamberId ? [chamberId] : [],
+        windowBeforeMinutes,
+        windowAfterMinutes,
+        lateAfterMinutes,
+        countsTowardAdherence: true,
       });
     }
   }
@@ -241,6 +291,26 @@ export async function POST(request: NextRequest) {
     const endDate = typeof body.endDate === 'string' && body.endDate.trim()
       ? body.endDate.trim()
       : null;
+    const chamberId = body.chamberId === undefined || body.chamberId === null || body.chamberId === ''
+      ? null
+      : Number(body.chamberId);
+    const windowBeforeMinutes = body.windowBeforeMinutes == null ? 30 : Number(body.windowBeforeMinutes);
+    const windowAfterMinutes = body.windowAfterMinutes == null ? 90 : Number(body.windowAfterMinutes);
+    const lateAfterMinutes = body.lateAfterMinutes == null ? 30 : Number(body.lateAfterMinutes);
+
+    if (chamberId !== null) {
+      const chamberConflict = await Medicine.exists({
+        userId: user.userId,
+        isActive: true,
+        chamberId,
+      });
+      if (chamberConflict) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: `Chamber ${chamberId} is already assigned to another active medicine.` },
+          { status: 409 },
+        );
+      }
+    }
 
     const medicine: IMedicineDocument = await Medicine.create({
       userId: user.userId,
@@ -248,6 +318,10 @@ export async function POST(request: NextRequest) {
       dosage,
       frequency,
       scheduledTimes,
+      chamberId,
+      windowBeforeMinutes,
+      windowAfterMinutes,
+      lateAfterMinutes,
       startDate,
       endDate,
       notes,
@@ -260,7 +334,11 @@ export async function POST(request: NextRequest) {
       medicine.name,
       medicine.dosage,
       medicine.scheduledTimes as string[],
-      startDate
+      startDate,
+      medicine.chamberId ?? null,
+      medicine.windowBeforeMinutes,
+      medicine.windowAfterMinutes,
+      medicine.lateAfterMinutes,
     );
 
     return NextResponse.json<ApiResponse>(

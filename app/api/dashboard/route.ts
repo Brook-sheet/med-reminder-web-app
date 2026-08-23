@@ -69,7 +69,7 @@ function computeWeightedAdherence(
 
     totalDue++;
 
-    if (log.status === 'taken') {
+    if (log.status === 'taken' || log.status === 'late') {
       if (log.takenAt) {
         const diffMinutes = Math.round(
           (
@@ -159,6 +159,13 @@ export async function GET(request: NextRequest) {
             scheduledTime: time,
             status: 'pending',
             source: 'auto',
+            eventType: 'SCHEDULED',
+            expectedChamberId: med.chamberId ?? null,
+            expectedChamberIds: med.chamberId ? [med.chamberId] : [],
+            windowBeforeMinutes: med.windowBeforeMinutes ?? 30,
+            windowAfterMinutes: med.windowAfterMinutes ?? 90,
+            lateAfterMinutes: med.lateAfterMinutes ?? 30,
+            countsTowardAdherence: true,
           });
         }
       }
@@ -188,7 +195,7 @@ export async function GET(request: NextRequest) {
 
         let status: ScheduleItem['status'] = 'Scheduled';
 
-        if (log.status === 'taken') {
+        if (log.status === 'taken' || log.status === 'late') {
           status = 'Taken';
         } else if (log.status === 'missed') {
           status = 'Missed';
@@ -203,7 +210,7 @@ export async function GET(request: NextRequest) {
           status = 'Scheduled';
         }
 
-        const medicineId = log.medicineId.toString();
+        const medicineId = log.medicineId?.toString() ?? '';
 
         return {
           medicineId,
@@ -218,7 +225,7 @@ export async function GET(request: NextRequest) {
     );
 
     const todayTaken = todayLogs.filter(
-      (log) => log.status === 'taken'
+      (log) => ['taken', 'late'].includes(log.status)
     ).length;
 
     const todayTotal = todayLogs.length;
@@ -269,7 +276,7 @@ export async function GET(request: NextRequest) {
       });
 
       const taken = dayLogs.filter(
-        (log) => log.status === 'taken'
+        (log) => ['taken', 'late'].includes(log.status)
       ).length;
 
       const total = dayLogs.length;
@@ -283,6 +290,7 @@ export async function GET(request: NextRequest) {
 
     const allLogs = await MedicationLog.find({
       userId: user.userId,
+      countsTowardAdherence: { $ne: false },
     }).lean();
 
     const adherenceRate = computeWeightedAdherence(

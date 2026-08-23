@@ -5,6 +5,10 @@ export interface Medicine {
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  chamberId?: number | null;
+  windowBeforeMinutes?: number;
+  windowAfterMinutes?: number;
+  lateAfterMinutes?: number;
   color?: string;
   notes?: string;
   startDate?: string;
@@ -13,4 +17,3 @@ export interface Medicine {
   createdAt?: Date;
   updatedAt?: Date;
 }
- 

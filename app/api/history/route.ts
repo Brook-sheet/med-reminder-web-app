@@ -4,6 +4,21 @@ import MedicationLog from '@/models/MedicationLog';
 import User from '@/models/User';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
+import {
+  ensureMedicationLogsForRange,
+  finalizeExpiredMedicationLogs,
+  processMedicationEvent,
+  scheduledDateTime,
+} from '@/lib/medicationVerification';
+
+type ReportRange = 'today' | 'week' | 'month' | 'custom';
+type ReportStatus =
+  | 'pending'
+  | 'taken'
+  | 'late'
+  | 'missed'
+  | 'unverified'
+  | 'incorrect_chamber';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -11,287 +26,241 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type FinalizedStatus = 'taken' | 'delayed' | 'missed' | 'pending';
-
-interface ClassifyResult {
-  status: FinalizedStatus;
-  delayMinutes: number | null;
+function dateString(date: Date): string {
+  return date.toISOString().split('T')[0];
 }
 
-interface EnrichedLog {
-  _id: unknown;
-  userId: unknown;
-  medicineId: unknown;
-  medicineName: string;
-  dosage: string;
-  scheduledTime: string;
-  scheduledDate: string;
-  takenAt?: Date | null;
-  status: string;
-  source: string;
-  sensorDeviceId?: string | null;
-  createdAt?: Date;
-  updatedAt?: Date;
-  classifiedStatus: FinalizedStatus;
-  delayMinutes: number | null;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function parseTimeToMinutes(timeStr: string): number {
-  const ampm = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (ampm) {
-    let h = parseInt(ampm[1]);
-    const m = parseInt(ampm[2]);
-    if (ampm[3].toUpperCase() === 'PM' && h !== 12) h += 12;
-    if (ampm[3].toUpperCase() === 'AM' && h === 12) h = 0;
-    return h * 60 + m;
+function resolveRange(request: NextRequest): { range: ReportRange; from: string; to: string } {
+  const range = (request.nextUrl.searchParams.get('range') || 'month') as ReportRange;
+  if (!['today', 'week', 'month', 'custom'].includes(range)) {
+    throw new Error('range must be today, week, month, or custom.');
   }
-  const plain = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (plain) return parseInt(plain[1]) * 60 + parseInt(plain[2]);
-  return 0;
-}
-
-/**
- * Classify a log entry:
- * - taken + diff ≤ 30 min → "taken" (on-time)
- * - taken + diff > 30 min → "delayed"
- * - not taken + elapsed > 120 min → "missed"
- * - otherwise → "pending"
- */
-function classifyLog(
-  scheduledDate: string,
-  scheduledTime: string,
-  rawStatus: string,
-  takenAt: Date | null | undefined,
-): ClassifyResult {
-  const scheduledMinutes = parseTimeToMinutes(scheduledTime);
-  const scheduledDateTime = new Date(`${scheduledDate}T00:00:00`);
-  scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
 
   const now = new Date();
+  const to = dateString(now);
+  if (range === 'today') return { range, from: to, to };
 
-  if (rawStatus === 'taken') {
-    if (takenAt) {
-      const taken = new Date(takenAt);
-      const diffMinutes = Math.round(
-        (taken.getTime() - scheduledDateTime.getTime()) / 60_000,
-      );
-      if (diffMinutes <= 30) {
-        return { status: 'taken', delayMinutes: null };
-      }
-      return { status: 'delayed', delayMinutes: diffMinutes };
-    }
-    return { status: 'taken', delayMinutes: null };
+  if (range === 'week') {
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - 6);
+    return { range, from: dateString(fromDate), to };
   }
 
-  const elapsedMinutes = (now.getTime() - scheduledDateTime.getTime()) / 60_000;
-  if (elapsedMinutes > 120) {
-    return { status: 'missed', delayMinutes: null };
+  if (range === 'month') {
+    const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { range, from: dateString(fromDate), to };
   }
 
+  const from = request.nextUrl.searchParams.get('from') || '';
+  const customTo = request.nextUrl.searchParams.get('to') || '';
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(from) || !datePattern.test(customTo) || from > customTo) {
+    throw new Error('Custom range requires valid from and to dates in YYYY-MM-DD format.');
+  }
+
+  const days = Math.ceil(
+    (new Date(`${customTo}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) /
+      86_400_000,
+  );
+  if (days > 366) throw new Error('Custom range cannot exceed 366 days.');
+  return { range, from, to: customTo };
+}
+
+function normalizeStatus(log: {
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  takenAt?: Date | null;
+  lateAfterMinutes?: number;
+}): { status: ReportStatus; delayMinutes: number | null } {
+  if (log.status === 'incorrect_chamber') return { status: 'incorrect_chamber', delayMinutes: null };
+  if (log.status === 'unverified') return { status: 'unverified', delayMinutes: null };
+  if (log.status === 'missed') return { status: 'missed', delayMinutes: null };
+  if (log.status === 'late') {
+    const scheduled = scheduledDateTime(log.scheduledDate, log.scheduledTime);
+    const delay = log.takenAt
+      ? Math.max(0, Math.round((new Date(log.takenAt).getTime() - scheduled.getTime()) / 60_000))
+      : null;
+    return { status: 'late', delayMinutes: delay };
+  }
+  if (log.status === 'taken') {
+    if (!log.takenAt) return { status: 'taken', delayMinutes: null };
+    const scheduled = scheduledDateTime(log.scheduledDate, log.scheduledTime);
+    const delay = Math.max(0, Math.round((new Date(log.takenAt).getTime() - scheduled.getTime()) / 60_000));
+    return delay > (log.lateAfterMinutes ?? 30)
+      ? { status: 'late', delayMinutes: delay }
+      : { status: 'taken', delayMinutes: delay };
+  }
   return { status: 'pending', delayMinutes: null };
 }
 
-/**
- * Compute weighted adherence rate across all finalized logs:
- * ((1.0 × On-Time) + (0.5 × Delayed)) / Total Due Scheduled Doses × 100
- *
- * Only includes logs whose scheduled time has already passed.
- * This ensures consistency with the Dashboard adherence calculation.
- */
-function computeWeightedAdherenceRate(logs: EnrichedLog[]): number {
-  const now = new Date();
-  let onTime = 0;
-  let delayed = 0;
-  let totalDue = 0;
-
-  for (const log of logs) {
-    const scheduledMinutes = parseTimeToMinutes(log.scheduledTime);
-    const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
-    scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
-
-    // Only count doses that are already due
-    if (scheduledDateTime > now) continue;
-
-    totalDue++;
-    if (log.classifiedStatus === 'taken') onTime++;
-    else if (log.classifiedStatus === 'delayed') delayed++;
-  }
-
-  if (totalDue === 0) return 0;
-  return Math.round(Math.min((1.0 * onTime + 0.5 * delayed) / totalDue * 100, 100));
-}
-
-// ── GET /api/history ───────────────────────────────────────────────────────
-
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
-    if (!user) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+    const auth = await getAuthUser(request);
+    if (!auth) {
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const selectedRange = resolveRange(request);
     await connectDB();
+    await ensureMedicationLogsForRange(auth.userId, selectedRange.from, selectedRange.to);
+    await finalizeExpiredMedicationLogs(auth.userId);
 
-    const userDoc = await User.findById(user.userId).select('dataResetAt');
-    const dataResetAt = userDoc?.dataResetAt ?? null;
+    const user = await User.findById(auth.userId).select('dataResetAt');
+    const query: Record<string, unknown> = {
+      userId: auth.userId,
+      scheduledDate: { $gte: selectedRange.from, $lte: selectedRange.to },
+    };
+    if (user?.dataResetAt) query.createdAt = { $gt: user.dataResetAt };
 
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const weekAgoStr = sevenDaysAgo.toISOString().split('T')[0];
-
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const monthAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const baseQuery: Record<string, unknown> = { userId: user.userId };
-    if (dataResetAt) {
-      baseQuery.createdAt = { $gt: dataResetAt };
-    }
-
-    const rawLogs = await MedicationLog.find(baseQuery)
-      .sort({ scheduledDate: -1, scheduledTime: -1 })
+    const rawLogs = await MedicationLog.find(query)
+      .sort({ scheduledDate: -1, scheduledTime: -1, createdAt: -1 })
       .lean();
 
-    // Classify every log
-    const enriched: EnrichedLog[] = rawLogs.map((log) => {
-      const { status, delayMinutes } = classifyLog(
-        String(log.scheduledDate),
-        String(log.scheduledTime),
-        String(log.status),
-        log.takenAt ?? null,
-      );
-      return {
-        _id: log._id,
-        userId: log.userId,
-        medicineId: log.medicineId,
-        medicineName: String(log.medicineName ?? ''),
-        dosage: String(log.dosage ?? ''),
-        scheduledTime: String(log.scheduledTime ?? ''),
-        scheduledDate: String(log.scheduledDate ?? ''),
+    const logs = rawLogs.map((log) => {
+      const normalized = normalizeStatus({
+        status: String(log.status),
+        scheduledDate: String(log.scheduledDate),
+        scheduledTime: String(log.scheduledTime),
         takenAt: log.takenAt ?? null,
-        status: String(log.status ?? ''),
-        source: String(log.source ?? 'auto'),
-        sensorDeviceId: (log.sensorDeviceId as string | null | undefined) ?? null,
-        createdAt: log.createdAt,
-        updatedAt: log.updatedAt,
-        classifiedStatus: status,
-        delayMinutes,
+        lateAfterMinutes: log.lateAfterMinutes,
+      });
+      return {
+        _id: log._id.toString(),
+        medicineId: log.medicineId?.toString() ?? null,
+        medicineName: log.medicineName,
+        dosage: log.dosage,
+        scheduledDate: log.scheduledDate,
+        scheduledTime: log.scheduledTime,
+        actualTime: log.takenAt ?? null,
+        status: normalized.status,
+        delayMinutes: normalized.delayMinutes,
+        source: log.source === 'auto' ? 'system' : log.source,
+        verificationMethod:
+          log.source === 'sensor' ? 'Sensor verification' :
+          log.source === 'manual' ? 'Manual verification' : 'System',
+        expectedChamberId: log.expectedChamberId ?? null,
+        detectedChamberId: log.detectedChamberId ?? null,
+        expectedChamberIds: log.expectedChamberIds ?? [],
+        countsTowardAdherence: log.countsTowardAdherence !== false,
+        verificationNote: log.verificationNote ?? '',
       };
     });
 
-    // Pending stays on Dashboard — history shows only finalized records
-    const finalized = enriched.filter((l) => l.classifiedStatus !== 'pending');
+    const now = new Date();
+    const scheduledLogs = logs.filter((log) => log.countsTowardAdherence);
+    const dueLogs = scheduledLogs.filter((log) =>
+      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now,
+    );
+    const onTime = dueLogs.filter((log) => log.status === 'taken').length;
+    const late = dueLogs.filter((log) => log.status === 'late').length;
+    const missed = dueLogs.filter((log) => log.status === 'missed').length;
+    const unverified = logs.filter((log) => log.status === 'unverified').length;
+    const incorrectChamber = logs.filter((log) => log.status === 'incorrect_chamber').length;
+    const adherenceRate = dueLogs.length > 0
+      ? Math.round(((onTime + late * 0.5) / dueLogs.length) * 100)
+      : 0;
 
-    // Section grouping
-    const today     = finalized.filter((l) => l.scheduledDate === todayStr);
-    const thisWeek  = finalized.filter((l) => l.scheduledDate >= weekAgoStr  && l.scheduledDate < todayStr);
-    const thisMonth = finalized.filter((l) => l.scheduledDate >= monthAgoStr && l.scheduledDate < weekAgoStr);
-    const earlier   = finalized.filter((l) => l.scheduledDate < monthAgoStr);
+    const medicineMap = new Map<string, {
+      medicineId: string | null;
+      medicineName: string;
+      scheduled: number;
+      verified: number;
+      onTime: number;
+      late: number;
+      missed: number;
+      incorrectChamber: number;
+    }>();
 
-    // Summary counts
-    const onTime         = finalized.filter((l) => l.classifiedStatus === 'taken').length;
-    const totalDelayed   = finalized.filter((l) => l.classifiedStatus === 'delayed').length;
-    const totalConfirmed = onTime + totalDelayed;
-    const totalMissed    = finalized.filter((l) => l.classifiedStatus === 'missed').length;
-    const totalRecords   = finalized.length;
+    for (const log of logs) {
+      const key = log.medicineId || log.medicineName;
+      const item = medicineMap.get(key) || {
+        medicineId: log.medicineId,
+        medicineName: log.medicineName,
+        scheduled: 0,
+        verified: 0,
+        onTime: 0,
+        late: 0,
+        missed: 0,
+        incorrectChamber: 0,
+      };
+      if (log.countsTowardAdherence && scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now) {
+        item.scheduled += 1;
+        if (log.status === 'taken') item.onTime += 1;
+        if (log.status === 'late') item.late += 1;
+        if (log.status === 'taken' || log.status === 'late') item.verified += 1;
+        if (log.status === 'missed') item.missed += 1;
+      }
+      if (log.status === 'incorrect_chamber') item.incorrectChamber += 1;
+      medicineMap.set(key, item);
+    }
 
-    // ── Weighted success rate (uses ALL enriched logs including pending)
-    // This matches the Dashboard "Overall Adherence" calculation exactly
-    const successRate = computeWeightedAdherenceRate(enriched);
+    const byMedicine = Array.from(medicineMap.values())
+      .filter((item) => item.scheduled > 0 || item.incorrectChamber > 0)
+      .map((item) => ({
+        ...item,
+        adherenceRate: item.scheduled > 0
+          ? Math.round(((item.onTime + item.late * 0.5) / item.scheduled) * 100)
+          : 0,
+      }))
+      .sort((a, b) => a.medicineName.localeCompare(b.medicineName));
 
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
+        range: selectedRange,
         summary: {
-          totalTaken: totalConfirmed,
+          totalScheduled: dueLogs.length,
+          verified: onTime + late,
           onTime,
-          totalDelayed,
-          totalMissed,
-          totalRecords,
-          successRate,
+          late,
+          missed,
+          unverified,
+          incorrectChamber,
+          adherenceRate,
         },
-        today,
-        thisWeek,
-        thisMonth,
-        earlier,
+        byMedicine,
+        logs,
       },
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    const clientError = /range|Custom/i.test(message);
     console.error('[GET /api/history]', error);
     return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Internal server error' },
-      { status: 500 },
+      { success: false, error: message },
+      { status: clientError ? 400 : 500 },
     );
   }
 }
 
-// ── PATCH /api/history — manual update (Dashboard only) ───────────────────
-
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
-    if (!user) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 },
-      );
+    const auth = await getAuthUser(request);
+    if (!auth) {
+      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
-    const body = await request.json();
-    const { logId, status } = body as { logId: string; status: string };
-
-    if (!logId || !status) {
+    const body = await request.json() as { logId?: string; status?: string };
+    if (!body.logId || !['taken', 'missed'].includes(body.status || '')) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'logId and status are required' },
+        { success: false, error: 'logId and a status of taken or missed are required.' },
         { status: 400 },
       );
     }
 
-    if (!['taken', 'missed', 'pending'].includes(status)) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Invalid status' },
-        { status: 400 },
-      );
-    }
-
-    const log = await MedicationLog.findOneAndUpdate(
-      { _id: logId, userId: user.userId },
-      {
-        status,
-        takenAt: status === 'taken' ? new Date() : null,
-        source: 'manual',
-      },
-      { new: true },
-    );
-
-    if (!log) {
-      return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Log not found' },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: log,
-      message: `Marked as ${status}`,
+    const result = await processMedicationEvent({
+      userId: auth.userId,
+      source: 'manual',
+      eventType: body.status === 'missed' ? 'MISSED' : 'MEDICATION_CONFIRMED',
+      logId: body.logId,
     });
+
+    return NextResponse.json<ApiResponse>({ success: true, data: result, message: result.message });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('[PATCH /api/history]', error);
-    return NextResponse.json<ApiResponse>(
-      { success: false, error: 'Internal server error' },
-      { status: 500 },
-    );
+    return NextResponse.json<ApiResponse>({ success: false, error: message }, { status: 400 });
   }
 }

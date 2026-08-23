@@ -369,6 +369,7 @@ const Medicines = () => {
             dosage={medicine.dosage}
             frequency={medicine.frequency}
             scheduledTimes={medicine.scheduledTimes}
+            chamberId={medicine.chamberId}
             notes={medicine.notes}
             startDate={medicine.startDate}
             endDate={medicine.endDate}

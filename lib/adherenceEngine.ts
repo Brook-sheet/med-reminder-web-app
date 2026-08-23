@@ -68,6 +68,7 @@ export interface RawLog {
   takenAt?: Date | null;
   classifiedStatus?: string;
   delayMinutes?: number | null;
+  countsTowardAdherence?: boolean;
 }
 
 function parseTimeToMinutes(timeStr: string): number {
@@ -89,6 +90,7 @@ export function extractFeatures(logs: RawLog[]): AdherenceFeatures {
 
   // Only evaluate due doses
   const dueLogs = logs.filter((log) => {
+    if (log.countsTowardAdherence === false) return false;
     const scheduledMinutes = parseTimeToMinutes(log.scheduledTime);
     const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
     scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
@@ -119,12 +121,12 @@ export function extractFeatures(logs: RawLog[]): AdherenceFeatures {
     const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
     scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
 
-    if (log.status === 'taken') {
+    if (log.status === 'taken' || log.status === 'late') {
       if (log.takenAt) {
         const diffMinutes = Math.round(
           (new Date(log.takenAt).getTime() - scheduledDateTime.getTime()) / 60_000
         );
-        if (diffMinutes <= 30) {
+        if (log.status !== 'late' && diffMinutes <= 30) {
           onTime++;
         } else {
           delayed++;
@@ -161,7 +163,7 @@ export function extractFeatures(logs: RawLog[]): AdherenceFeatures {
     scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
     const elapsed = (now.getTime() - scheduledDateTime.getTime()) / 60_000;
 
-    const isMissed = log.status !== 'taken' && elapsed > 120;
+    const isMissed = !['taken', 'late'].includes(log.status) && elapsed > 120;
     if (isMissed) {
       currentRun++;
       maxConsecutive = Math.max(maxConsecutive, currentRun);
@@ -179,13 +181,13 @@ export function extractFeatures(logs: RawLog[]): AdherenceFeatures {
   let recentOnTime = 0;
   let recentDelayed = 0;
   for (const log of recentLogs) {
-    if (log.status === 'taken') {
+    if (log.status === 'taken' || log.status === 'late') {
       const scheduledMinutes = parseTimeToMinutes(log.scheduledTime);
       const scheduledDateTime = new Date(`${log.scheduledDate}T00:00:00`);
       scheduledDateTime.setMinutes(scheduledDateTime.getMinutes() + scheduledMinutes);
       if (log.takenAt) {
         const diff = Math.round((new Date(log.takenAt).getTime() - scheduledDateTime.getTime()) / 60_000);
-        if (diff <= 30) recentOnTime++; else recentDelayed++;
+        if (log.status !== 'late' && diff <= 30) recentOnTime++; else recentDelayed++;
       } else {
         recentOnTime++;
       }
@@ -453,4 +455,3 @@ export function analyzeAdherence(logs: RawLog[]): AdherenceAnalysis {
   return { features, ruleBased, mlPrediction, finalRiskLevel, insight, recommendation };
   
 }
-

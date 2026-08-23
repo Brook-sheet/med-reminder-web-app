@@ -6,6 +6,11 @@ import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 import { analyzeAdherence } from '@/lib/adherenceEngine';
+import {
+  ensureMedicationLogsForRange,
+  finalizeExpiredMedicationLogs,
+  scheduledDateTime,
+} from '@/lib/medicationVerification';
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -135,8 +140,21 @@ export async function GET(
       );
     }
 
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const range = request.nextUrl.searchParams.get('range') || 'week';
+    const fromDate = new Date(now);
+    if (range === 'today') fromDate.setDate(fromDate.getDate());
+    else if (range === 'month') fromDate.setDate(fromDate.getDate() - 29);
+    else fromDate.setDate(fromDate.getDate() - 6);
+    const from = range === 'today' ? today : fromDate.toISOString().split('T')[0];
+
+    await ensureMedicationLogsForRange(patient._id.toString(), from, today);
+    await finalizeExpiredMedicationLogs(patient._id.toString());
+
     const logs = await MedicationLog.find({
       userId: patient._id,
+      scheduledDate: { $gte: from, $lte: today },
     })
       .sort({
         scheduledDate: -1,
@@ -144,11 +162,13 @@ export async function GET(
       })
       .lean();
 
-    const rawLogs = logs.map((log) => ({
+    const adherenceLogs = logs.filter((log) => log.countsTowardAdherence !== false);
+    const rawLogs = adherenceLogs.map((log) => ({
       status: String(log.status),
       scheduledDate: String(log.scheduledDate),
       scheduledTime: String(log.scheduledTime),
       takenAt: log.takenAt ?? null,
+      countsTowardAdherence: true,
     }));
 
     const analysis = analyzeAdherence(rawLogs);
@@ -160,7 +180,41 @@ export async function GET(
       status: log.status,
       takenAt: log.takenAt,
       dosage: log.dosage,
+      source: log.source === 'auto' ? 'system' : log.source,
+      expectedChamberId: log.expectedChamberId ?? null,
+      detectedChamberId: log.detectedChamberId ?? null,
+      expectedChamberIds: log.expectedChamberIds ?? [],
+      verificationNote: log.verificationNote ?? '',
     }));
+
+    const dueLogs = adherenceLogs.filter((log) =>
+      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now
+    );
+    const todayLogs = adherenceLogs.filter((log) => log.scheduledDate === today);
+    const todayDue = todayLogs.filter((log) =>
+      scheduledDateTime(log.scheduledDate, log.scheduledTime) <= now
+    );
+    const verifiedStatuses = ['taken', 'late'];
+    const reportSummary = {
+      range,
+      from,
+      to: today,
+      scheduled: dueLogs.length,
+      verified: dueLogs.filter((log) => verifiedStatuses.includes(log.status)).length,
+      missed: dueLogs.filter((log) => log.status === 'missed').length,
+      late: dueLogs.filter((log) => log.status === 'late').length,
+      incorrectChamber: logs.filter((log) => log.status === 'incorrect_chamber').length,
+      unverified: logs.filter((log) => log.status === 'unverified').length,
+      today: {
+        scheduled: todayDue.length,
+        verified: todayDue.filter((log) => verifiedStatuses.includes(log.status)).length,
+        missed: todayDue.filter((log) => log.status === 'missed').length,
+        late: todayDue.filter((log) => log.status === 'late').length,
+        incorrectChamber: logs.filter(
+          (log) => log.scheduledDate === today && log.status === 'incorrect_chamber'
+        ).length,
+      },
+    };
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -179,9 +233,9 @@ export async function GET(
             analysis.mlPrediction.confidence * 100
           ),
           adherenceRate: analysis.features.adherenceRate,
-          totalScheduled: logs.length,
-          totalTaken: logs.filter(
-            (log) => log.status === 'taken'
+          totalScheduled: adherenceLogs.length,
+          totalTaken: adherenceLogs.filter(
+            (log) => verifiedStatuses.includes(log.status)
           ).length,
           totalMissed: analysis.features.missedDoses,
           consecutiveMissed:
@@ -196,6 +250,7 @@ export async function GET(
           recommendation: analysis.recommendation,
         },
         recentLogs,
+        reportSummary,
         readOnly: true,
       },
     });

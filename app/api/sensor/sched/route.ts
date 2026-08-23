@@ -48,27 +48,36 @@ export async function GET(req: NextRequest) {
       isActive: true,
     });
 
-    const alarms: { hour: number; minute: number }[] = [];
+    const alarms: Array<{
+      hour: number;
+      minute: number;
+      medicineId: string;
+      medicineName: string;
+      chamberId: number | null;
+    }> = [];
 
     for (const med of medicines) {
       for (const t of med.scheduledTimes || []) {
         const parsed = parseTime(t);
-        if (parsed) alarms.push(parsed);
+        if (parsed) {
+          alarms.push({
+            ...parsed,
+            medicineId: med._id.toString(),
+            medicineName: med.name,
+            chamberId: med.chamberId ?? null,
+          });
+        }
       }
     }
 
-    const unique = alarms
-      .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
-      .filter(
-        (v, i, arr) =>
-          i === 0 ||
-          !(arr[i - 1].hour === v.hour && arr[i - 1].minute === v.minute)
-      );
+    const sorted = alarms.sort(
+      (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)
+    );
 
     return NextResponse.json({
       success: true,
-      count: unique.length,
-      alarms: unique,
+      count: sorted.length,
+      alarms: sorted,
     });
   } catch (err) {
     console.error('[ESP32 SCHED ERROR]', err);

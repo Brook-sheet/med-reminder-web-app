@@ -40,12 +40,35 @@ interface LogEntry {
   status: string;
   takenAt?: string | null;
   dosage?: string;
+  source?: string;
+  expectedChamberId?: number | null;
+  detectedChamberId?: number | null;
+  expectedChamberIds?: number[];
+  verificationNote?: string;
+}
+
+interface ReportSummary {
+  range: string;
+  scheduled: number;
+  verified: number;
+  missed: number;
+  late: number;
+  incorrectChamber: number;
+  unverified: number;
+  today: {
+    scheduled: number;
+    verified: number;
+    missed: number;
+    late: number;
+    incorrectChamber: number;
+  };
 }
 
 interface DashboardData {
   patient: PatientInfo;
   adherence: AdherenceInfo;
   recentLogs: LogEntry[];
+  reportSummary: ReportSummary;
   readOnly: boolean;
 }
 
@@ -81,6 +104,9 @@ const TREND_CONFIG = {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
   taken: { label: 'Taken', color: 'text-green-700 dark:text-green-300', dot: 'bg-green-500' },
+  late: { label: 'Late', color: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
+  incorrect_chamber: { label: 'Incorrect Chamber', color: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' },
+  unverified: { label: 'Unverified', color: 'text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' },
   missed: { label: 'Missed', color: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' },
   pending: { label: 'Pending', color: 'text-yellow-700 dark:text-yellow-300', dot: 'bg-yellow-500' },
   skipped: { label: 'Skipped', color: 'text-gray-500', dot: 'bg-gray-400' },
@@ -150,7 +176,7 @@ export default function MonitorDashboardPage() {
     );
   }
 
-  const { patient, adherence, recentLogs } = data;
+  const { patient, adherence, recentLogs, reportSummary } = data;
   const riskCfg = RISK_CONFIG[adherence.riskLevel];
   const RiskIcon = riskCfg.icon;
   const trendCfg = TREND_CONFIG[adherence.weeklyTrend];
@@ -209,6 +235,28 @@ export default function MonitorDashboardPage() {
               <RiskIcon className="w-3.5 h-3.5" />
               {adherence.riskLevel} Risk
             </span>
+          </div>
+        </div>
+
+        {/* Today's Medication Status */}
+        <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-5 h-5 text-green-500" />
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Today&apos;s Medication Status</h2>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Verified', value: `${reportSummary.today.verified} / ${reportSummary.today.scheduled}`, color: 'text-green-600' },
+              { label: 'Missed', value: reportSummary.today.missed, color: 'text-red-600' },
+              { label: 'Late', value: reportSummary.today.late, color: 'text-amber-600' },
+              { label: 'Wrong Chamber', value: reportSummary.today.incorrectChamber, color: 'text-red-600' },
+              { label: 'Weekly Adherence', value: `${adherence.adherenceRate}%`, color: 'text-blue-600' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-border/30 bg-white/60 p-3 text-center dark:bg-gray-800/60">
+                <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                <p className={`mt-1 text-xl font-bold ${item.color}`}>{item.value}</p>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -367,6 +415,11 @@ export default function MonitorDashboardPage() {
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {log.scheduledDate} · {log.scheduledTime}
                         </p>
+                        {(log.expectedChamberId || log.detectedChamberId) && (
+                          <p className="text-[11px] text-gray-400">
+                            Expected {log.expectedChamberId ?? '—'} · Detected {log.detectedChamberId ?? '—'} · {log.source ?? 'system'}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <span className={`text-xs font-semibold ${statusCfg.color}`}>

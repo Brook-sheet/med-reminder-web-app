@@ -1,134 +1,266 @@
-// app/api/sensor/route.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// This endpoint receives data from your physical hardware (pill dispenser,
-// smart pillbox, wearable, etc.).
-//
-// The hardware POSTs JSON like:
-//   { "deviceId": "box-001", "event": "pill_taken", "medicineId": "...",
-//     "userId": "...", "timestamp": "2025-01-15T08:05:00Z" }
-//
-// GET is provided for polling / heartbeat checks.
-// ─────────────────────────────────────────────────────────────────────────────
-import { NextRequest, NextResponse } from 'next/server';
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+import mongoose from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
-import SensorData from '@/models/SensorData';
-import MedicationLog from '@/models/MedicationLog';
+import SensorData, {
+  type ISensorDataDocument,
+} from '@/models/SensorData';
+import { processMedicationEvent } from '@/lib/medicationVerification';
 import type { ApiResponse } from '@/types';
 
-const SENSOR_API_KEY = process.env.SENSOR_API_KEY || 'dev-sensor-key-change-me';
+const SENSOR_API_KEY =
+  process.env.SENSOR_API_KEY ||
+  'dev-sensor-key-change-me';
 
-function authorizeSensor(request: NextRequest): boolean {
-  const key = request.headers.get('x-sensor-key') || request.headers.get('x-api-key');
-  return key === SENSOR_API_KEY;
+function authorized(
+  request: NextRequest
+): boolean {
+  const key =
+    request.headers.get(
+      'x-sensor-key'
+    ) ||
+    request.headers.get(
+      'x-api-key'
+    );
+
+  return (
+    process.env.NODE_ENV !==
+      'production' ||
+    key === SENSOR_API_KEY
+  );
 }
 
-// ── POST /api/sensor ──────────────────────────────────────────────────────────
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    if (!authorizeSensor(request)) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized sensor' }, { status: 401 });
+    if (!authorized(request)) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'Unauthorized sensor',
+        },
+        {
+          status: 401,
+        }
+      );
     }
 
     await connectDB();
-    const body = await request.json();
-    const { deviceId, event, userId, medicineId, medicineName, timestamp, rawData } = body;
+
+    const body =
+      (await request.json()) as Record<
+        string,
+        unknown
+      >;
+
+    const deviceId =
+      typeof body.deviceId === 'string'
+        ? body.deviceId
+        : '';
+
+    const event =
+      typeof body.event === 'string'
+        ? body.event
+        : '';
+
+    const userId =
+      typeof body.userId === 'string'
+        ? body.userId
+        : '';
+
+    const timestamp =
+      typeof body.timestamp === 'string'
+        ? new Date(body.timestamp)
+        : new Date();
 
     if (!deviceId || !event) {
-      return NextResponse.json<ApiResponse>({ success: false, error: 'deviceId and event are required' }, { status: 400 });
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'deviceId and event are required.',
+        },
+        {
+          status: 400,
+        }
+      );
     }
 
-    // ── Save raw sensor record ─────────────────────────────────────────────────
-    const sensorRecord = await SensorData.create({
-      deviceId,
-      event,
-      userId: userId || null,
-      medicineId: medicineId || null,
-      medicineName: medicineName || null,
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
-      rawData: rawData || {},
-      processed: false,
-    });
+    const supportedEvents:
+      ISensorDataDocument['event'][] = [
+        'pill_taken',
+        'pill_dispensed',
+        'container_opened',
+        'heartbeat',
+      ];
 
-    // ── Process "pill_taken" events ───────────────────────────────────────────
-    if (event === 'pill_taken' && userId) {
-      const eventDate = new Date(timestamp || Date.now());
-      const dateStr = eventDate.toISOString().split('T')[0];
-      const eventHour = eventDate.getHours();
-      const eventMin = eventDate.getMinutes();
-      const eventTotal = eventHour * 60 + eventMin;
+    if (
+      !supportedEvents.includes(
+        event as ISensorDataDocument['event']
+      )
+    ) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'event must be pill_taken, pill_dispensed, container_opened, or heartbeat.',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-      // Find the closest pending log within ±90 minutes of event time
-      const pendingLogs = await MedicationLog.find({
-        userId,
-        scheduledDate: dateStr,
-        status: { $in: ['pending', 'reminder'] },
+    if (
+      userId &&
+      !mongoose.isValidObjectId(userId)
+    ) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'userId must be a valid MongoDB ObjectId.',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const sensorEvent =
+      event as ISensorDataDocument['event'];
+
+    const sensorUserId = userId
+      ? new mongoose.mongo.ObjectId(
+          userId
+        )
+      : null;
+
+    const sensorRecord =
+      await SensorData.create({
+        deviceId,
+        event: sensorEvent,
+        userId: sensorUserId,
+        timestamp,
+        rawData:
+          body.rawData || body,
+        processed: false,
       });
 
-      let closestLog = null;
-      let minDiff = Infinity;
+    const sensorRecordId =
+      sensorRecord._id.toString();
 
-      for (const log of pendingLogs) {
-        const match = log.scheduledTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (!match) continue;
-        let h = parseInt(match[1]);
-        const m = parseInt(match[2]);
-        const ampm = match[3].toUpperCase();
-        if (ampm === 'PM' && h !== 12) h += 12;
-        if (ampm === 'AM' && h === 12) h = 0;
-        const logTotal = h * 60 + m;
-        const diff = Math.abs(logTotal - eventTotal);
-        if (diff < minDiff && diff <= 90) {
-          minDiff = diff;
-          closestLog = log;
-        }
-      }
-
-      // If we matched a specific medicine from the sensor
-      let targetLog = closestLog;
-      if (medicineId && !targetLog) {
-        targetLog = await MedicationLog.findOne({
-          userId,
-          medicineId,
-          scheduledDate: dateStr,
-          status: { $in: ['pending', 'reminder'] },
-        });
-      }
-
-      if (targetLog) {
-        await MedicationLog.findByIdAndUpdate(targetLog._id, {
-          status: 'taken',
-          takenAt: eventDate,
-          source: 'sensor',
-          sensorDeviceId: deviceId,
-        });
-
-        await SensorData.findByIdAndUpdate(sensorRecord._id, { processed: true });
-
-        return NextResponse.json<ApiResponse>({
-          success: true,
-          message: 'Pill intake recorded via sensor',
-          data: { logId: targetLog._id, medicineName: targetLog.medicineName },
-        });
-      }
+    if (sensorEvent === 'heartbeat') {
+      return NextResponse.json<ApiResponse>({
+        success: true,
+        message:
+          'Heartbeat received.',
+        data: {
+          sensorId: sensorRecordId,
+        },
+      });
     }
 
-    // Heartbeat / other events — just acknowledge
+    if (!userId) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error:
+            'userId is required for medication events.',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const chamberId =
+      body.chamberId == null
+        ? null
+        : Number(body.chamberId);
+
+    const result =
+      await processMedicationEvent({
+        userId,
+        source: 'sensor',
+        eventType:
+          sensorEvent ===
+          'pill_dispensed'
+            ? 'MISSED'
+            : 'CHAMBER_OPENED',
+        timestamp,
+        chamberId,
+        medicineId:
+          typeof body.medicineId ===
+          'string'
+            ? body.medicineId
+            : null,
+        deviceId,
+      });
+
+    await SensorData.findByIdAndUpdate(
+      sensorRecordId,
+      {
+        processed: result.verified,
+        medicineName:
+          result.medicineName,
+      }
+    );
+
     return NextResponse.json<ApiResponse>({
       success: true,
-      message: `Sensor event "${event}" received`,
-      data: { sensorId: sensorRecord._id },
+      data: result,
+      message: result.message,
     });
   } catch (error) {
-    console.error('[POST /api/sensor]', error);
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Internal server error' }, { status: 500 });
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Internal server error';
+
+    console.error(
+      '[POST /api/sensor]',
+      error
+    );
+
+    return NextResponse.json<ApiResponse>(
+      {
+        success: false,
+        error: message,
+      },
+      {
+        status: 400,
+      }
+    );
   }
 }
 
-// ── GET /api/sensor — heartbeat / status check ────────────────────────────────
-export async function GET(request: NextRequest) {
-  if (!authorizeSensor(request)) {
-    return NextResponse.json<ApiResponse>({ success: false, error: 'Unauthorized sensor' }, { status: 401 });
+export async function GET(
+  request: NextRequest
+) {
+  if (!authorized(request)) {
+    return NextResponse.json<ApiResponse>(
+      {
+        success: false,
+        error:
+          'Unauthorized sensor',
+      },
+      {
+        status: 401,
+      }
+    );
   }
-  return NextResponse.json<ApiResponse>({ success: true, message: 'Sensor API is online', data: { timestamp: new Date() } });
-}
 
+  return NextResponse.json<ApiResponse>({
+    success: true,
+    message:
+      'Sensor API is online.',
+    data: {
+      timestamp: new Date(),
+    },
+  });
+}

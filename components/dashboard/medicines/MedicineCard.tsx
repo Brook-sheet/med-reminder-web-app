@@ -7,6 +7,7 @@ interface MedicineCardProps {
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  chamberId?: number | null;
   startDate?: string;
   endDate?: string;
   notes?: string;
@@ -20,6 +21,7 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
   dosage,
   frequency,
   scheduledTimes,
+  chamberId,
   startDate,
   endDate,
   notes,
@@ -116,6 +118,15 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
           </div>
         </div>
 
+        <div>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+            Dispenser Chamber
+          </p>
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            {chamberId ? `Chamber ${chamberId}` : "Not assigned yet"}
+          </p>
+        </div>
+
         {notes && (
           <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
@@ -148,4 +159,3 @@ const MedicineCard: React.FC<MedicineCardProps> = ({
 };
 
 export default MedicineCard;
-

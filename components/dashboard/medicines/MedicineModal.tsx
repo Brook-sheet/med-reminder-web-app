@@ -53,6 +53,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
   const [dosage, setDosage] = useState("");
   const [frequency, setFrequency] = useState("Once daily");
   const [scheduledTimes, setScheduledTimes] = useState<string[]>(["8:00 AM"]);
+  const [chamberId, setChamberId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -173,6 +174,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       setStartDate(initialData.startDate || today);
       setEndDate(initialData.endDate || "");
       setNotes(initialData.notes || "");
+      setChamberId(initialData.chamberId ? String(initialData.chamberId) : "");
     } else {
       setName("");
       setDosage("");
@@ -181,6 +183,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       setStartDate(today);
       setEndDate("");
       setNotes("");
+      setChamberId("");
     }
     setError("");
   }, [initialData, isOpen, today]);
@@ -262,6 +265,10 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         startDate,
         endDate: endDate || undefined,
         notes,
+        chamberId: chamberId ? Number(chamberId) : null,
+        windowBeforeMinutes: initialData?.windowBeforeMinutes ?? 30,
+        windowAfterMinutes: initialData?.windowAfterMinutes ?? 90,
+        lateAfterMinutes: initialData?.lateAfterMinutes ?? 30,
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save. Please try again.");
@@ -371,6 +378,26 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Dispenser Chamber <span className="text-gray-400 text-xs font-normal">(optional)</span>
+            </label>
+            <select
+              value={chamberId}
+              onChange={(event) => setChamberId(event.target.value)}
+              disabled={saving}
+              className="w-full h-9 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            >
+              <option value="">Not assigned yet</option>
+              <option value="1">Chamber 1</option>
+              <option value="2">Chamber 2</option>
+              <option value="3">Chamber 3</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Optional while the physical dispenser is still under development.
+            </p>
           </div>
 
           <div>

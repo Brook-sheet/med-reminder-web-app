@@ -7,6 +7,10 @@ export interface IMedicineDocument extends Document {
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  chamberId?: number | null;
+  windowBeforeMinutes: number;
+  windowAfterMinutes: number;
+  lateAfterMinutes: number;
   notes: string;
   startDate: string;
   endDate?: string | null;
@@ -45,6 +49,31 @@ const MedicineSchema = new Schema<IMedicineDocument>(
         validator: (times: string[]) => times.length > 0,
         message: 'At least one scheduled time is required',
       },
+    },
+    chamberId: {
+      type: Number,
+      min: 1,
+      max: 3,
+      default: null,
+      index: true,
+    },
+    windowBeforeMinutes: {
+      type: Number,
+      min: 0,
+      max: 720,
+      default: 30,
+    },
+    windowAfterMinutes: {
+      type: Number,
+      min: 0,
+      max: 720,
+      default: 90,
+    },
+    lateAfterMinutes: {
+      type: Number,
+      min: 0,
+      max: 720,
+      default: 30,
     },
     notes: {
       type: String,

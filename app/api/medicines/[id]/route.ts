@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const { id } = await params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid medicine ID' },
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -108,13 +108,18 @@ interface ValidationResult {
 }
 
 function validateMedicinePayload(body: Record<string, unknown>): ValidationResult {
-  const { name, dosage, frequency, scheduledTimes, startDate, endDate } = body as {
+  const { name, dosage, frequency, scheduledTimes, startDate, endDate, chamberId,
+    windowBeforeMinutes, windowAfterMinutes, lateAfterMinutes } = body as {
     name?: unknown;
     dosage?: unknown;
     frequency?: unknown;
     scheduledTimes?: unknown;
     startDate?: unknown;
     endDate?: unknown;
+    chamberId?: unknown;
+    windowBeforeMinutes?: unknown;
+    windowAfterMinutes?: unknown;
+    lateAfterMinutes?: unknown;
   };
 
   // ── name ──────────────────────────────────────────────────────────────
@@ -186,6 +191,27 @@ function validateMedicinePayload(body: Record<string, unknown>): ValidationResul
     }
   }
 
+  if (chamberId !== undefined && chamberId !== null && chamberId !== '') {
+    const chamber = Number(chamberId);
+    if (!Number.isInteger(chamber) || chamber < 1 || chamber > 3) {
+      return { valid: false, error: 'Chamber must be 1, 2, or 3.' };
+    }
+  }
+
+  for (const [field, value] of Object.entries({ windowBeforeMinutes, windowAfterMinutes, lateAfterMinutes })) {
+    if (value !== undefined && value !== null && value !== '') {
+      const minutes = Number(value);
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 720) {
+        return { valid: false, error: `${field} must be a whole number from 0 to 720.` };
+      }
+    }
+  }
+
+  if (lateAfterMinutes !== undefined && windowAfterMinutes !== undefined &&
+      Number(lateAfterMinutes) > Number(windowAfterMinutes)) {
+    return { valid: false, error: 'Late threshold cannot be longer than the after-window.' };
+  }
+
   return { valid: true };
 }
 
@@ -205,7 +231,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid medicine ID' },
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -234,7 +260,8 @@ export async function PUT(
       );
     }
 
-    const { name, dosage, frequency, scheduledTimes, notes, startDate, endDate } = body as {
+    const { name, dosage, frequency, scheduledTimes, notes, startDate, endDate, chamberId,
+      windowBeforeMinutes, windowAfterMinutes, lateAfterMinutes } = body as {
       name: string;
       dosage: string;
       frequency: string;
@@ -242,7 +269,27 @@ export async function PUT(
       notes?: string;
       startDate?: string;
       endDate?: string;
+      chamberId?: number | null;
+      windowBeforeMinutes?: number;
+      windowAfterMinutes?: number;
+      lateAfterMinutes?: number;
     };
+
+    const normalizedChamberId = chamberId == null ? null : Number(chamberId);
+    if (normalizedChamberId !== null) {
+      const chamberConflict = await Medicine.exists({
+        _id: { $ne: id },
+        userId: user.userId,
+        isActive: true,
+        chamberId: normalizedChamberId,
+      });
+      if (chamberConflict) {
+        return NextResponse.json<ApiResponse>(
+          { success: false, error: `Chamber ${normalizedChamberId} is already assigned to another active medicine.` },
+          { status: 409 },
+        );
+      }
+    }
 
     const medicine = await Medicine.findOneAndUpdate(
       { _id: id, userId: user.userId },
@@ -251,6 +298,10 @@ export async function PUT(
         dosage: dosage.trim(),
         frequency,
         scheduledTimes: (scheduledTimes as string[]).map((t) => t.trim()),
+        chamberId: normalizedChamberId,
+        windowBeforeMinutes: windowBeforeMinutes ?? 30,
+        windowAfterMinutes: windowAfterMinutes ?? 90,
+        lateAfterMinutes: lateAfterMinutes ?? 30,
         startDate: startDate && startDate.trim() ? startDate.trim() : undefined,
         endDate: endDate && endDate.trim() ? endDate.trim() : null,
         notes: typeof notes === 'string' ? notes.trim().slice(0, 500) : '',
@@ -288,6 +339,13 @@ export async function PUT(
           scheduledTime: time.trim(),
           status: 'pending',
           source: 'auto',
+          eventType: 'SCHEDULED',
+          expectedChamberId: medicine.chamberId ?? null,
+          expectedChamberIds: medicine.chamberId ? [medicine.chamberId] : [],
+          windowBeforeMinutes: medicine.windowBeforeMinutes,
+          windowAfterMinutes: medicine.windowAfterMinutes,
+          lateAfterMinutes: medicine.lateAfterMinutes,
+          countsTowardAdherence: true,
         });
       }
     } catch (logErr) {
@@ -328,7 +386,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         { success: false, error: 'Invalid medicine ID' },
         { status: 400, headers: { 'Content-Type': 'application/json' } }

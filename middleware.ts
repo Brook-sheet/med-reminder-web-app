@@ -35,6 +35,7 @@ const PUBLIC_API_ROUTES = [
   '/api/sensor',
   '/api/esp32',
   '/api/hardware',
+  '/api/medication-events',
 ];
 
 function isPublicApi(pathname: string) {

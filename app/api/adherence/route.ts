@@ -45,13 +45,17 @@ export async function GET(request: NextRequest) {
       | 'High'
       | undefined;
 
-    const allLogs = await MedicationLog.find({ userId: user.userId }).lean();
+    const allLogs = await MedicationLog.find({
+      userId: user.userId,
+      countsTowardAdherence: { $ne: false },
+    }).lean();
 
     const rawLogs: RawLog[] = allLogs.map((l) => ({
       status: String(l.status),
       scheduledDate: String(l.scheduledDate),
       scheduledTime: String(l.scheduledTime),
       takenAt: l.takenAt ?? null,
+      countsTowardAdherence: l.countsTowardAdherence !== false,
     }));
 
     // Full adherence analysis (Rule-Based + Random Forest)
@@ -60,7 +64,7 @@ export async function GET(request: NextRequest) {
       analysis;
 
     const totalScheduled = allLogs.length;
-    const totalTaken = allLogs.filter((l) => l.status === 'taken').length;
+    const totalTaken = allLogs.filter((l) => ['taken', 'late'].includes(l.status)).length;
     const totalMissed = features.missedDoses;
 
     // Adaptive Intervention Engine
