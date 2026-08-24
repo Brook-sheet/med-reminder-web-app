@@ -1,58 +1,72 @@
 import {
   NextRequest,
   NextResponse,
-} from 'next/server';
-import { jwtVerify } from 'jose';
+} from "next/server";
+import { jwtVerify } from "jose";
 
-export const runtime =
-  'experimental-edge';
+export const runtime = "experimental-edge";
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ||
-    'fallback-secret-change-this-in-production-min-32'
+    "fallback-secret-change-this-in-production-min-32"
 );
 
 const PUBLIC_ROUTES = [
-  '/sign-in',
-  '/sign-up',
-  '/forgot-password',
-  '/reset-password',
-  '/auth/google/callback',
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/auth/google/callback",
 ];
 
 const AUTH_ONLY_ROUTES = [
-  '/sign-in',
-  '/sign-up',
+  "/sign-in",
+  "/sign-up",
 ];
 
 const PUBLIC_API_ROUTES = [
-  '/api/auth',
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/forgot-password',
-  '/api/auth/verify-reset-code',
-  '/api/auth/reset-password',
-  '/api/sensor',
-  '/api/esp32',
-  '/api/hardware',
-  '/api/medication-events',
+  "/api/auth",
+  "/api/sensor",
+  "/api/esp32",
+  "/api/hardware",
+  "/api/medication-events",
 ];
 
 function isPublicApi(pathname: string) {
-  return PUBLIC_API_ROUTES.some(
-    (route) =>
-      pathname.startsWith(route)
+  return PUBLIC_API_ROUTES.some((route) =>
+    pathname.startsWith(route)
   );
 }
 
-async function verifyToken(
-  token: string
-) {
+function getRequestToken(request: NextRequest) {
+  const cookieToken =
+    request.cookies.get("med_auth_token")?.value;
+
+  if (cookieToken) {
+    return cookieToken;
+  }
+
+  const authorization =
+    request.headers.get("authorization");
+
+  if (
+    authorization &&
+    authorization.toLowerCase().startsWith("bearer ")
+  ) {
+    return authorization.slice(7).trim();
+  }
+
+  return null;
+}
+
+async function verifyToken(token: string) {
   try {
-    const { payload } = await jwtVerify(
-      token,
-      SECRET
-    );
+    const { payload } = await jwtVerify(token, SECRET);
+
+    if (payload.emailVerified !== true) {
+      return null;
+    }
 
     return payload;
   } catch {
@@ -60,46 +74,53 @@ async function verifyToken(
   }
 }
 
-function forbidden(
-  request: NextRequest,
-  role: 'patient' | 'family'
-) {
-  if (
-    request.nextUrl.pathname.startsWith(
-      '/api/'
-    )
-  ) {
+function unauthorized(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          'Forbidden for this account role.',
+        error: "Unauthorized",
       },
+      { status: 401 }
+    );
+  }
+
+  const signInUrl = new URL("/sign-in", request.url);
+
+  signInUrl.searchParams.set(
+    "from",
+    request.nextUrl.pathname
+  );
+
+  return NextResponse.redirect(signInUrl);
+}
+
+function forbidden(
+  request: NextRequest,
+  role: "patient" | "family"
+) {
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
       {
-        status: 403,
-      }
+        success: false,
+        error: "Forbidden for this account role.",
+      },
+      { status: 403 }
     );
   }
 
   return NextResponse.redirect(
-    new URL(
-      role === 'family'
-        ? '/monitor'
-        : '/',
-      request.url
-    )
+    new URL(role === "family" ? "/monitor" : "/", request.url)
   );
 }
 
-export async function middleware(
-  request: NextRequest
-) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon') ||
-    pathname.includes('.')
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.includes(".")
   ) {
     return NextResponse.next();
   }
@@ -108,100 +129,72 @@ export async function middleware(
     return NextResponse.next();
   }
 
-  const token =
-    request.cookies.get(
-      'med_auth_token'
-    )?.value;
+  const token = getRequestToken(request);
+  const user = token ? await verifyToken(token) : null;
 
-  const user = token
-    ? await verifyToken(token)
-    : null;
+  const isPublicPage = PUBLIC_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
 
-  const isPublicPage =
-    PUBLIC_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
-
-  const isAuthOnlyPage =
-    AUTH_ONLY_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
+  const isAuthOnlyPage = AUTH_ONLY_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
 
   if (user && isAuthOnlyPage) {
+    const role =
+      user.role === "family" ? "family" : "patient";
+
     return NextResponse.redirect(
-      new URL('/', request.url)
+      new URL(role === "family" ? "/monitor" : "/", request.url)
     );
   }
 
   if (!user && !isPublicPage) {
-    const signInUrl = new URL(
-      '/sign-in',
-      request.url
-    );
-
-    signInUrl.searchParams.set(
-      'from',
-      pathname
-    );
-
-    return NextResponse.redirect(
-      signInUrl
-    );
+    return unauthorized(request);
   }
 
-  if (user) {
-    const role =
-      user.role === 'family'
-        ? 'family'
-        : 'patient';
+  if (!user) {
+    return NextResponse.next();
+  }
 
-    const patientOnlyPages =
-      pathname === '/' ||
-      pathname.startsWith(
-        '/medicines'
-      ) ||
-      pathname.startsWith(
-        '/history'
-      );
+  const role: "patient" | "family" =
+    user.role === "family" ? "family" : "patient";
 
-    const familyOnlyPages =
-      pathname.startsWith(
-        '/monitor'
-      );
+  const patientOnlyPages =
+    pathname === "/" ||
+    pathname.startsWith("/medicines") ||
+    pathname.startsWith("/history");
 
-    const patientOnlyApis = [
-      '/api/dashboard',
-      '/api/medicines',
-      '/api/history',
-      '/api/adherence',
-      '/api/upcoming',
-      '/api/food-monitoring',
-    ].some((prefix) =>
-      pathname.startsWith(prefix)
-    );
+  const familyOnlyPages =
+    pathname.startsWith("/monitor") ||
+    pathname.startsWith("/alerts");
 
-    if (
-      role === 'family' &&
-      (
-        patientOnlyPages ||
-        patientOnlyApis
-      )
-    ) {
-      return forbidden(
-        request,
-        role
-      );
-    }
+  const patientOnlyApis = [
+    "/api/dashboard",
+    "/api/medicines",
+    "/api/history",
+    "/api/adherence",
+    "/api/upcoming",
+    "/api/food-monitoring",
+  ].some((prefix) => pathname.startsWith(prefix));
 
-    if (
-      role === 'patient' &&
-      familyOnlyPages
-    ) {
-      return forbidden(
-        request,
-        role
-      );
-    }
+  const familyOnlyApis = [
+    "/api/alerts",
+    "/api/patient/monitor/",
+  ].some((prefix) => pathname.startsWith(prefix));
+
+  if (
+    role === "family" &&
+    (patientOnlyPages || patientOnlyApis)
+  ) {
+    return forbidden(request, role);
+  }
+
+  if (
+    role === "patient" &&
+    (familyOnlyPages || familyOnlyApis)
+  ) {
+    return forbidden(request, role);
   }
 
   return NextResponse.next();
@@ -209,6 +202,6 @@ export async function middleware(
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

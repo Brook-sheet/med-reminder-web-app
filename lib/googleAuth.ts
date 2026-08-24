@@ -5,6 +5,7 @@ import {
 import {
   createRemoteJWKSet,
   jwtVerify,
+  type JWTPayload,
 } from "jose";
 
 const GOOGLE_AUTHORIZATION_ENDPOINT =
@@ -54,6 +55,49 @@ function requireEnvironmentVariable(
   }
 
   return value;
+}
+
+function googlePayloadToIdentity(
+  payload: JWTPayload
+): GoogleIdentity {
+  if (
+    typeof payload.sub !== "string" ||
+    typeof payload.email !== "string" ||
+    payload.email_verified !== true
+  ) {
+    throw new Error(
+      "Google did not provide a verified email identity."
+    );
+  }
+
+  const fullName =
+    typeof payload.name === "string"
+      ? payload.name.trim()
+      : "";
+
+  const nameParts = fullName
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const firstName =
+    typeof payload.given_name === "string"
+      ? payload.given_name.trim()
+      : nameParts[0] || "Google";
+
+  const lastName =
+    typeof payload.family_name === "string"
+      ? payload.family_name.trim()
+      : nameParts.slice(1).join(" ") ||
+        "User";
+
+  return {
+    subject: payload.sub,
+    email: payload.email
+      .trim()
+      .toLowerCase(),
+    firstName,
+    lastName,
+  };
 }
 
 export function isGoogleAuthConfigured(): boolean {
@@ -156,6 +200,37 @@ export function createGoogleAuthorizationRequest(
   };
 }
 
+export async function verifyGoogleIdToken(
+  idToken: string
+): Promise<GoogleIdentity> {
+  const token = idToken.trim();
+
+  if (!token) {
+    throw new Error(
+      "Google ID token is required."
+    );
+  }
+
+  const clientId =
+    requireEnvironmentVariable(
+      "GOOGLE_CLIENT_ID"
+    );
+
+  const { payload } = await jwtVerify(
+    token,
+    GOOGLE_JWKS,
+    {
+      audience: clientId,
+      issuer: [
+        "https://accounts.google.com",
+        "accounts.google.com",
+      ],
+    }
+  );
+
+  return googlePayloadToIdentity(payload);
+}
+
 export async function exchangeGoogleCodeForIdentity(
   params: {
     code: string;
@@ -240,42 +315,5 @@ export async function exchangeGoogleCodeForIdentity(
     );
   }
 
-  if (
-    typeof payload.sub !== "string" ||
-    typeof payload.email !== "string" ||
-    payload.email_verified !== true
-  ) {
-    throw new Error(
-      "Google did not provide a verified email identity."
-    );
-  }
-
-  const fullName =
-    typeof payload.name === "string"
-      ? payload.name.trim()
-      : "";
-
-  const nameParts = fullName
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const firstName =
-    typeof payload.given_name === "string"
-      ? payload.given_name.trim()
-      : nameParts[0] || "Google";
-
-  const lastName =
-    typeof payload.family_name === "string"
-      ? payload.family_name.trim()
-      : nameParts.slice(1).join(" ") ||
-        "User";
-
-  return {
-    subject: payload.sub,
-    email: payload.email
-      .trim()
-      .toLowerCase(),
-    firstName,
-    lastName,
-  };
+  return googlePayloadToIdentity(payload);
 }
