@@ -101,6 +101,15 @@ export async function getApprovedConversationIdsForUser(
   }).distinct('_id');
 }
 
+export async function getApprovedPatientIdsForMonitor(
+  monitorId: string | mongoose.Types.ObjectId
+) {
+  return MonitoringRequest.find({
+    familyId: monitorId,
+    status: 'approved',
+  }).distinct('patientId');
+}
+
 export async function ensureApprovedConversation(
   patientId: string,
   familyId: string

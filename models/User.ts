@@ -26,6 +26,12 @@ export interface IUser
   isDeleted?: boolean;
   dataResetAt?: Date;
   lastRiskLevel?: string;
+  notificationPreferences?: {
+    inApp: boolean;
+    push: boolean;
+    sms: boolean;
+    smsPhoneNumber?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -161,6 +167,27 @@ const UserSchema =
           "High",
         ],
         default: null,
+      },
+
+      notificationPreferences: {
+        inApp: {
+          type: Boolean,
+          default: true,
+        },
+        push: {
+          type: Boolean,
+          default: true,
+        },
+        sms: {
+          type: Boolean,
+          default: false,
+        },
+        smsPhoneNumber: {
+          type: String,
+          default: '',
+          trim: true,
+          select: false,
+        },
       },
     },
     {

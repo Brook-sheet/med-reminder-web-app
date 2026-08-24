@@ -7,6 +7,7 @@ import Notification from '@/models/Notification';
 import FoodLog from '@/models/FoodLog';
 import PushSubscription from '@/models/PushSubscription';
 import SensorData from '@/models/SensorData';
+import Alert from '@/models/Alert';
 import { getTokenFromRequest, verifyToken, COOKIE_OPTIONS } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -36,6 +37,12 @@ export async function DELETE(request: NextRequest) {
       FoodLog.deleteMany({ userId: user.userId }),
       SensorData.deleteMany({ userId: user.userId }),
       PushSubscription.deleteMany({ userId: user.userId }),
+      Alert.deleteMany({
+        $or: [
+          { patientId: user.userId },
+          { monitorId: user.userId },
+        ],
+      }),
     ]);
 
     // Finally delete the user account itself

@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
     data = { title: 'Medication Reminder', body: event.data.text() };
   }
 
-  const { title, body, type, riskLevel, medicineName } = data;
+  const { title, body, type, riskLevel, severity, medicineName, alertId, url } = data;
 
   // Configure notification appearance based on type
   let icon = '/favicon.ico';
@@ -59,6 +59,17 @@ self.addEventListener('push', (event) => {
       ];
       break;
 
+    case 'medication_alert':
+      requireInteraction = severity === 'CRITICAL';
+      vibrate = severity === 'CRITICAL'
+        ? [300, 100, 300, 100, 300]
+        : [200, 100, 200];
+      actions = [
+        { action: 'view', title: 'View Alert' },
+        { action: 'dismiss', title: 'Dismiss' },
+      ];
+      break;
+
     default:
       vibrate = [200];
       actions = [
@@ -77,9 +88,11 @@ self.addEventListener('push', (event) => {
     requireInteraction,
     vibrate,
     data: {
-      url: '/',
+      url: url || (type === 'medication_alert' ? '/alerts' : '/'),
       type,
       riskLevel,
+      severity,
+      alertId,
       medicineName,
       timestamp: Date.now(),
     },
@@ -142,7 +155,7 @@ self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', () => {
+self.addEventListener('activate', (event) => {
   console.log('[SW] Activating...');
   event.waitUntil(clients.claim());
 });

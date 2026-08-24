@@ -16,7 +16,7 @@ import {
   CiMonitor,
 } from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
-import { MessageCircle } from "lucide-react";
+import { Bell, MessageCircle } from "lucide-react";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useMonitoringRequestCount } from "@/hooks/useMonitoringRequestCount";
 
@@ -132,6 +132,23 @@ const Navbar = ({ role }: NavbarProps) => {
 
                 <span className="font-semibold">
                   Patient Monitoring
+                </span>
+              </Link>
+            )}
+
+            {role === "family" && (
+              <Link
+                href="/alerts"
+                onClick={closeSidebar}
+                className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
+                  pathname === "/alerts"
+                    ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
+                    : ""
+                }`}
+              >
+                <Bell className="h-6 w-6" />
+                <span className="font-semibold">
+                  Medication Alerts
                 </span>
               </Link>
             )}

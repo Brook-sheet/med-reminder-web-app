@@ -1,6 +1,7 @@
 import Navbar from "@/components/navbar";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import NotificationManager from "@/components/notifications/NotificationManager";
+import AlertBell from "@/components/alerts/AlertBell";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -31,6 +32,10 @@ export default async function MainLayout({
 
       {user.role === "patient" && (
         <NotificationBell />
+      )}
+
+      {user.role === "family" && (
+        <AlertBell />
       )}
     </div>
   );

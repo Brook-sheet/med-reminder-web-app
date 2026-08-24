@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
-import User from '@/models/User';
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import Notification from '@/models/Notification';
 import SensorData from '@/models/SensorData';
+import Alert from '@/models/Alert';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 
@@ -32,6 +32,12 @@ export async function POST(request: NextRequest) {
       MedicationLog.deleteMany({ userId: user.userId }),
       Notification.deleteMany({ userId: user.userId }),
       SensorData.deleteMany({ userId: user.userId }),
+      Alert.deleteMany({
+        $or: [
+          { patientId: user.userId },
+          { monitorId: user.userId },
+        ],
+      }),
     ]);
 
     return NextResponse.json<ApiResponse>({
