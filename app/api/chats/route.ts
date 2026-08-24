@@ -1,40 +1,112 @@
+import mongoose from "mongoose";
 import {
   NextRequest,
   NextResponse,
 } from "next/server";
-import mongoose from "mongoose";
-import { connectDB } from "@/lib/mongodb";
-import Conversation from "@/models/Conversation";
-import Message from "@/models/Message";
-import User from "@/models/User";
-import MonitoringRequest from "@/models/MonitoringRequest";
-import ChatRequest from "@/models/ChatRequest";
-import Notification from "@/models/Notification";
+
 import {
   getTokenFromRequest,
   verifyToken,
 } from "@/lib/auth";
-import type { ApiResponse } from "@/lib/interfaces/data/Api";
-import type { ConversationSummary } from "@/lib/interfaces/data/Chat";
+
 import {
   findPairConversation,
   isConversationActiveForPair,
   makeParticipantKey,
 } from "@/lib/chatRelationship";
 
+import type {
+  ConversationSummary,
+} from "@/lib/interfaces/data/Chat";
+
+import type {
+  ApiResponse,
+} from "@/lib/interfaces/data/Api";
+
+import {
+  connectDB,
+} from "@/lib/mongodb";
+
+import {
+  sendWebPushToUser,
+} from "@/lib/notificationChannels";
+
+import ChatRequest from "@/models/ChatRequest";
+import Conversation from "@/models/Conversation";
+import Message from "@/models/Message";
+import MonitoringRequest from "@/models/MonitoringRequest";
+import Notification from "@/models/Notification";
+import User from "@/models/User";
+
 const TYPING_TTL_MS = 6000;
+
+interface ChatTargetUser {
+  _id: mongoose.Types.ObjectId;
+  firstName?: string;
+  lastName?: string;
+  patientId?: string;
+  familyId?: string;
+  role: "patient" | "family";
+  isDeleted?: boolean;
+
+  notificationPreferences?: {
+    inApp?: boolean;
+    push?: boolean;
+    sms?: boolean;
+    smsPhoneNumber?: string;
+  };
+}
 
 async function getAuthUser(
   request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(request);
+    getTokenFromRequest(
+      request
+    );
 
-  if (!token) {
-    return null;
+  return token
+    ? verifyToken(token)
+    : null;
+}
+
+async function sendChatRequestPush(
+  userId: string,
+  pushEnabled: boolean,
+  payload: Parameters<
+    typeof sendWebPushToUser
+  >[1]
+): Promise<void> {
+  if (!pushEnabled) {
+    return;
   }
 
-  return verifyToken(token);
+  try {
+    const result =
+      await sendWebPushToUser(
+        userId,
+        payload
+      );
+
+    if (
+      result.status ===
+      "FAILED"
+    ) {
+      console.warn(
+        "[Chat Request Push] Delivery failed:",
+        result.error
+      );
+    }
+  } catch (error) {
+    /*
+     * Push failure must not cancel an already-created
+     * Message Request.
+     */
+    console.warn(
+      "[Chat Request Push] Unexpected delivery error:",
+      error
+    );
+  }
 }
 
 export async function GET(
@@ -42,7 +114,9 @@ export async function GET(
 ) {
   try {
     const auth =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
@@ -60,9 +134,12 @@ export async function GET(
 
     const conversations =
       await Conversation.find({
-        participants: auth.userId,
+        participants:
+          auth.userId,
+
         deletedFor: {
-          $ne: auth.userId,
+          $ne:
+            auth.userId,
         },
       })
         .sort({
@@ -75,21 +152,27 @@ export async function GET(
         )
         .lean();
 
-    const now = Date.now();
+    const now =
+      Date.now();
 
     const summaries:
       ConversationSummary[] =
       await Promise.all(
         conversations.map(
-          async (conversation) => {
+          async (
+            conversation
+          ) => {
             type PopulatedUser = {
               _id: {
-                toString(): string;
+                toString():
+                  string;
               };
+
               firstName?: string;
               lastName?: string;
               patientId?: string;
               familyId?: string;
+
               role?:
                 | "patient"
                 | "family";
@@ -100,7 +183,9 @@ export async function GET(
 
             const other =
               participants.find(
-                (participant) =>
+                (
+                  participant
+                ) =>
                   participant._id.toString() !==
                   auth.userId
               );
@@ -119,11 +204,12 @@ export async function GET(
                 auth.userId
               ];
 
-            const fallbackName = other
-              ? `${other.firstName ?? ""} ${
-                  other.lastName ?? ""
-                }`.trim()
-              : "Unknown user";
+            const fallbackName =
+              other
+                ? `${other.firstName ?? ""} ${
+                    other.lastName ?? ""
+                  }`.trim()
+                : "Unknown user";
 
             const contactAvatars =
               conversation.contactAvatars as unknown as Record<
@@ -144,15 +230,19 @@ export async function GET(
                 {
                   conversationId:
                     conversation._id,
+
                   recipientId:
                     auth.userId,
+
                   status: {
-                    $ne: "read",
+                    $ne:
+                      "read",
                   },
                 }
               );
 
-            let isTyping = false;
+            let isTyping =
+              false;
 
             if (other) {
               const typingMap =
@@ -171,7 +261,8 @@ export async function GET(
                 other._id.toString();
 
               const rawTimestamp =
-                typingMap instanceof Map
+                typingMap instanceof
+                Map
                   ? typingMap.get(
                       otherId
                     )
@@ -179,14 +270,17 @@ export async function GET(
                       otherId
                     ];
 
-              if (rawTimestamp) {
+              if (
+                rawTimestamp
+              ) {
                 const timestamp =
                   new Date(
                     rawTimestamp
                   ).getTime();
 
                 isTyping =
-                  now - timestamp <
+                  now -
+                    timestamp <
                   TYPING_TTL_MS;
               }
             }
@@ -206,9 +300,12 @@ export async function GET(
                   "Unknown user",
 
                 identifier:
-                  other?.role === "family"
-                    ? other.familyId ?? ""
-                    : other?.patientId ?? "",
+                  other?.role ===
+                  "family"
+                    ? other.familyId ??
+                      ""
+                    : other?.patientId ??
+                      "",
 
                 role:
                   other?.role ??
@@ -253,12 +350,18 @@ export async function GET(
       );
 
     const normalized =
-      summaries.map((summary) => ({
-        ...summary,
-        updatedAt: new Date(
-          summary.updatedAt
-        ).toISOString(),
-      }));
+      summaries.map(
+        (
+          summary
+        ) => ({
+          ...summary,
+
+          updatedAt:
+            new Date(
+              summary.updatedAt
+            ).toISOString(),
+        })
+      );
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -288,7 +391,9 @@ export async function POST(
 ) {
   try {
     const auth =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
@@ -302,24 +407,51 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body =
+      await request
+        .json()
+        .catch(
+          () => ({})
+        );
+
     const identifier =
-      typeof body.identifier === "string"
-        ? body.identifier.trim().toUpperCase()
-        : "";
-    const monitoringRequestId =
-      typeof body.monitoringRequestId === "string"
-        ? body.monitoringRequestId.trim()
-        : "";
-    const contactName =
-      typeof body.contactName === "string"
-        ? body.contactName.trim().slice(0, 80)
+      typeof body.identifier ===
+      "string"
+        ? body.identifier
+            .trim()
+            .toUpperCase()
         : "";
 
-    if (!identifier && !monitoringRequestId) {
+    const monitoringRequestId =
+      typeof body.monitoringRequestId ===
+      "string"
+        ? body.monitoringRequestId.trim()
+        : "";
+
+    const contactName =
+      typeof body.contactName ===
+      "string"
+        ? body.contactName
+            .trim()
+            .slice(
+              0,
+              80
+            )
+        : "";
+
+    if (
+      !identifier &&
+      !monitoringRequestId
+    ) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: "An account ID is required." },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            "An account ID is required.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
@@ -328,9 +460,14 @@ export async function POST(
     const currentUser =
       await User.findById(
         auth.userId
-      ).select("role patientId familyId firstName lastName isDeleted");
+      ).select(
+        "role patientId familyId firstName lastName isDeleted"
+      );
 
-    if (!currentUser || currentUser.isDeleted) {
+    if (
+      !currentUser ||
+      currentUser.isDeleted
+    ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -342,67 +479,150 @@ export async function POST(
       );
     }
 
-    let targetUser = null;
+    let targetUser:
+      | ChatTargetUser
+      | null = null;
 
-    if (monitoringRequestId) {
-      if (!mongoose.Types.ObjectId.isValid(monitoringRequestId)) {
+    if (
+      monitoringRequestId
+    ) {
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          monitoringRequestId
+        )
+      ) {
         return NextResponse.json<ApiResponse>(
-          { success: false, error: "Invalid monitoring request ID." },
-          { status: 400 }
+          {
+            success: false,
+            error:
+              "Invalid monitoring request ID.",
+          },
+          {
+            status: 400,
+          }
         );
       }
 
-      const monitoring = await MonitoringRequest.findOne({
-        _id: monitoringRequestId,
-        status: "approved",
-        $or: [
-          { patientId: currentUser._id },
-          { familyId: currentUser._id },
-        ],
-      }).lean();
+      const monitoring =
+        await MonitoringRequest.findOne(
+          {
+            _id:
+              monitoringRequestId,
+
+            status:
+              "approved",
+
+            $or: [
+              {
+                patientId:
+                  currentUser._id,
+              },
+              {
+                familyId:
+                  currentUser._id,
+              },
+            ],
+          }
+        ).lean();
 
       if (!monitoring) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: "An approved monitoring relationship is required for this action.",
+            error:
+              "An approved monitoring relationship is required for this action.",
           },
-          { status: 403 }
+          {
+            status: 403,
+          }
         );
       }
 
       const targetId =
-        monitoring.patientId.toString() === currentUser._id.toString()
+        monitoring.patientId.toString() ===
+        currentUser._id.toString()
           ? monitoring.familyId
           : monitoring.patientId;
 
-      targetUser = await User.findById(targetId).select(
-        "_id firstName lastName patientId familyId role isDeleted"
-      );
-    } else {
-      const isPatient = currentUser.role === "patient";
-      const expectedPrefix = isPatient ? "FM-" : "PT-";
+      const foundTarget =
+        await User.findById(
+          targetId
+        )
+          .select(
+            "_id firstName lastName patientId familyId role isDeleted notificationPreferences"
+          )
+          .lean();
 
-      if (!identifier.startsWith(expectedPrefix)) {
+      targetUser =
+        foundTarget as unknown as
+          | ChatTargetUser
+          | null;
+    } else {
+      const isPatient =
+        currentUser.role ===
+        "patient";
+
+      const expectedPrefix =
+        isPatient
+          ? "FM-"
+          : "PT-";
+
+      if (
+        !identifier.startsWith(
+          expectedPrefix
+        )
+      ) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: isPatient
-              ? "Enter a valid Family ID beginning with FM-."
-              : "Enter a valid Patient ID beginning with PT-.",
+
+            error:
+              isPatient
+                ? "Enter a valid Family ID beginning with FM-."
+                : "Enter a valid Patient ID beginning with PT-.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      targetUser = await User.findOne({
-        ...(isPatient ? { familyId: identifier } : { patientId: identifier }),
-        role: isPatient ? "family" : "patient",
-        isDeleted: { $ne: true },
-      }).select("_id firstName lastName patientId familyId role isDeleted");
+      const foundTarget =
+        await User.findOne({
+          ...(isPatient
+            ? {
+                familyId:
+                  identifier,
+              }
+            : {
+                patientId:
+                  identifier,
+              }),
+
+          role:
+            isPatient
+              ? "family"
+              : "patient",
+
+          isDeleted: {
+            $ne: true,
+          },
+        })
+          .select(
+            "_id firstName lastName patientId familyId role isDeleted notificationPreferences"
+          )
+          .lean();
+
+      targetUser =
+        foundTarget as unknown as
+          | ChatTargetUser
+          | null;
     }
 
-    if (!targetUser || targetUser.isDeleted) {
+    if (
+      !targetUser ||
+      targetUser.isDeleted
+    ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
@@ -415,25 +635,58 @@ export async function POST(
       );
     }
 
-    if (targetUser._id.toString() === currentUser._id.toString()) {
+    if (
+      targetUser._id.toString() ===
+      currentUser._id.toString()
+    ) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: "You cannot send a Message Request to yourself." },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            "You cannot send a Message Request to yourself.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    if (targetUser.role === currentUser.role) {
+    if (
+      targetUser.role ===
+      currentUser.role
+    ) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: "Chat requests are available only between Patient and Family accounts." },
-        { status: 403 }
+        {
+          success: false,
+          error:
+            "Chat requests are available only between Patient and Family accounts.",
+        },
+        {
+          status: 403,
+        }
       );
     }
 
-    const pairKey = makeParticipantKey(currentUser._id, targetUser._id);
-    let chatRequest = await ChatRequest.findOne({ pairKey });
+    const pairKey =
+      makeParticipantKey(
+        currentUser._id,
+        targetUser._id
+      );
 
-    if (chatRequest?.status === "accepted") {
-      const conversation = await findPairConversation(currentUser._id, targetUser._id);
+    let chatRequest =
+      await ChatRequest.findOne({
+        pairKey,
+      });
+
+    if (
+      chatRequest?.status ===
+      "accepted"
+    ) {
+      const conversation =
+        await findPairConversation(
+          currentUser._id,
+          targetUser._id
+        );
 
       if (
         isConversationActiveForPair(
@@ -445,87 +698,209 @@ export async function POST(
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-            error: "This person is already an accepted Chat contact.",
+            error:
+              "This person is already an accepted Chat contact.",
+
             data: {
-              status: "accepted",
-              conversationId: conversation?._id.toString() ?? null,
+              status:
+                "accepted",
+
+              conversationId:
+                conversation?._id.toString() ??
+                null,
             },
           },
-          { status: 409 }
+          {
+            status: 409,
+          }
         );
       }
     }
 
-    if (chatRequest?.status === "pending") {
+    if (
+      chatRequest?.status ===
+      "pending"
+    ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: "A Message Request is already pending between these accounts.",
-          data: { status: "pending", requestId: chatRequest._id.toString() },
+          error:
+            "A Message Request is already pending between these accounts.",
+
+          data: {
+            status:
+              "pending",
+
+            requestId:
+              chatRequest._id.toString(),
+          },
         },
-        { status: 409 }
+        {
+          status: 409,
+        }
       );
     }
 
     if (chatRequest) {
-      chatRequest.requesterId = currentUser._id;
-      chatRequest.recipientId = targetUser._id;
-      chatRequest.status = "pending";
-      chatRequest.respondedAt = null;
-      chatRequest.requestedContactName = contactName;
+      chatRequest.requesterId =
+        currentUser._id;
+
+      chatRequest.recipientId =
+        targetUser._id;
+
+      chatRequest.status =
+        "pending";
+
+      chatRequest.respondedAt =
+        null;
+
+      chatRequest.requestedContactName =
+        contactName;
+
       await chatRequest.save();
     } else {
       try {
-        chatRequest = await ChatRequest.create({
-          requesterId: currentUser._id,
-          recipientId: targetUser._id,
-          pairKey,
-          status: "pending",
-          requestedContactName: contactName,
-        });
+        chatRequest =
+          await ChatRequest.create({
+            requesterId:
+              currentUser._id,
+
+            recipientId:
+              targetUser._id,
+
+            pairKey,
+
+            status:
+              "pending",
+
+            requestedContactName:
+              contactName,
+          });
       } catch (error: unknown) {
         if (
           error &&
-          typeof error === "object" &&
+          typeof error ===
+            "object" &&
           "code" in error &&
-          Number((error as { code?: unknown }).code) === 11000
+          Number(
+            (
+              error as {
+                code?: unknown;
+              }
+            ).code
+          ) ===
+            11000
         ) {
           return NextResponse.json<ApiResponse>(
-            { success: false, error: "A Message Request already exists between these accounts." },
-            { status: 409 }
+            {
+              success: false,
+              error:
+                "A Message Request already exists between these accounts.",
+            },
+            {
+              status: 409,
+            }
           );
         }
+
         throw error;
       }
     }
 
     await Notification.deleteMany({
-      userId: targetUser._id,
-      type: "chat_request",
-      chatRequestId: chatRequest._id,
+      userId:
+        targetUser._id,
+
+      type:
+        "chat_request",
+
+      chatRequestId:
+        chatRequest._id,
     });
 
     const senderName =
-      `${currentUser.firstName ?? ""} ${currentUser.lastName ?? ""}`.trim() ||
+      `${currentUser.firstName ?? ""} ${
+        currentUser.lastName ?? ""
+      }`.trim() ||
       "A user";
 
+    const notificationTitle =
+      "New Message Request";
+
+    const notificationMessage =
+      `${senderName} wants to connect with you through Chat.`;
+
     await Notification.create({
-      userId: targetUser._id,
-      type: "chat_request",
-      title: "New Message Request",
-      message: `${senderName} wants to connect with you through Chat.`,
-      chatRequestId: chatRequest._id,
-      read: false,
+      userId:
+        targetUser._id,
+
+      type:
+        "chat_request",
+
+      title:
+        notificationTitle,
+
+      message:
+        notificationMessage,
+
+      screen:
+        "chats",
+
+      url:
+        "/chats",
+
+      chatRequestId:
+        chatRequest._id,
+
+      read:
+        false,
     });
+
+    await sendChatRequestPush(
+      targetUser._id.toString(),
+
+      targetUser
+        .notificationPreferences
+        ?.push !== false,
+
+      {
+        title:
+          notificationTitle,
+
+        body:
+          notificationMessage,
+
+        type:
+          "chat_request",
+
+        screen:
+          "chats",
+
+        url:
+          "/chats",
+
+        requestId:
+          chatRequest._id.toString(),
+
+        chatRequestId:
+          chatRequest._id.toString(),
+      }
+    );
 
     return NextResponse.json<ApiResponse>(
       {
         success: true,
+
         data: {
-          requestId: chatRequest._id.toString(),
-          status: chatRequest.status,
+          requestId:
+            chatRequest._id.toString(),
+
+          status:
+            chatRequest.status,
         },
-        message: "Message Request sent. Chat will be available after the recipient accepts.",
+
+        message:
+          "Message Request sent. Chat will be available after the recipient accepts.",
       },
       {
         status: 201,

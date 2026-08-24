@@ -1,14 +1,42 @@
 import ExpoPushToken from "@/models/ExpoPushToken";
 import PushSubscription from "@/models/PushSubscription";
 
+export type NotificationScreen =
+  | "dashboard"
+  | "alerts"
+  | "monitoring"
+  | "chats"
+  | "history"
+  | "medicines"
+  | "adherence"
+  | "settings"
+  | "account"
+  | "patient_dashboard";
+
 export interface NotificationPayload {
   title: string;
   body: string;
   type: string;
+
   severity?: string;
-  alertId?: string;
-  medicineName?: string;
+  riskLevel?: string;
+
+  screen?: NotificationScreen;
   url?: string;
+
+  alertId?: string;
+  medicineId?: string;
+  medicineName?: string;
+  patientId?: string;
+
+  conversationId?: string;
+  messageId?: string;
+
+  requestId?: string;
+  monitoringRequestId?: string;
+  chatRequestId?: string;
+
+  logId?: string;
 }
 
 export interface ChannelDeliveryResult {
@@ -16,6 +44,7 @@ export interface ChannelDeliveryResult {
     | "SENT"
     | "SKIPPED"
     | "FAILED";
+
   sentCount?: number;
   error?: string;
 }
@@ -24,8 +53,10 @@ interface ExpoPushTicket {
   status:
     | "ok"
     | "error";
+
   id?: string;
   message?: string;
+
   details?: {
     error?: string;
   };
@@ -35,10 +66,31 @@ interface ExpoPushResponse {
   data?:
     | ExpoPushTicket
     | ExpoPushTicket[];
+
   errors?: Array<{
     message?: string;
   }>;
 }
+
+interface ExpoPushMessage {
+  to: string;
+  title: string;
+  body: string;
+  sound: "default";
+  priority: "high";
+  channelId: string;
+
+  data: Record<
+    string,
+    string
+  >;
+}
+
+const EXPO_PUSH_ENDPOINT =
+  "https://exp.host/--/api/v2/push/send";
+
+const EXPO_PUSH_BATCH_SIZE =
+  100;
 
 function pushConfigured(): boolean {
   return Boolean(
@@ -49,6 +101,128 @@ function pushConfigured(): boolean {
   );
 }
 
+function optionalString(
+  value:
+    | string
+    | undefined
+    | null
+): string {
+  return typeof value ===
+    "string"
+    ? value.trim()
+    : "";
+}
+
+function buildNotificationData(
+  payload: NotificationPayload
+): Record<string, string> {
+  return {
+    type:
+      optionalString(
+        payload.type
+      ) ||
+      "notification",
+
+    screen:
+      optionalString(
+        payload.screen
+      ),
+
+    url:
+      optionalString(
+        payload.url
+      ) ||
+      "/",
+
+    severity:
+      optionalString(
+        payload.severity
+      ),
+
+    riskLevel:
+      optionalString(
+        payload.riskLevel
+      ),
+
+    alertId:
+      optionalString(
+        payload.alertId
+      ),
+
+    medicineId:
+      optionalString(
+        payload.medicineId
+      ),
+
+    medicineName:
+      optionalString(
+        payload.medicineName
+      ),
+
+    patientId:
+      optionalString(
+        payload.patientId
+      ),
+
+    conversationId:
+      optionalString(
+        payload.conversationId
+      ),
+
+    messageId:
+      optionalString(
+        payload.messageId
+      ),
+
+    requestId:
+      optionalString(
+        payload.requestId
+      ),
+
+    monitoringRequestId:
+      optionalString(
+        payload.monitoringRequestId
+      ),
+
+    chatRequestId:
+      optionalString(
+        payload.chatRequestId
+      ),
+
+    logId:
+      optionalString(
+        payload.logId
+      ),
+
+    timestamp:
+      new Date().toISOString(),
+  };
+}
+
+function splitIntoBatches<T>(
+  items: T[],
+  batchSize: number
+): T[][] {
+  const batches: T[][] =
+    [];
+
+  for (
+    let index = 0;
+    index < items.length;
+    index += batchSize
+  ) {
+    batches.push(
+      items.slice(
+        index,
+        index +
+          batchSize
+      )
+    );
+  }
+
+  return batches;
+}
+
 async function deliverWebPushToUser(
   userId: string,
   payload: NotificationPayload
@@ -56,29 +230,34 @@ async function deliverWebPushToUser(
   if (!pushConfigured()) {
     return {
       status: "SKIPPED",
+      sentCount: 0,
       error:
         "Web Push is not configured.",
     };
   }
 
-  const subscriptions =
-    await PushSubscription.find({
-      userId,
-    }).lean();
-
-  if (
-    subscriptions.length === 0
-  ) {
-    return {
-      status: "SKIPPED",
-      error:
-        "No active browser push subscription.",
-    };
-  }
-
   try {
+    const subscriptions =
+      await PushSubscription.find({
+        userId,
+      }).lean();
+
+    if (
+      subscriptions.length ===
+      0
+    ) {
+      return {
+        status: "SKIPPED",
+        sentCount: 0,
+        error:
+          "No active browser push subscription.",
+      };
+    }
+
     const webpush = (
-      await import("web-push")
+      await import(
+        "web-push"
+      )
     ).default;
 
     webpush.setVapidDetails(
@@ -87,8 +266,10 @@ async function deliverWebPushToUser(
         process.env
           .VAPID_EMAIL ||
         "mailto:admin@medreminder.app",
+
       process.env
         .NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
+
       process.env
         .VAPID_PRIVATE_KEY as string
     );
@@ -104,11 +285,19 @@ async function deliverWebPushToUser(
                 {
                   endpoint:
                     subscription.endpoint,
+
                   keys:
                     subscription.keys,
                 },
+
                 JSON.stringify({
                   ...payload,
+
+                  data:
+                    buildNotificationData(
+                      payload
+                    ),
+
                   timestamp:
                     Date.now(),
                 })
@@ -116,11 +305,12 @@ async function deliverWebPushToUser(
 
               return true;
             } catch (error) {
-              const statusCode = (
-                error as {
-                  statusCode?: number;
-                }
-              ).statusCode;
+              const statusCode =
+                (
+                  error as {
+                    statusCode?: number;
+                  }
+                ).statusCode;
 
               if (
                 statusCode ===
@@ -144,7 +334,9 @@ async function deliverWebPushToUser(
 
     const sentCount =
       results.filter(
-        (result) =>
+        (
+          result
+        ) =>
           result.status ===
           "fulfilled"
       ).length;
@@ -160,9 +352,20 @@ async function deliverWebPushToUser(
       };
     }
 
+    const failedCount =
+      results.length -
+      sentCount;
+
     return {
       status: "SENT",
       sentCount,
+
+      ...(failedCount > 0
+        ? {
+            error:
+              `${failedCount} browser push delivery attempt(s) failed.`,
+          }
+        : {}),
     };
   } catch (error) {
     console.error(
@@ -172,6 +375,7 @@ async function deliverWebPushToUser(
 
     return {
       status: "FAILED",
+      sentCount: 0,
       error:
         "Web Push delivery failed.",
     };
@@ -182,141 +386,220 @@ export async function sendExpoPushToUser(
   userId: string,
   payload: NotificationPayload
 ): Promise<ChannelDeliveryResult> {
-  const tokens =
-    await ExpoPushToken.find({
-      userId,
-    }).lean();
-
-  if (
-    tokens.length === 0
-  ) {
-    return {
-      status: "SKIPPED",
-      error:
-        "No active Expo push token.",
-    };
-  }
-
   try {
-    const messages =
-      tokens.map(
-        (item) => ({
-          to: item.token,
-          title:
-            payload.title,
-          body:
-            payload.body,
-          sound: "default",
-          priority: "high",
-          channelId:
-            "medication-alerts",
-          data: {
-            type:
-              payload.type,
-            severity:
-              payload.severity ||
-              "",
-            alertId:
-              payload.alertId ||
-              "",
-            medicineName:
-              payload.medicineName ||
-              "",
-            url:
-              payload.url ||
-              "/",
-          },
-        })
-      );
+    const tokens =
+      await ExpoPushToken.find({
+        userId,
+      }).lean();
 
-    const response =
-      await fetch(
-        "https://exp.host/--/api/v2/push/send",
-        {
-          method: "POST",
-          headers: {
-            Accept:
-              "application/json",
-            "Content-Type":
-              "application/json",
-            ...(process.env
-              .EXPO_ACCESS_TOKEN
-              ? {
-                  Authorization:
-                    `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
-                }
-              : {}),
-          },
-          body:
-            JSON.stringify(
-              messages
-            ),
-        }
-      );
-
-    const result = (
-      await response
-        .json()
-        .catch(() => ({}))
-    ) as ExpoPushResponse;
-
-    if (!response.ok) {
+    if (
+      tokens.length === 0
+    ) {
       return {
-        status: "FAILED",
+        status: "SKIPPED",
         sentCount: 0,
         error:
-          result.errors?.[0]
-            ?.message ||
-          `Expo Push returned ${response.status}.`,
+          "No active Expo push token.",
       };
     }
 
-    const tickets =
-      Array.isArray(
-        result.data
-      )
-        ? result.data
-        : result.data
-          ? [result.data]
-          : [];
+    const notificationData =
+      buildNotificationData(
+        payload
+      );
+
+    const messages:
+      ExpoPushMessage[] =
+      tokens.map(
+        (
+          item
+        ) => ({
+          to: item.token,
+
+          title:
+            payload.title
+              .trim()
+              .slice(
+                0,
+                150
+              ),
+
+          body:
+            payload.body
+              .trim()
+              .slice(
+                0,
+                1500
+              ),
+
+          sound:
+            "default",
+
+          priority:
+            "high",
+
+          channelId:
+            "medication-alerts",
+
+          data:
+            notificationData,
+        })
+      );
+
+    const tokenBatches =
+      splitIntoBatches(
+        tokens,
+        EXPO_PUSH_BATCH_SIZE
+      );
+
+    const messageBatches =
+      splitIntoBatches(
+        messages,
+        EXPO_PUSH_BATCH_SIZE
+      );
 
     const invalidTokens:
       string[] = [];
 
+    const deliveryErrors:
+      string[] = [];
+
     let sentCount = 0;
 
-    tickets.forEach(
-      (
-        ticket,
-        index
-      ) => {
-        if (
-          ticket.status ===
-          "ok"
-        ) {
-          sentCount += 1;
-          return;
+    for (
+      let batchIndex = 0;
+      batchIndex <
+      messageBatches.length;
+      batchIndex += 1
+    ) {
+      const messageBatch =
+        messageBatches[
+          batchIndex
+        ];
+
+      const tokenBatch =
+        tokenBatches[
+          batchIndex
+        ];
+
+      try {
+        const response =
+          await fetch(
+            EXPO_PUSH_ENDPOINT,
+            {
+              method: "POST",
+
+              headers: {
+                Accept:
+                  "application/json",
+
+                "Content-Type":
+                  "application/json",
+
+                ...(process.env
+                  .EXPO_ACCESS_TOKEN
+                  ? {
+                      Authorization:
+                        `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
+                    }
+                  : {}),
+              },
+
+              body:
+                JSON.stringify(
+                  messageBatch
+                ),
+            }
+          );
+
+        const result = (
+          await response
+            .json()
+            .catch(
+              () => ({})
+            )
+        ) as ExpoPushResponse;
+
+        if (!response.ok) {
+          deliveryErrors.push(
+            result.errors?.[0]
+              ?.message ||
+              `Expo Push returned HTTP ${response.status}.`
+          );
+
+          continue;
         }
 
-        if (
-          ticket.details
-            ?.error ===
-          "DeviceNotRegistered"
-        ) {
-          const invalidToken =
-            tokens[index]
-              ?.token;
+        const tickets =
+          Array.isArray(
+            result.data
+          )
+            ? result.data
+            : result.data
+              ? [
+                  result.data,
+                ]
+              : [];
 
-          if (
-            invalidToken
-          ) {
-            invalidTokens.push(
-              invalidToken
+        if (
+          tickets.length ===
+          0
+        ) {
+          deliveryErrors.push(
+            "Expo Push returned no delivery tickets."
+          );
+
+          continue;
+        }
+
+        tickets.forEach(
+          (
+            ticket,
+            ticketIndex
+          ) => {
+            if (
+              ticket.status ===
+              "ok"
+            ) {
+              sentCount += 1;
+              return;
+            }
+
+            const token =
+              tokenBatch[
+                ticketIndex
+              ]?.token;
+
+            if (
+              ticket.details
+                ?.error ===
+                "DeviceNotRegistered" &&
+              token
+            ) {
+              invalidTokens.push(
+                token
+              );
+            }
+
+            deliveryErrors.push(
+              ticket.message ||
+                ticket.details
+                  ?.error ||
+                "Expo Push rejected a notification."
             );
           }
-        }
+        );
+      } catch (error) {
+        console.error(
+          "[Expo Push] Batch delivery failed:",
+          error
+        );
+
+        deliveryErrors.push(
+          "An Expo Push batch request failed."
+        );
       }
-    );
+    }
 
     if (
       invalidTokens.length >
@@ -338,11 +621,9 @@ export async function sendExpoPushToUser(
       return {
         status: "FAILED",
         sentCount: 0,
+
         error:
-          tickets.find(
-            (ticket) =>
-              ticket.message
-          )?.message ||
+          deliveryErrors[0] ||
           "All Expo Push deliveries failed.",
       };
     }
@@ -350,6 +631,14 @@ export async function sendExpoPushToUser(
     return {
       status: "SENT",
       sentCount,
+
+      ...(deliveryErrors.length >
+      0
+        ? {
+            error:
+              `${deliveryErrors.length} Expo Push delivery attempt(s) failed.`,
+          }
+        : {}),
     };
   } catch (error) {
     console.error(
@@ -359,6 +648,7 @@ export async function sendExpoPushToUser(
 
     return {
       status: "FAILED",
+      sentCount: 0,
       error:
         "Expo Push delivery failed.",
     };
@@ -366,14 +656,11 @@ export async function sendExpoPushToUser(
 }
 
 /*
- * The existing alert engine already calls
- * sendWebPushToUser().
+ * This name is preserved because the existing alert engine
+ * already calls sendWebPushToUser().
  *
- * We preserve that function name, but it now
- * delivers through browser Web Push and Expo Push.
- *
- * This avoids changing or duplicating the alert
- * engine and preserves existing web functionality.
+ * The function delivers through both browser Web Push and
+ * native Expo Push.
  */
 export async function sendWebPushToUser(
   userId: string,
@@ -382,27 +669,52 @@ export async function sendWebPushToUser(
   const [
     webResult,
     expoResult,
-  ] = await Promise.all([
-    deliverWebPushToUser(
-      userId,
-      payload
-    ),
-    sendExpoPushToUser(
-      userId,
-      payload
-    ),
-  ]);
+  ] =
+    await Promise.all([
+      deliverWebPushToUser(
+        userId,
+        payload
+      ),
+
+      sendExpoPushToUser(
+        userId,
+        payload
+      ),
+    ]);
 
   const sentCount =
-    (webResult.sentCount ||
-      0) +
-    (expoResult.sentCount ||
-      0);
+    (
+      webResult.sentCount ||
+      0
+    ) +
+    (
+      expoResult.sentCount ||
+      0
+    );
+
+  const errors = [
+    webResult.error,
+    expoResult.error,
+  ].filter(
+    (
+      error
+    ): error is string =>
+      Boolean(error)
+  );
 
   if (sentCount > 0) {
     return {
       status: "SENT",
       sentCount,
+
+      ...(errors.length > 0
+        ? {
+            error:
+              errors.join(
+                " "
+              ),
+          }
+        : {}),
     };
   }
 
@@ -415,24 +727,22 @@ export async function sendWebPushToUser(
     return {
       status: "SKIPPED",
       sentCount: 0,
-      error: [
-        webResult.error,
-        expoResult.error,
-      ]
-        .filter(Boolean)
-        .join(" "),
+      error:
+        errors.join(
+          " "
+        ),
     };
   }
 
   return {
     status: "FAILED",
     sentCount: 0,
-    error: [
-      webResult.error,
-      expoResult.error,
-    ]
-      .filter(Boolean)
-      .join(" "),
+
+    error:
+      errors.join(
+        " "
+      ) ||
+      "All notification delivery channels failed.",
   };
 }
 
@@ -456,6 +766,7 @@ export async function sendConfiguredSms(
   if (!phoneNumber) {
     return {
       status: "SKIPPED",
+      sentCount: 0,
       error:
         "No SMS phone number is configured.",
     };
@@ -464,6 +775,7 @@ export async function sendConfiguredSms(
   if (!smsConfigured()) {
     return {
       status: "SKIPPED",
+      sentCount: 0,
       error:
         "SMS provider is not configured.",
     };
@@ -484,24 +796,35 @@ export async function sendConfiguredSms(
 
     const form =
       new URLSearchParams({
-        To: phoneNumber,
-        From: from,
-        Body: message,
+        To:
+          phoneNumber,
+
+        From:
+          from,
+
+        Body:
+          message,
       });
 
     const response =
       await fetch(
         `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
         {
-          method: "POST",
+          method:
+            "POST",
+
           headers: {
             Authorization:
               `Basic ${Buffer.from(
                 `${accountSid}:${authToken}`
-              ).toString("base64")}`,
+              ).toString(
+                "base64"
+              )}`,
+
             "Content-Type":
               "application/x-www-form-urlencoded",
           },
+
           body:
             form.toString(),
         }
@@ -509,14 +832,15 @@ export async function sendConfiguredSms(
 
     if (!response.ok) {
       console.error(
-        "[SMS] Provider returned status",
+        "[SMS] Provider returned status:",
         response.status
       );
 
       return {
         status: "FAILED",
+        sentCount: 0,
         error:
-          `SMS provider returned ${response.status}.`,
+          `SMS provider returned HTTP ${response.status}.`,
       };
     }
 
@@ -532,6 +856,7 @@ export async function sendConfiguredSms(
 
     return {
       status: "FAILED",
+      sentCount: 0,
       error:
         "SMS delivery failed.",
     };
