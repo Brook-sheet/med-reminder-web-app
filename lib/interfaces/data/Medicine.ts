@@ -1,3 +1,4 @@
+// lib/interfaces/data/Medicine.ts
 export interface Medicine {
   _id?: string;
   userId: string;
@@ -5,7 +6,14 @@ export interface Medicine {
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  pillsPerDose: number;
+
+  /**
+   * Legacy data only.
+   * The daily Rx Box plan owns chamber assignment.
+   */
   chamberId?: number | null;
+
   windowBeforeMinutes?: number;
   windowAfterMinutes?: number;
   lateAfterMinutes?: number;

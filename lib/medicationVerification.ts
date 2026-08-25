@@ -1,9 +1,16 @@
+// lib/medicationVerification.ts
 import mongoose from 'mongoose';
+
 import MedicationLog, {
   type IMedicationLogDocument,
 } from '@/models/MedicationLog';
+
 import Medicine from '@/models/Medicine';
-import { processMedicationAlertEvent } from '@/lib/alertEngine';
+
+import {
+  processMedicationAlertEvent,
+} from '@/lib/alertEngine';
+
 import {
   addDaysToMedicationDateKey,
   formatMedicationTime,
@@ -33,10 +40,17 @@ export interface MedicationEventInput {
   medicineId?: string | null;
   logId?: string | null;
   deviceId?: string | null;
+
+  /**
+   * Only the authenticated Rx Box plan/group handler may
+   * set this option.
+   */
+  allowHardwareMissedBeforeWindowEnd?: boolean;
 }
 
 export interface VerificationResult {
   verified: boolean;
+
   status:
     | 'dispensed'
     | 'taken'
@@ -44,6 +58,7 @@ export interface VerificationResult {
     | 'missed'
     | 'unverified'
     | 'incorrect_chamber';
+
   message: string;
   logId: string;
   medicineName: string;
@@ -62,6 +77,7 @@ type CandidateLog = {
   scheduledDate: string;
   scheduledTime: string;
   expectedChamberId?: number | null;
+  expectedChamberIds?: number[];
   windowBeforeMinutes?: number;
   windowAfterMinutes?: number;
   lateAfterMinutes?: number;
@@ -100,26 +116,34 @@ function finalAlertDetails(
   switch (log.status) {
     case 'taken':
       return {
-        eventType: 'MEDICATION_VERIFIED' as const,
-        title: 'Medication taken',
+        eventType:
+          'MEDICATION_VERIFIED' as const,
+        title:
+          'Medication taken',
       };
 
     case 'late':
       return {
-        eventType: 'MEDICATION_LATE' as const,
-        title: 'Medication taken late',
+        eventType:
+          'MEDICATION_LATE' as const,
+        title:
+          'Medication taken late',
       };
 
     case 'missed':
       return {
-        eventType: 'MEDICATION_MISSED' as const,
-        title: 'Medication missed',
+        eventType:
+          'MEDICATION_MISSED' as const,
+        title:
+          'Medication missed',
       };
 
     case 'incorrect_chamber':
       return {
-        eventType: 'MEDICATION_EVENT_WARNING' as const,
-        title: 'Incorrect medication access',
+        eventType:
+          'MEDICATION_EVENT_WARNING' as const,
+        title:
+          'Incorrect medication access',
       };
   }
 }
@@ -132,8 +156,10 @@ async function sendFinalStatusAlert(
     finalAlertDetails(log);
 
   await processMedicationAlertEvent({
-    // alertEngine also normalizes final medication events to this key.
-    // Keeping it deterministic makes repeated processing idempotent.
+    /*
+     * A deterministic event key prevents duplicate final
+     * alerts when a finalized log is processed repeatedly.
+     */
     eventKey:
       `medication-final:${log._id.toString()}`,
 
@@ -141,7 +167,8 @@ async function sendFinalStatusAlert(
       log.userId.toString(),
 
     medicationId:
-      log.medicineId?.toString() ?? null,
+      log.medicineId?.toString() ??
+      null,
 
     medicationLogId:
       log._id.toString(),
@@ -176,16 +203,20 @@ async function sendFinalStatusAlert(
         log.scheduledTime,
 
       takenAt:
-        log.takenAt?.toISOString() ?? null,
+        log.takenAt?.toISOString() ??
+        null,
 
       expectedChamberId:
-        log.expectedChamberId ?? null,
+        log.expectedChamberId ??
+        null,
 
       detectedChamberId:
-        log.detectedChamberId ?? null,
+        log.detectedChamberId ??
+        null,
 
       verificationNote:
-        log.verificationNote ?? '',
+        log.verificationNote ??
+        '',
     },
   });
 }
@@ -196,12 +227,12 @@ export const timeToMinutes =
 export function scheduledDateTime(
   date: string,
   time: string,
-  requestedTimeZone?: string | null,
+  requestedTimeZone?: string | null
 ): Date {
   return medicationScheduledAt(
     date,
     time,
-    requestedTimeZone,
+    requestedTimeZone
   );
 }
 
@@ -216,120 +247,132 @@ function isValidChamber(
     (
       Number.isInteger(chamberId) &&
       chamberId >= 1 &&
-      chamberId <= 3
+      chamberId <= 4
     )
   );
 }
 
+/**
+ * Creates one medication log for every scheduled dose.
+ *
+ * pillsPerDose is intentionally not expanded here because
+ * multi-pill doses still count as one adherence event.
+ */
 export async function ensureMedicationLogsForDate(
   userId: string,
   dateString: string
 ): Promise<void> {
-  const medicines = await Medicine.find({
-    userId,
-    isActive: true,
+  const medicines =
+    await Medicine.find({
+      userId,
+      isActive: true,
 
-    startDate: {
-      $lte: dateString,
-    },
+      startDate: {
+        $lte: dateString,
+      },
 
-    $or: [
-      {
-        endDate: null,
-      },
-      {
-        endDate: '',
-      },
-      {
-        endDate: {
-          $gte: dateString,
+      $or: [
+        {
+          endDate: null,
         },
-      },
-    ],
-  }).lean();
-
-  const logUpdates = medicines.flatMap(
-    (medicine) =>
-      (
-        medicine.scheduledTimes as string[]
-      ).map((scheduledTime) =>
-        MedicationLog.updateOne(
-          {
-            userId,
-
-            medicineId:
-              medicine._id,
-
-            scheduledDate:
-              dateString,
-
-            scheduledTime,
-
-            countsTowardAdherence: {
-              $ne: false,
-            },
+        {
+          endDate: '',
+        },
+        {
+          endDate: {
+            $gte: dateString,
           },
-          {
-            $setOnInsert: {
-              userId,
+        },
+      ],
+    }).lean();
 
-              medicineId:
-                medicine._id,
+  const logUpdates =
+    medicines.flatMap(
+      (medicine) => {
+        /*
+         * Keep the assertion together syntactically.
+         * This corrects the previous TS parser error.
+         */
+        const scheduledTimes =
+          medicine.scheduledTimes as string[];
 
-              medicineName:
-                medicine.name,
+        return scheduledTimes.map(
+          (scheduledTime) =>
+            MedicationLog.updateOne(
+              {
+                userId,
 
-              dosage:
-                medicine.dosage,
+                medicineId:
+                  medicine._id,
 
-              scheduledDate:
-                dateString,
+                scheduledDate:
+                  dateString,
 
-              scheduledTime,
+                scheduledTime,
 
-              status: 'pending',
+                countsTowardAdherence: {
+                  $ne: false,
+                },
+              },
+              {
+                $setOnInsert: {
+                  userId,
 
-              source: 'auto',
+                  medicineId:
+                    medicine._id,
 
-              eventType:
-                'SCHEDULED',
+                  medicineName:
+                    medicine.name,
 
-              expectedChamberId:
-                medicine.chamberId ??
-                null,
+                  dosage:
+                    medicine.dosage,
 
-              expectedChamberIds:
-                medicine.chamberId
-                  ? [
-                      medicine.chamberId,
-                    ]
-                  : [],
+                  scheduledDate:
+                    dateString,
 
-              windowBeforeMinutes:
-                medicine
-                  .windowBeforeMinutes ??
-                30,
+                  scheduledTime,
 
-              windowAfterMinutes:
-                medicine
-                  .windowAfterMinutes ??
-                90,
+                  status:
+                    'pending',
 
-              lateAfterMinutes:
-                medicine
-                  .lateAfterMinutes ??
-                30,
+                  source:
+                    'auto',
 
-              countsTowardAdherence:
-                true,
-            },
-          },
-          {
-            upsert: true,
-          }
-        )
-      )
-  );
+                  eventType:
+                    'SCHEDULED',
+
+                  expectedChamberId:
+                    null,
+
+                  expectedChamberIds:
+                    [],
+
+                  windowBeforeMinutes:
+                    medicine
+                      .windowBeforeMinutes ??
+                    30,
+
+                  windowAfterMinutes:
+                    medicine
+                      .windowAfterMinutes ??
+                    90,
+
+                  lateAfterMinutes:
+                    medicine
+                      .lateAfterMinutes ??
+                    30,
+
+                  countsTowardAdherence:
+                    true,
+                },
+              },
+              {
+                upsert: true,
+              }
+            )
+        );
+      }
+    );
 
   if (logUpdates.length > 0) {
     await Promise.all(logUpdates);
@@ -349,13 +392,18 @@ export async function ensureMedicationLogsForRange(
       cursor
     );
 
-    cursor = addDaysToMedicationDateKey(
-      cursor,
-      1,
-    );
+    cursor =
+      addDaysToMedicationDateKey(
+        cursor,
+        1
+      );
   }
 }
 
+/**
+ * Changes unresolved logs into missed after their
+ * configured medication window expires.
+ */
 export async function finalizeExpiredMedicationLogs(
   userId: string,
   now = new Date()
@@ -363,10 +411,11 @@ export async function finalizeExpiredMedicationLogs(
   const timeZone =
     resolveMedicationTimeZone();
 
-  const today = getMedicationDateKey(
-    now,
-    timeZone,
-  );
+  const today =
+    getMedicationDateKey(
+      now,
+      timeZone
+    );
 
   const pending =
     await MedicationLog.find({
@@ -389,27 +438,29 @@ export async function finalizeExpiredMedicationLogs(
       },
     });
 
-  const expiredLogs = pending.filter(
-    (log) => {
-      const scheduled =
-        scheduledDateTime(
-          log.scheduledDate,
-          log.scheduledTime,
-          timeZone,
-        );
+  const expiredLogs =
+    pending.filter(
+      (log) => {
+        const scheduled =
+          scheduledDateTime(
+            log.scheduledDate,
+            log.scheduledTime,
+            timeZone
+          );
 
-      const end = new Date(
-        scheduled.getTime() +
-          (
-            log.windowAfterMinutes ??
-            90
-          ) *
+        const end =
+          new Date(
+            scheduled.getTime() +
+            (
+              log.windowAfterMinutes ??
+              90
+            ) *
             60_000
-      );
+          );
 
-      return now > end;
-    }
-  );
+        return now > end;
+      }
+    );
 
   for (const expiredLog of expiredLogs) {
     const updated =
@@ -453,14 +504,15 @@ export async function finalizeExpiredMedicationLogs(
         now
       );
     } catch (error) {
-      // The medication state is already safely finalized. A notification
-      // provider failure must not roll the dose back to pending.
+      /*
+       * Notification failure must not return the medication
+       * log to a pending status.
+       */
       console.error(
         '[Medication Verification] Missed family alert failed:',
         {
           medicationLogId:
             updated._id.toString(),
-
           error,
         }
       );
@@ -474,14 +526,18 @@ function distanceFromSchedule(
 ): number {
   return Math.abs(
     eventAt.getTime() -
-      scheduledDateTime(
-        log.scheduledDate,
-        log.scheduledTime,
-        resolveMedicationTimeZone(),
-      ).getTime()
+    scheduledDateTime(
+      log.scheduledDate,
+      log.scheduledTime,
+      resolveMedicationTimeZone()
+    ).getTime()
   );
 }
 
+/**
+ * Creates a non-adherence audit record for an event that
+ * cannot safely finalize a scheduled dose.
+ */
 async function createAuditLog(
   input: MedicationEventInput,
   eventAt: Date,
@@ -500,27 +556,29 @@ async function createAuditLog(
         input.userId,
 
       medicineId:
-        expected?.medicineId ?? null,
+        expected?.medicineId ??
+        null,
 
       medicineName:
         expected?.medicineName ??
         'Unmatched medication event',
 
       dosage:
-        expected?.dosage ?? '',
+        expected?.dosage ??
+        '',
 
       scheduledDate:
         expected?.scheduledDate ??
         getMedicationDateKey(
           eventAt,
-          resolveMedicationTimeZone(),
+          resolveMedicationTimeZone()
         ),
 
       scheduledTime:
         expected?.scheduledTime ??
         formatMedicationTime(
           eventAt,
-          resolveMedicationTimeZone(),
+          resolveMedicationTimeZone()
         ),
 
       takenAt:
@@ -535,17 +593,22 @@ async function createAuditLog(
         input.eventType,
 
       sensorDeviceId:
-        input.deviceId ?? undefined,
+        input.deviceId ??
+        undefined,
 
       expectedChamberId:
         expected?.expectedChamberId ??
         null,
 
       detectedChamberId:
-        input.chamberId ?? null,
+        input.chamberId ??
+        null,
 
       expectedChamberIds,
 
+      /*
+       * Audit records must not inflate adherence totals.
+       */
       countsTowardAdherence:
         false,
 
@@ -568,10 +631,12 @@ async function createAuditLog(
       log.scheduledTime,
 
     expectedChamberId:
-      log.expectedChamberId ?? null,
+      log.expectedChamberId ??
+      null,
 
     detectedChamberId:
-      log.detectedChamberId ?? null,
+      log.detectedChamberId ??
+      null,
 
     expectedChamberIds,
 
@@ -580,6 +645,12 @@ async function createAuditLog(
   };
 }
 
+/**
+ * Legacy chamber-access handling.
+ *
+ * The simplified tray ultrasonic sensor never uses this
+ * because it cannot determine an individual chamber.
+ */
 async function finalizeIncorrectAccess(
   input: MedicationEventInput,
   eventAt: Date,
@@ -613,10 +684,12 @@ async function finalizeIncorrectAccess(
             input.eventType,
 
           sensorDeviceId:
-            input.deviceId ?? undefined,
+            input.deviceId ??
+            undefined,
 
           detectedChamberId:
-            input.chamberId ?? null,
+            input.chamberId ??
+            null,
 
           expectedChamberIds,
 
@@ -642,7 +715,6 @@ async function finalizeIncorrectAccess(
 
   return {
     verified: false,
-
     status:
       'incorrect_chamber',
 
@@ -660,10 +732,12 @@ async function finalizeIncorrectAccess(
       updated.scheduledTime,
 
     expectedChamberId:
-      updated.expectedChamberId ?? null,
+      updated.expectedChamberId ??
+      null,
 
     detectedChamberId:
-      updated.detectedChamberId ?? null,
+      updated.detectedChamberId ??
+      null,
 
     expectedChamberIds,
 
@@ -698,10 +772,12 @@ function resultFromFinalLog(
       log.scheduledTime,
 
     expectedChamberId:
-      log.expectedChamberId ?? null,
+      log.expectedChamberId ??
+      null,
 
     detectedChamberId:
-      log.detectedChamberId ?? null,
+      log.detectedChamberId ??
+      null,
 
     expectedChamberIds:
       log.expectedChamberIds ??
@@ -736,7 +812,7 @@ export async function processMedicationEvent(
     )
   ) {
     throw new Error(
-      'chamberId must be 1, 2, or 3.'
+      'chamberId must be 1, 2, 3, or 4.'
     );
   }
 
@@ -761,24 +837,29 @@ export async function processMedicationEvent(
   const eventDate =
     getMedicationDateKey(
       eventAt,
-      timeZone,
+      timeZone
     );
 
+  /*
+   * Include neighboring dates because medication windows
+   * can cross midnight.
+   */
   const dates =
     [-1, 0, 1].map(
       (offset) =>
         addDaysToMedicationDateKey(
           eventDate,
-          offset,
+          offset
         )
     );
 
   await Promise.all(
-    dates.map((date) =>
-      ensureMedicationLogsForDate(
-        input.userId,
-        date
-      )
+    dates.map(
+      (date) =>
+        ensureMedicationLogsForDate(
+          input.userId,
+          date
+        )
     )
   );
 
@@ -787,6 +868,9 @@ export async function processMedicationEvent(
     eventAt
   );
 
+  /*
+   * Preserve and return already finalized logs.
+   */
   if (input.logId) {
     const existingFinalLog =
       await MedicationLog.findOne({
@@ -820,29 +904,27 @@ export async function processMedicationEvent(
     }
   }
 
-  const query: Record<
-    string,
-    unknown
-  > = {
-    userId:
-      input.userId,
+  const query:
+    Record<string, unknown> = {
+      userId:
+        input.userId,
 
-    scheduledDate: {
-      $in: dates,
-    },
+      scheduledDate: {
+        $in: dates,
+      },
 
-    status: {
-      $in: [
-        'pending',
-        'reminder',
-        'dispensed',
-      ],
-    },
+      status: {
+        $in: [
+          'pending',
+          'reminder',
+          'dispensed',
+        ],
+      },
 
-    countsTowardAdherence: {
-      $ne: false,
-    },
-  };
+      countsTowardAdherence: {
+        $ne: false,
+      },
+    };
 
   if (input.logId) {
     if (
@@ -866,37 +948,37 @@ export async function processMedicationEvent(
 
   const candidates =
     pendingLogs
-      .filter((log) => {
-        const scheduled =
-          scheduledDateTime(
-            log.scheduledDate,
-            log.scheduledTime,
-            timeZone,
+      .filter(
+        (log) => {
+          const scheduled =
+            scheduledDateTime(
+              log.scheduledDate,
+              log.scheduledTime,
+              timeZone
+            );
+
+          const start =
+            scheduled.getTime() -
+            (
+              log.windowBeforeMinutes ??
+              30
+            ) *
+            60_000;
+
+          const end =
+            scheduled.getTime() +
+            (
+              log.windowAfterMinutes ??
+              90
+            ) *
+            60_000;
+
+          return (
+            eventAt.getTime() >= start &&
+            eventAt.getTime() <= end
           );
-
-        const start =
-          scheduled.getTime() -
-          (
-            log.windowBeforeMinutes ??
-            30
-          ) *
-            60_000;
-
-        const end =
-          scheduled.getTime() +
-          (
-            log.windowAfterMinutes ??
-            90
-          ) *
-            60_000;
-
-        return (
-          eventAt.getTime() >=
-            start &&
-          eventAt.getTime() <=
-            end
-        );
-      })
+        }
+      )
       .sort(
         (first, second) =>
           distanceFromSchedule(
@@ -913,16 +995,21 @@ export async function processMedicationEvent(
     Array.from(
       new Set(
         candidates
-          .map(
+          .flatMap(
             (log) =>
-              log.expectedChamberId
+              log.expectedChamberIds?.length
+                ? log.expectedChamberIds
+                : log.expectedChamberId == null
+                  ? []
+                  : [
+                      log.expectedChamberId,
+                    ]
           )
           .filter(
             (
               chamber
             ): chamber is number =>
-              typeof chamber ===
-              'number'
+              typeof chamber === 'number'
           )
       )
     ).sort(
@@ -934,6 +1021,10 @@ export async function processMedicationEvent(
     | CandidateLog
     | undefined;
 
+  /*
+   * Exact log matching is used by authenticated Rx Box
+   * group events.
+   */
   if (input.logId) {
     target =
       candidates.find(
@@ -941,18 +1032,17 @@ export async function processMedicationEvent(
           log._id.toString() ===
           input.logId
       );
-  } else if (
-    input.medicineId
-  ) {
+  } else if (input.medicineId) {
     target =
       candidates.find(
         (log) =>
           log.medicineId?.toString() ===
           input.medicineId
       );
-  } else if (
-    input.chamberId != null
-  ) {
+  } else if (input.chamberId != null) {
+    /*
+     * Legacy chamber matching only.
+     */
     target =
       candidates.find(
         (log) =>
@@ -961,11 +1051,14 @@ export async function processMedicationEvent(
       );
   }
 
+  /*
+   * The simplified tray sensor cannot identify a chamber.
+   * Normal Rx Box pickup events use MEDICATION_CONFIRMED
+   * and exact group log IDs instead of CHAMBER_OPENED.
+   */
   if (
-    input.eventType ===
-      'CHAMBER_OPENED' &&
-    input.source ===
-      'sensor' &&
+    input.eventType === 'CHAMBER_OPENED' &&
+    input.source === 'sensor' &&
     input.chamberId == null
   ) {
     return createAuditLog(
@@ -994,9 +1087,7 @@ export async function processMedicationEvent(
             ? ' is'
             : 's are'
         } ${
-          expectedChamberIds.join(
-            ', '
-          ) ||
+          expectedChamberIds.join(', ') ||
           'not assigned'
         }.`;
 
@@ -1022,8 +1113,7 @@ export async function processMedicationEvent(
 
   if (
     input.chamberId != null &&
-    target.expectedChamberId !=
-      null &&
+    target.expectedChamberId != null &&
     input.chamberId !==
       target.expectedChamberId
   ) {
@@ -1040,7 +1130,7 @@ export async function processMedicationEvent(
     scheduledDateTime(
       target.scheduledDate,
       target.scheduledTime,
-      timeZone,
+      timeZone
     );
 
   const delayMinutes =
@@ -1049,7 +1139,7 @@ export async function processMedicationEvent(
         eventAt.getTime() -
         scheduled.getTime()
       ) /
-        60_000
+      60_000
     );
 
   const status =
@@ -1067,21 +1157,24 @@ export async function processMedicationEvent(
           ? 'late'
           : 'taken';
 
-  if (
-    status === 'missed'
-  ) {
+  /*
+   * Manual or unrelated calls cannot mark a dose missed
+   * before the medication window expires.
+   */
+  if (status === 'missed') {
     const windowEndsAt =
       new Date(
         scheduled.getTime() +
-          (
-            target.windowAfterMinutes ??
-            90
-          ) *
-            60_000
+        (
+          target.windowAfterMinutes ??
+          90
+        ) *
+        60_000
       );
 
     if (
-      eventAt <= windowEndsAt
+      eventAt <= windowEndsAt &&
+      !input.allowHardwareMissedBeforeWindowEnd
     ) {
       throw new Error(
         'Medication cannot be marked missed until its medication window has expired.'
@@ -1107,6 +1200,10 @@ export async function processMedicationEvent(
         $set: {
           status,
 
+          /*
+           * Dispensed means waiting for pickup.
+           * Missed events also do not receive takenAt.
+           */
           takenAt:
             status === 'missed' ||
             status === 'dispensed'
@@ -1123,6 +1220,10 @@ export async function processMedicationEvent(
             input.deviceId ??
             undefined,
 
+          /*
+           * This is normally null for the tray ultrasonic
+           * sensor because it cannot identify a chamber.
+           */
           detectedChamberId:
             input.chamberId ??
             null,
@@ -1134,8 +1235,7 @@ export async function processMedicationEvent(
               ? 'Medication was dispensed and is waiting for intake confirmation.'
               : status === 'late'
                 ? `Medication access was verified ${delayMinutes} minutes after the scheduled time.`
-                : status ===
-                    'missed'
+                : status === 'missed'
                   ? 'Medication was marked missed by an authorized event.'
                   : 'Medication access was verified within the configured time window.',
         },
@@ -1151,9 +1251,11 @@ export async function processMedicationEvent(
     );
   }
 
-  if (
-    status !== 'dispensed'
-  ) {
+  /*
+   * Dispensed is an intermediate state, so it does not
+   * create a final taken/missed alert.
+   */
+  if (status !== 'dispensed') {
     await sendFinalStatusAlert(
       updated as FinalMedicationLog,
       eventAt

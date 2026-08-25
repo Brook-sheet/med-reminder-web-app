@@ -1,19 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
+// app/api/medicines/[id]/route.ts
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import mongoose from 'mongoose';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
-import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import mongoose from 'mongoose';
+
+import {
+  getTokenFromRequest,
+  verifyToken,
+} from '@/lib/auth';
+
+import type {
+  ApiResponse,
+} from '@/lib/interfaces/data/Api';
+
 import {
   getMedicationDateKey,
   isValidMedicationDateKey,
 } from '@/lib/medicationTime';
 
-async function getAuthUser(request: NextRequest) {
-  const token = getTokenFromRequest(request);
+async function getAuthUser(
+  request: NextRequest
+) {
+  const token =
+    getTokenFromRequest(
+      request
+    );
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
   return verifyToken(token);
 }
@@ -26,17 +50,20 @@ export async function GET(
     params: Promise<{
       id: string;
     }>;
-  },
+  }
 ) {
   try {
     const user =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error:
+            'Unauthorized',
         },
         {
           status: 401,
@@ -45,22 +72,24 @@ export async function GET(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
-    const { id } =
-      await params;
+    const {
+      id,
+    } = await params;
 
     if (
       !mongoose.isValidObjectId(
-        id,
+        id
       )
     ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid medicine ID',
+          error:
+            'Invalid medicine ID',
         },
         {
           status: 400,
@@ -69,7 +98,7 @@ export async function GET(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
@@ -77,9 +106,7 @@ export async function GET(
 
     const medicine =
       await Medicine.findOne({
-        _id:
-          id,
-
+        _id: id,
         userId:
           user.userId,
       });
@@ -88,7 +115,8 @@ export async function GET(
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Medicine not found',
+          error:
+            'Medicine not found',
         },
         {
           status: 404,
@@ -97,17 +125,14 @@ export async function GET(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          true,
-
-        data:
-          medicine,
+        success: true,
+        data: medicine,
       },
       {
         status: 200,
@@ -116,18 +141,19 @@ export async function GET(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   } catch (error) {
     console.error(
       '[GET /api/medicines/[id]] Error:',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error:
+          'Internal server error',
       },
       {
         status: 500,
@@ -136,7 +162,7 @@ export async function GET(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   }
 }
@@ -156,29 +182,33 @@ const TIME_REGEX =
   /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
 
 function isValidDate(
-  dateString: string,
+  dateString: string
 ): boolean {
   return isValidMedicationDateKey(
-    dateString,
+    dateString
   );
 }
 
 function isValidTime(
-  timeString: string,
+  timeString: string
 ): boolean {
   return TIME_REGEX.test(
-    timeString.trim(),
+    timeString.trim()
   );
 }
 
 function sanitizeMedicineName(
-  raw: string,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (
+    typeof raw !==
+    'string'
+  ) {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const trimmed =
+    raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -189,7 +219,7 @@ function sanitizeMedicineName(
 
   if (
     !/[a-zA-Z0-9]/.test(
-      trimmed,
+      trimmed
     )
   ) {
     return null;
@@ -197,7 +227,7 @@ function sanitizeMedicineName(
 
   if (
     /^[^a-zA-Z0-9]+$/.test(
-      trimmed,
+      trimmed
     )
   ) {
     return null;
@@ -207,13 +237,17 @@ function sanitizeMedicineName(
 }
 
 function sanitizeDosage(
-  raw: string,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (
+    typeof raw !==
+    'string'
+  ) {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const trimmed =
+    raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -224,7 +258,7 @@ function sanitizeDosage(
 
   if (
     !/[a-zA-Z0-9]/.test(
-      trimmed,
+      trimmed
     )
   ) {
     return null;
@@ -239,7 +273,7 @@ interface ValidationResult {
 }
 
 function validateMedicinePayload(
-  body: Record<string, unknown>,
+  body: Record<string, unknown>
 ): ValidationResult {
   const {
     name,
@@ -248,32 +282,20 @@ function validateMedicinePayload(
     scheduledTimes,
     startDate,
     endDate,
-    chamberId,
+    pillsPerDose,
     windowBeforeMinutes,
     windowAfterMinutes,
     lateAfterMinutes,
-  } = body as {
-    name?: unknown;
-    dosage?: unknown;
-    frequency?: unknown;
-    scheduledTimes?: unknown;
-    startDate?: unknown;
-    endDate?: unknown;
-    chamberId?: unknown;
-    windowBeforeMinutes?: unknown;
-    windowAfterMinutes?: unknown;
-    lateAfterMinutes?: unknown;
-  };
+  } = body;
 
   const cleanName =
     sanitizeMedicineName(
-      name as string,
+      name
     );
 
   if (!cleanName) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.',
@@ -282,13 +304,12 @@ function validateMedicinePayload(
 
   const cleanDosage =
     sanitizeDosage(
-      dosage as string,
+      dosage
     );
 
   if (!cleanDosage) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.',
@@ -297,11 +318,11 @@ function validateMedicinePayload(
 
   if (
     !frequency ||
-    typeof frequency !== 'string'
+    typeof frequency !==
+      'string'
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Frequency is required.',
@@ -310,12 +331,11 @@ function validateMedicinePayload(
 
   if (
     !VALID_FREQUENCIES.includes(
-      frequency,
+      frequency
     )
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         `Frequency must be one of: ${VALID_FREQUENCIES.join(', ')}.`,
@@ -324,13 +344,13 @@ function validateMedicinePayload(
 
   if (
     !Array.isArray(
-      scheduledTimes,
+      scheduledTimes
     ) ||
-    scheduledTimes.length === 0
+    scheduledTimes.length ===
+      0
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'At least one scheduled time is required.',
@@ -338,11 +358,11 @@ function validateMedicinePayload(
   }
 
   if (
-    scheduledTimes.length > 24
+    scheduledTimes.length >
+      24
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'A maximum of 24 scheduled times is allowed.',
@@ -350,39 +370,42 @@ function validateMedicinePayload(
   }
 
   for (
-    const time of scheduledTimes
+    const time of
+    scheduledTimes
   ) {
     if (
-      typeof time !== 'string' ||
+      typeof time !==
+        'string' ||
       !isValidTime(time)
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
-          `Invalid scheduled time "${time}". Expected format: "H:MM AM" or "H:MM PM".`,
+          `Invalid scheduled time "${String(time)}". Expected format: "H:MM AM" or "H:MM PM".`,
       };
     }
   }
 
+  const normalizedTimes =
+    scheduledTimes as string[];
+
   const uniqueTimes =
     new Set(
-      scheduledTimes.map(
+      normalizedTimes.map(
         (time) =>
           time
             .trim()
-            .toUpperCase(),
-      ),
+            .toUpperCase()
+      )
     );
 
   if (
     uniqueTimes.size !==
-    scheduledTimes.length
+      normalizedTimes.length
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Duplicate scheduled times are not allowed.',
@@ -395,14 +418,14 @@ function validateMedicinePayload(
     startDate !== ''
   ) {
     if (
-      typeof startDate !== 'string' ||
+      typeof startDate !==
+        'string' ||
       !isValidDate(
-        startDate as string,
+        startDate
       )
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'Start date must be a valid date in YYYY-MM-DD format.',
@@ -416,14 +439,14 @@ function validateMedicinePayload(
     endDate !== ''
   ) {
     if (
-      typeof endDate !== 'string' ||
+      typeof endDate !==
+        'string' ||
       !isValidDate(
-        endDate as string,
+        endDate
       )
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'End date must be a valid date in YYYY-MM-DD format.',
@@ -431,19 +454,18 @@ function validateMedicinePayload(
     }
 
     const scheduleStart =
-      (
-        startDate as string
-      ) ||
-      getMedicationDateKey();
+      typeof startDate ===
+        'string' &&
+      startDate
+        ? startDate
+        : getMedicationDateKey();
 
     if (
-      (
-        endDate as string
-      ) < scheduleStart
+      endDate <
+      scheduleStart
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'End date cannot be before start date.',
@@ -451,32 +473,35 @@ function validateMedicinePayload(
     }
   }
 
+  const normalizedPillsPerDose =
+    pillsPerDose == null
+      ? 1
+      : Number(
+          pillsPerDose
+        );
+
   if (
-    chamberId !== undefined &&
-    chamberId !== null &&
-    chamberId !== ''
+    !Number.isInteger(
+      normalizedPillsPerDose
+    ) ||
+    normalizedPillsPerDose <
+      1 ||
+    normalizedPillsPerDose >
+      4
   ) {
-    const chamber =
-      Number(chamberId);
+    return {
+      valid: false,
 
-    if (
-      !Number.isInteger(chamber) ||
-      chamber < 1 ||
-      chamber > 3
-    ) {
-      return {
-        valid:
-          false,
-
-        error:
-          'Chamber must be 1, 2, or 3.',
-      };
-    }
+      error:
+        'Pills per scheduled dose must be a whole number from 1 to 4.',
+    };
   }
 
   for (
-    const [field, value] of
-    Object.entries({
+    const [
+      field,
+      value,
+    ] of Object.entries({
       windowBeforeMinutes,
       windowAfterMinutes,
       lateAfterMinutes,
@@ -491,13 +516,14 @@ function validateMedicinePayload(
         Number(value);
 
       if (
-        !Number.isInteger(minutes) ||
+        !Number.isInteger(
+          minutes
+        ) ||
         minutes < 0 ||
         minutes > 720
       ) {
         return {
-          valid:
-            false,
+          valid: false,
 
           error:
             `${field} must be a whole number from 0 to 720.`,
@@ -507,14 +533,19 @@ function validateMedicinePayload(
   }
 
   if (
-    lateAfterMinutes !== undefined &&
-    windowAfterMinutes !== undefined &&
-    Number(lateAfterMinutes) >
-      Number(windowAfterMinutes)
+    lateAfterMinutes !==
+      undefined &&
+    windowAfterMinutes !==
+      undefined &&
+    Number(
+      lateAfterMinutes
+    ) >
+      Number(
+        windowAfterMinutes
+      )
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Late threshold cannot be longer than the after-window.',
@@ -522,8 +553,7 @@ function validateMedicinePayload(
   }
 
   return {
-    valid:
-      true,
+    valid: true,
   };
 }
 
@@ -535,17 +565,20 @@ export async function PUT(
     params: Promise<{
       id: string;
     }>;
-  },
+  }
 ) {
   try {
     const user =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error:
+            'Unauthorized',
         },
         {
           status: 401,
@@ -554,22 +587,24 @@ export async function PUT(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
-    const { id } =
-      await params;
+    const {
+      id,
+    } = await params;
 
     if (
       !mongoose.isValidObjectId(
-        id,
+        id
       )
     ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid medicine ID',
+          error:
+            'Invalid medicine ID',
         },
         {
           status: 400,
@@ -578,7 +613,7 @@ export async function PUT(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
@@ -589,17 +624,22 @@ export async function PUT(
 
     try {
       body =
-        await request.json();
+        (await request.json()) as
+          Record<
+            string,
+            unknown
+          >;
     } catch (parseError) {
       console.error(
         '[PUT /api/medicines/[id]] JSON parse error:',
-        parseError,
+        parseError
       );
 
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid JSON body.',
+          error:
+            'Invalid JSON body.',
         },
         {
           status: 400,
@@ -608,19 +648,21 @@ export async function PUT(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
     const validation =
-      validateMedicinePayload(body);
+      validateMedicinePayload(
+        body
+      );
 
-    if (!validation.valid) {
+    if (
+      !validation.valid
+    ) {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
+          success: false,
           error:
             validation.error,
         },
@@ -631,84 +673,87 @@ export async function PUT(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
-    const {
-      name,
-      dosage,
-      frequency,
-      scheduledTimes,
-      notes,
-      startDate,
-      endDate,
-      chamberId,
-      windowBeforeMinutes,
-      windowAfterMinutes,
-      lateAfterMinutes,
-    } = body as {
-      name: string;
-      dosage: string;
-      frequency: string;
-      scheduledTimes: string[];
-      notes?: string;
-      startDate?: string;
-      endDate?: string;
-      chamberId?: number | null;
-      windowBeforeMinutes?: number;
-      windowAfterMinutes?: number;
-      lateAfterMinutes?: number;
-    };
+    const name =
+      body.name as string;
 
-    const normalizedChamberId =
-      chamberId == null
-        ? null
-        : Number(chamberId);
+    const dosage =
+      body.dosage as string;
 
-    if (
-      normalizedChamberId !== null
-    ) {
-      const chamberConflict =
-        await Medicine.exists({
-          _id: {
-            $ne:
-              id,
-          },
+    const frequency =
+      body.frequency as string;
 
-          userId:
-            user.userId,
+    const scheduledTimes =
+      body.scheduledTimes as
+        string[];
 
-          isActive:
-            true,
+    const notes =
+      typeof body.notes ===
+        'string'
+        ? body.notes
+        : undefined;
 
-          chamberId:
-            normalizedChamberId,
-        });
+    const startDate =
+      typeof body.startDate ===
+        'string'
+        ? body.startDate
+        : undefined;
 
-      if (chamberConflict) {
-        return NextResponse.json<ApiResponse>(
-          {
-            success:
-              false,
+    const endDate =
+      typeof body.endDate ===
+        'string'
+        ? body.endDate
+        : undefined;
 
-            error:
-              `Chamber ${normalizedChamberId} is already assigned to another active medicine.`,
-          },
-          {
-            status:
-              409,
-          },
-        );
-      }
-    }
+    const pillsPerDose =
+      body.pillsPerDose ==
+        null
+        ? 1
+        : Number(
+            body.pillsPerDose
+          );
 
+    const windowBeforeMinutes =
+      body.windowBeforeMinutes ==
+        null
+        ? 30
+        : Number(
+            body.windowBeforeMinutes
+          );
+
+    const windowAfterMinutes =
+      body.windowAfterMinutes ==
+        null
+        ? 90
+        : Number(
+            body.windowAfterMinutes
+          );
+
+    const lateAfterMinutes =
+      body.lateAfterMinutes ==
+        null
+        ? 30
+        : Number(
+            body.lateAfterMinutes
+          );
+
+    const normalizedTimes =
+      scheduledTimes.map(
+        (time) =>
+          time.trim()
+      );
+
+    /*
+     * No chamberId is accepted here.
+     * The daily Rx Box plan assigns chambers.
+     */
     const medicine =
       await Medicine.findOneAndUpdate(
         {
-          _id:
-            id,
-
+          _id: id,
           userId:
             user.userId,
         },
@@ -722,25 +767,15 @@ export async function PUT(
           frequency,
 
           scheduledTimes:
-            scheduledTimes.map(
-              (time) =>
-                time.trim(),
-            ),
+            normalizedTimes,
 
-          chamberId:
-            normalizedChamberId,
+          pillsPerDose,
 
-          windowBeforeMinutes:
-            windowBeforeMinutes ??
-            30,
+          windowBeforeMinutes,
 
-          windowAfterMinutes:
-            windowAfterMinutes ??
-            90,
+          windowAfterMinutes,
 
-          lateAfterMinutes:
-            lateAfterMinutes ??
-            30,
+          lateAfterMinutes,
 
           startDate:
             startDate &&
@@ -755,33 +790,35 @@ export async function PUT(
               : null,
 
           notes:
-            typeof notes === 'string'
+            typeof notes ===
+              'string'
               ? notes
                   .trim()
-                  .slice(0, 500)
+                  .slice(
+                    0,
+                    500
+                  )
               : '',
 
           updatedAt:
             new Date(),
         },
         {
-          new:
-            true,
-
-          runValidators:
-            true,
-        },
+          new: true,
+          runValidators: true,
+        }
       );
 
     if (!medicine) {
       console.warn(
-        `[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`,
+        `[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`
       );
 
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Medicine not found',
+          error:
+            'Medicine not found',
         },
         {
           status: 404,
@@ -790,7 +827,7 @@ export async function PUT(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
@@ -798,6 +835,10 @@ export async function PUT(
       const today =
         getMedicationDateKey();
 
+      /*
+       * Only unresolved logs for today are regenerated.
+       * Previous days and finalized records are preserved.
+       */
       await MedicationLog.deleteMany({
         userId:
           user.userId,
@@ -829,7 +870,7 @@ export async function PUT(
       if (isActiveToday) {
         for (
           const time of
-          scheduledTimes
+          normalizedTimes
         ) {
           await MedicationLog.updateOne(
             {
@@ -843,11 +884,10 @@ export async function PUT(
                 today,
 
               scheduledTime:
-                time.trim(),
+                time,
 
               countsTowardAdherence: {
-                $ne:
-                  false,
+                $ne: false,
               },
             },
             {
@@ -868,7 +908,7 @@ export async function PUT(
                   today,
 
                 scheduledTime:
-                  time.trim(),
+                  time,
 
                 status:
                   'pending',
@@ -880,51 +920,48 @@ export async function PUT(
                   'SCHEDULED',
 
                 expectedChamberId:
-                  medicine.chamberId ??
                   null,
 
                 expectedChamberIds:
-                  medicine.chamberId
-                    ? [
-                        medicine.chamberId,
-                      ]
-                    : [],
+                  [],
 
                 windowBeforeMinutes:
-                  medicine.windowBeforeMinutes,
+                  medicine
+                    .windowBeforeMinutes,
 
                 windowAfterMinutes:
-                  medicine.windowAfterMinutes,
+                  medicine
+                    .windowAfterMinutes,
 
                 lateAfterMinutes:
-                  medicine.lateAfterMinutes,
+                  medicine
+                    .lateAfterMinutes,
 
                 countsTowardAdherence:
                   true,
               },
             },
             {
-              upsert:
-                true,
-            },
+              upsert: true,
+            }
           );
         }
       }
     } catch (logError) {
+      /*
+       * The medicine update is already saved. Log refresh
+       * failure is recorded without corrupting old history.
+       */
       console.error(
         '[PUT /api/medicines/[id]] Error updating medication logs:',
-        logError,
+        logError
       );
     }
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          true,
-
-        data:
-          medicine,
-
+        success: true,
+        data: medicine,
         message:
           'Medicine updated successfully',
       },
@@ -935,18 +972,19 @@ export async function PUT(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   } catch (error) {
     console.error(
       '[PUT /api/medicines/[id]] Unhandled error:',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error:
+          'Internal server error',
       },
       {
         status: 500,
@@ -955,7 +993,7 @@ export async function PUT(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   }
 }
@@ -968,17 +1006,20 @@ export async function DELETE(
     params: Promise<{
       id: string;
     }>;
-  },
+  }
 ) {
   try {
     const user =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error:
+            'Unauthorized',
         },
         {
           status: 401,
@@ -987,22 +1028,24 @@ export async function DELETE(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
-    const { id } =
-      await params;
+    const {
+      id,
+    } = await params;
 
     if (
       !mongoose.isValidObjectId(
-        id,
+        id
       )
     ) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid medicine ID',
+          error:
+            'Invalid medicine ID',
         },
         {
           status: 400,
@@ -1011,18 +1054,19 @@ export async function DELETE(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
     await connectDB();
 
+    /*
+     * Soft delete preserves previous medication history.
+     */
     const medicine =
       await Medicine.findOneAndUpdate(
         {
-          _id:
-            id,
-
+          _id: id,
           userId:
             user.userId,
         },
@@ -1034,16 +1078,16 @@ export async function DELETE(
             new Date(),
         },
         {
-          new:
-            true,
-        },
+          new: true,
+        }
       );
 
     if (!medicine) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Medicine not found',
+          error:
+            'Medicine not found',
         },
         {
           status: 404,
@@ -1052,13 +1096,17 @@ export async function DELETE(
             'Content-Type':
               'application/json',
           },
-        },
+        }
       );
     }
 
     const todayString =
       getMedicationDateKey();
 
+    /*
+     * Remove only unresolved current/future schedules.
+     * Historical and finalized adherence records remain.
+     */
     await MedicationLog.deleteMany({
       userId:
         user.userId,
@@ -1081,8 +1129,7 @@ export async function DELETE(
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          true,
+        success: true,
 
         message:
           'Medicine deleted successfully',
@@ -1094,18 +1141,19 @@ export async function DELETE(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   } catch (error) {
     console.error(
       '[DELETE /api/medicines/[id]] Error:',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error:
+          'Internal server error',
       },
       {
         status: 500,
@@ -1114,7 +1162,7 @@ export async function DELETE(
           'Content-Type':
             'application/json',
         },
-      },
+      }
     );
   }
 }

@@ -9,11 +9,17 @@ export interface ISensorDataDocument
   extends Document<mongoose.Types.ObjectId> {
   userId?: mongoose.mongo.ObjectId | null;
   deviceId: string;
+  eventId?: string | null;
+  planId?: string | null;
+  groupId?: string | null;
+
   event:
     | 'pill_taken'
     | 'pill_dispensed'
     | 'container_opened'
+    | 'medication_missed'
     | 'heartbeat';
+
   medicineId?: mongoose.mongo.ObjectId | null;
   medicineName?: string | null;
   timestamp: Date;
@@ -31,6 +37,7 @@ const SensorDataSchema =
         default: null,
         index: true,
       },
+
       deviceId: {
         type: String,
         required: [
@@ -39,34 +46,59 @@ const SensorDataSchema =
         ],
         index: true,
       },
+
+      eventId: {
+        type: String,
+        default: undefined,
+        trim: true,
+      },
+
+      planId: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
+      groupId: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
       event: {
         type: String,
         enum: [
           'pill_taken',
           'pill_dispensed',
           'container_opened',
+          'medication_missed',
           'heartbeat',
         ],
         required: true,
       },
+
       medicineId: {
         type: Schema.Types.ObjectId,
         ref: 'Medicine',
         default: null,
       },
+
       medicineName: {
         type: String,
         default: null,
       },
+
       timestamp: {
         type: Date,
         required: true,
         default: Date.now,
       },
+
       rawData: {
         type: Schema.Types.Mixed,
         default: {},
       },
+
       processed: {
         type: Boolean,
         default: false,
@@ -78,12 +110,27 @@ const SensorDataSchema =
     }
   );
 
+SensorDataSchema.index(
+  {
+    deviceId: 1,
+    eventId: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      eventId: {
+        $type: 'string',
+      },
+    },
+  }
+);
+
 const SensorData:
   Model<ISensorDataDocument> =
-  mongoose.models.SensorData ||
-  mongoose.model<ISensorDataDocument>(
-    'SensorData',
-    SensorDataSchema
-  );
+    mongoose.models.SensorData ||
+    mongoose.model<ISensorDataDocument>(
+      'SensorData',
+      SensorDataSchema
+    );
 
 export default SensorData;

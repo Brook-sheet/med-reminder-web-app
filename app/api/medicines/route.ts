@@ -1,19 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
+// app/api/medicines/route.ts
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
-import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import type { IMedicineDocument } from '@/models/Medicine';
+
+import {
+  getTokenFromRequest,
+  verifyToken,
+} from '@/lib/auth';
+
+import type {
+  ApiResponse,
+} from '@/lib/interfaces/data/Api';
+
+import type {
+  IMedicineDocument,
+} from '@/models/Medicine';
+
 import {
   getMedicationDateKey,
   isValidMedicationDateKey,
 } from '@/lib/medicationTime';
 
-async function getAuthUser(request: NextRequest) {
-  const token = getTokenFromRequest(request);
+async function getAuthUser(
+  request: NextRequest
+) {
+  const token =
+    getTokenFromRequest(
+      request
+    );
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
   return verifyToken(token);
 }
@@ -33,29 +59,32 @@ const TIME_REGEX =
   /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
 
 function isValidDate(
-  dateString: string,
+  dateString: string
 ): boolean {
   return isValidMedicationDateKey(
-    dateString,
+    dateString
   );
 }
 
 function isValidTime(
-  timeString: string,
+  timeString: string
 ): boolean {
   return TIME_REGEX.test(
-    timeString.trim(),
+    timeString.trim()
   );
 }
 
 function sanitizeMedicineName(
-  raw: unknown,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (
+    typeof raw !== 'string'
+  ) {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const trimmed =
+    raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -65,14 +94,16 @@ function sanitizeMedicineName(
   }
 
   if (
-    !/[a-zA-Z0-9]/.test(trimmed)
+    !/[a-zA-Z0-9]/.test(
+      trimmed
+    )
   ) {
     return null;
   }
 
   if (
     /^[^a-zA-Z0-9]+$/.test(
-      trimmed,
+      trimmed
     )
   ) {
     return null;
@@ -82,13 +113,16 @@ function sanitizeMedicineName(
 }
 
 function sanitizeDosage(
-  raw: unknown,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (
+    typeof raw !== 'string'
+  ) {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const trimmed =
+    raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -98,7 +132,9 @@ function sanitizeDosage(
   }
 
   if (
-    !/[a-zA-Z0-9]/.test(trimmed)
+    !/[a-zA-Z0-9]/.test(
+      trimmed
+    )
   ) {
     return null;
   }
@@ -112,7 +148,7 @@ interface ValidationResult {
 }
 
 function validateMedicinePayload(
-  body: Record<string, unknown>,
+  body: Record<string, unknown>
 ): ValidationResult {
   const {
     name,
@@ -121,19 +157,20 @@ function validateMedicinePayload(
     scheduledTimes,
     startDate,
     endDate,
-    chamberId,
+    pillsPerDose,
     windowBeforeMinutes,
     windowAfterMinutes,
     lateAfterMinutes,
   } = body;
 
   const cleanName =
-    sanitizeMedicineName(name);
+    sanitizeMedicineName(
+      name
+    );
 
   if (!cleanName) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.',
@@ -141,12 +178,13 @@ function validateMedicinePayload(
   }
 
   const cleanDosage =
-    sanitizeDosage(dosage);
+    sanitizeDosage(
+      dosage
+    );
 
   if (!cleanDosage) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.',
@@ -155,12 +193,11 @@ function validateMedicinePayload(
 
   if (
     !frequency ||
-    typeof frequency !== 'string'
+    typeof frequency !==
+      'string'
   ) {
     return {
-      valid:
-        false,
-
+      valid: false,
       error:
         'Frequency is required.',
     };
@@ -168,12 +205,11 @@ function validateMedicinePayload(
 
   if (
     !VALID_FREQUENCIES.includes(
-      frequency,
+      frequency
     )
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         `Frequency must be one of: ${VALID_FREQUENCIES.join(', ')}.`,
@@ -182,13 +218,13 @@ function validateMedicinePayload(
 
   if (
     !Array.isArray(
-      scheduledTimes,
+      scheduledTimes
     ) ||
-    scheduledTimes.length === 0
+    scheduledTimes.length ===
+      0
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'At least one scheduled time is required.',
@@ -196,11 +232,11 @@ function validateMedicinePayload(
   }
 
   if (
-    scheduledTimes.length > 24
+    scheduledTimes.length >
+      24
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'A maximum of 24 scheduled times is allowed.',
@@ -208,15 +244,16 @@ function validateMedicinePayload(
   }
 
   for (
-    const time of scheduledTimes
+    const time of
+    scheduledTimes
   ) {
     if (
-      typeof time !== 'string' ||
+      typeof time !==
+        'string' ||
       !isValidTime(time)
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           `Invalid scheduled time "${String(time)}". Expected format: "H:MM AM" or "H:MM PM".`,
@@ -224,25 +261,25 @@ function validateMedicinePayload(
     }
   }
 
+  const normalizedScheduledTimes =
+    scheduledTimes as string[];
+
   const uniqueTimes =
     new Set(
-      (
-        scheduledTimes as string[]
-      ).map(
+      normalizedScheduledTimes.map(
         (time) =>
           time
             .trim()
-            .toUpperCase(),
-      ),
+            .toUpperCase()
+      )
     );
 
   if (
     uniqueTimes.size !==
-    scheduledTimes.length
+      scheduledTimes.length
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Duplicate scheduled times are not allowed.',
@@ -255,12 +292,14 @@ function validateMedicinePayload(
     startDate !== ''
   ) {
     if (
-      typeof startDate !== 'string' ||
-      !isValidDate(startDate)
+      typeof startDate !==
+        'string' ||
+      !isValidDate(
+        startDate
+      )
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'Start date must be a valid date in YYYY-MM-DD format.',
@@ -274,28 +313,33 @@ function validateMedicinePayload(
     endDate !== ''
   ) {
     if (
-      typeof endDate !== 'string' ||
-      !isValidDate(endDate)
+      typeof endDate !==
+        'string' ||
+      !isValidDate(
+        endDate
+      )
     ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'End date must be a valid date in YYYY-MM-DD format.',
       };
     }
 
-    const start =
-      typeof startDate === 'string' &&
+    const normalizedStartDate =
+      typeof startDate ===
+        'string' &&
       startDate
         ? startDate
         : getMedicationDateKey();
 
-    if (endDate < start) {
+    if (
+      endDate <
+      normalizedStartDate
+    ) {
       return {
-        valid:
-          false,
+        valid: false,
 
         error:
           'End date cannot be before start date.',
@@ -303,32 +347,35 @@ function validateMedicinePayload(
     }
   }
 
+  const normalizedPillsPerDose =
+    pillsPerDose == null
+      ? 1
+      : Number(
+          pillsPerDose
+        );
+
   if (
-    chamberId !== undefined &&
-    chamberId !== null &&
-    chamberId !== ''
+    !Number.isInteger(
+      normalizedPillsPerDose
+    ) ||
+    normalizedPillsPerDose <
+      1 ||
+    normalizedPillsPerDose >
+      4
   ) {
-    const chamber =
-      Number(chamberId);
+    return {
+      valid: false,
 
-    if (
-      !Number.isInteger(chamber) ||
-      chamber < 1 ||
-      chamber > 3
-    ) {
-      return {
-        valid:
-          false,
-
-        error:
-          'Chamber must be 1, 2, or 3.',
-      };
-    }
+      error:
+        'Pills per scheduled dose must be a whole number from 1 to 4.',
+    };
   }
 
   for (
-    const [field, value] of
-    Object.entries({
+    const [
+      field,
+      value,
+    ] of Object.entries({
       windowBeforeMinutes,
       windowAfterMinutes,
       lateAfterMinutes,
@@ -343,13 +390,14 @@ function validateMedicinePayload(
         Number(value);
 
       if (
-        !Number.isInteger(minutes) ||
+        !Number.isInteger(
+          minutes
+        ) ||
         minutes < 0 ||
         minutes > 720
       ) {
         return {
-          valid:
-            false,
+          valid: false,
 
           error:
             `${field} must be a whole number from 0 to 720.`,
@@ -359,14 +407,19 @@ function validateMedicinePayload(
   }
 
   if (
-    lateAfterMinutes !== undefined &&
-    windowAfterMinutes !== undefined &&
-    Number(lateAfterMinutes) >
-      Number(windowAfterMinutes)
+    lateAfterMinutes !==
+      undefined &&
+    windowAfterMinutes !==
+      undefined &&
+    Number(
+      lateAfterMinutes
+    ) >
+      Number(
+        windowAfterMinutes
+      )
   ) {
     return {
-      valid:
-        false,
+      valid: false,
 
       error:
         'Late threshold cannot be longer than the after-window.',
@@ -374,11 +427,17 @@ function validateMedicinePayload(
   }
 
   return {
-    valid:
-      true,
+    valid: true,
   };
 }
 
+/**
+ * Creates scheduled-dose logs for today when the newly
+ * created medicine is active today.
+ *
+ * pillsPerDose is intentionally not expanded here.
+ * One scheduled dose remains one adherence log.
+ */
 async function createLogsFromStartDate(
   userId: string,
   medicineId: string,
@@ -387,10 +446,9 @@ async function createLogsFromStartDate(
   scheduledTimes: string[],
   startDate: string,
   endDate: string | null,
-  chamberId: number | null,
   windowBeforeMinutes: number,
   windowAfterMinutes: number,
-  lateAfterMinutes: number,
+  lateAfterMinutes: number
 ) {
   const today =
     getMedicationDateKey();
@@ -406,7 +464,8 @@ async function createLogsFromStartDate(
   }
 
   for (
-    const time of scheduledTimes
+    const time of
+    scheduledTimes
   ) {
     const existing =
       await MedicationLog.findOne({
@@ -441,12 +500,10 @@ async function createLogsFromStartDate(
           'SCHEDULED',
 
         expectedChamberId:
-          chamberId,
+          null,
 
         expectedChamberIds:
-          chamberId
-            ? [chamberId]
-            : [],
+          [],
 
         windowBeforeMinutes,
 
@@ -462,21 +519,24 @@ async function createLogsFromStartDate(
 }
 
 export async function GET(
-  request: NextRequest,
+  request: NextRequest
 ) {
   try {
     const user =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error:
+            'Unauthorized',
         },
         {
           status: 401,
-        },
+        }
       );
     }
 
@@ -495,46 +555,47 @@ export async function GET(
       });
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
-      data:
-        medicines,
+      success: true,
+      data: medicines,
     });
   } catch (error) {
     console.error(
       '[GET /api/medicines]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error:
+          'Internal server error',
       },
       {
         status: 500,
-      },
+      }
     );
   }
 }
 
 export async function POST(
-  request: NextRequest,
+  request: NextRequest
 ) {
   try {
     const user =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error:
+            'Unauthorized',
         },
         {
           status: 401,
-        },
+        }
       );
     }
 
@@ -545,35 +606,41 @@ export async function POST(
 
     try {
       body =
-        await request.json() as
-          Record<string, unknown>;
+        (await request.json()) as
+          Record<
+            string,
+            unknown
+          >;
     } catch {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid JSON body.',
+          error:
+            'Invalid JSON body.',
         },
         {
           status: 400,
-        },
+        }
       );
     }
 
     const validation =
-      validateMedicinePayload(body);
+      validateMedicinePayload(
+        body
+      );
 
-    if (!validation.valid) {
+    if (
+      !validation.valid
+    ) {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
+          success: false,
           error:
             validation.error,
         },
         {
           status: 400,
-        },
+        }
       );
     }
 
@@ -590,12 +657,14 @@ export async function POST(
     const frequency =
       body.frequency as string;
 
+    const rawScheduledTimes =
+      body.scheduledTimes as
+        string[];
+
     const scheduledTimes =
-      (
-        body.scheduledTimes as
-          string[]
-      ).map(
-        (time) => time.trim(),
+      rawScheduledTimes.map(
+        (time) =>
+          time.trim()
       );
 
     const notes =
@@ -603,7 +672,10 @@ export async function POST(
         'string'
         ? body.notes
             .trim()
-            .slice(0, 500)
+            .slice(
+              0,
+              500
+            )
         : '';
 
     const startDate =
@@ -620,66 +692,42 @@ export async function POST(
         ? body.endDate.trim()
         : null;
 
-    const chamberId =
-      body.chamberId === undefined ||
-      body.chamberId === null ||
-      body.chamberId === ''
-        ? null
+    const pillsPerDose =
+      body.pillsPerDose ==
+        null
+        ? 1
         : Number(
-            body.chamberId,
+            body.pillsPerDose
           );
 
     const windowBeforeMinutes =
-      body.windowBeforeMinutes == null
+      body.windowBeforeMinutes ==
+        null
         ? 30
         : Number(
-            body.windowBeforeMinutes,
+            body.windowBeforeMinutes
           );
 
     const windowAfterMinutes =
-      body.windowAfterMinutes == null
+      body.windowAfterMinutes ==
+        null
         ? 90
         : Number(
-            body.windowAfterMinutes,
+            body.windowAfterMinutes
           );
 
     const lateAfterMinutes =
-      body.lateAfterMinutes == null
+      body.lateAfterMinutes ==
+        null
         ? 30
         : Number(
-            body.lateAfterMinutes,
+            body.lateAfterMinutes
           );
 
-    if (
-      chamberId !== null
-    ) {
-      const chamberConflict =
-        await Medicine.exists({
-          userId:
-            user.userId,
-
-          isActive:
-            true,
-
-          chamberId,
-        });
-
-      if (chamberConflict) {
-        return NextResponse.json<ApiResponse>(
-          {
-            success:
-              false,
-
-            error:
-              `Chamber ${chamberId} is already assigned to another active medicine.`,
-          },
-          {
-            status: 409,
-          },
-        );
-      }
-    }
-
+    /*
+     * No chamberId is accepted or assigned here.
+     * The daily Rx Box plan owns chamber allocation.
+     */
     const medicine:
       IMedicineDocument =
         await Medicine.create({
@@ -694,7 +742,7 @@ export async function POST(
 
           scheduledTimes,
 
-          chamberId,
+          pillsPerDose,
 
           windowBeforeMinutes,
 
@@ -712,49 +760,49 @@ export async function POST(
             true,
         });
 
+    const medicineScheduledTimes =
+      medicine.scheduledTimes as
+        string[];
+
     await createLogsFromStartDate(
       user.userId,
       medicine._id.toString(),
       medicine.name,
       medicine.dosage,
-      medicine.scheduledTimes as string[],
+      medicineScheduledTimes,
       startDate,
       endDate,
-      medicine.chamberId ?? null,
       medicine.windowBeforeMinutes,
       medicine.windowAfterMinutes,
-      medicine.lateAfterMinutes,
+      medicine.lateAfterMinutes
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          true,
-
-        data:
-          medicine,
-
+        success: true,
+        data: medicine,
         message:
           'Medicine added successfully',
       },
       {
         status: 201,
-      },
+      }
     );
   } catch (error) {
     console.error(
       '[POST /api/medicines]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error:
+          'Internal server error',
       },
       {
         status: 500,
-      },
+      }
     );
   }
 }

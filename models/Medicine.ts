@@ -16,7 +16,14 @@ export interface IMedicineDocument
   dosage: string;
   frequency: string;
   scheduledTimes: string[];
+  pillsPerDose: number;
+
+  /**
+   * Legacy data only.
+   * Daily Rx Box plans no longer use this field.
+   */
   chamberId?: number | null;
+
   windowBeforeMinutes: number;
   windowAfterMinutes: number;
   lateAfterMinutes: number;
@@ -32,175 +39,116 @@ const MedicineSchema =
   new Schema<IMedicineDocument>(
     {
       userId: {
-        type:
-          Schema.Types.ObjectId,
-
-        ref:
-          'User',
-
+        type: Schema.Types.ObjectId,
+        ref: 'User',
         required: [
           true,
           'User ID is required',
         ],
-
-        index:
-          true,
+        index: true,
       },
 
       name: {
-        type:
-          String,
-
+        type: String,
         required: [
           true,
           'Medicine name is required',
         ],
-
-        trim:
-          true,
+        trim: true,
       },
 
       dosage: {
-        type:
-          String,
-
+        type: String,
         required: [
           true,
           'Dosage is required',
         ],
-
-        trim:
-          true,
+        trim: true,
       },
 
       frequency: {
-        type:
-          String,
-
+        type: String,
         required: [
           true,
           'Frequency is required',
         ],
-
-        default:
-          'Once daily',
+        default: 'Once daily',
       },
 
       scheduledTimes: {
-        type: [
-          String,
-        ],
-
+        type: [String],
         required: [
           true,
           'At least one scheduled time is required',
         ],
-
         validate: {
-          validator:
-            (times: string[]) =>
-              times.length > 0,
-
+          validator: (times: string[]) =>
+            times.length > 0,
           message:
             'At least one scheduled time is required',
         },
       },
 
+      pillsPerDose: {
+        type: Number,
+        min: 1,
+        max: 4,
+        default: 1,
+      },
+
+      // Kept only for compatibility with existing documents.
       chamberId: {
-        type:
-          Number,
-
-        min:
-          1,
-
-        max:
-          3,
-
-        default:
-          null,
-
-        index:
-          true,
+        type: Number,
+        min: 1,
+        max: 4,
+        default: null,
+        index: true,
       },
 
       windowBeforeMinutes: {
-        type:
-          Number,
-
-        min:
-          0,
-
-        max:
-          720,
-
-        default:
-          30,
+        type: Number,
+        min: 0,
+        max: 720,
+        default: 30,
       },
 
       windowAfterMinutes: {
-        type:
-          Number,
-
-        min:
-          0,
-
-        max:
-          720,
-
-        default:
-          90,
+        type: Number,
+        min: 0,
+        max: 720,
+        default: 90,
       },
 
       lateAfterMinutes: {
-        type:
-          Number,
-
-        min:
-          0,
-
-        max:
-          720,
-
-        default:
-          30,
+        type: Number,
+        min: 0,
+        max: 720,
+        default: 30,
       },
 
       notes: {
-        type:
-          String,
-
-        default:
-          '',
+        type: String,
+        default: '',
       },
 
       startDate: {
-        type:
-          String,
-
-        default:
-          () =>
-            getMedicationDateKey(),
+        type: String,
+        default: () =>
+          getMedicationDateKey(),
       },
 
       endDate: {
-        type:
-          String,
-
-        default:
-          null,
+        type: String,
+        default: null,
       },
 
       isActive: {
-        type:
-          Boolean,
-
-        default:
-          true,
+        type: Boolean,
+        default: true,
       },
     },
     {
-      timestamps:
-        true,
+      timestamps: true,
     }
   );
 

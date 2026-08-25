@@ -14,6 +14,7 @@ export interface IMedicationLogDocument
   scheduledTime: string;
   scheduledDate: string;
   takenAt?: Date;
+
   status:
     | 'pending'
     | 'dispensed'
@@ -23,20 +24,34 @@ export interface IMedicationLogDocument
     | 'unverified'
     | 'incorrect_chamber'
     | 'reminder';
+
   source:
     | 'manual'
     | 'sensor'
     | 'system'
     | 'auto';
+
   eventType?:
     | 'CHAMBER_OPENED'
     | 'MEDICATION_DISPENSED'
     | 'MEDICATION_CONFIRMED'
     | 'MISSED'
     | 'SCHEDULED';
+
+  /**
+   * Backward-compatible first chamber.
+   * expectedChamberIds is authoritative.
+   */
   expectedChamberId?: number | null;
+
+  /**
+   * Legacy field. The tray ultrasonic sensor does not
+   * detect a chamber and must not populate this field.
+   */
   detectedChamberId?: number | null;
+
   expectedChamberIds: number[];
+
   windowBeforeMinutes: number;
   windowAfterMinutes: number;
   lateAfterMinutes: number;
@@ -56,32 +71,39 @@ const MedicationLogSchema =
         required: true,
         index: true,
       },
+
       medicineId: {
         type: Schema.Types.ObjectId,
         ref: 'Medicine',
         default: null,
       },
+
       medicineName: {
         type: String,
         required: true,
       },
+
       dosage: {
         type: String,
         default: '',
       },
+
       scheduledTime: {
         type: String,
         required: true,
       },
+
       scheduledDate: {
         type: String,
         required: true,
         index: true,
       },
+
       takenAt: {
         type: Date,
         default: null,
       },
+
       status: {
         type: String,
         enum: [
@@ -97,6 +119,7 @@ const MedicationLogSchema =
         default: 'pending',
         index: true,
       },
+
       source: {
         type: String,
         enum: [
@@ -107,6 +130,7 @@ const MedicationLogSchema =
         ],
         default: 'auto',
       },
+
       eventType: {
         type: String,
         enum: [
@@ -118,44 +142,64 @@ const MedicationLogSchema =
         ],
         default: 'SCHEDULED',
       },
+
       expectedChamberId: {
         type: Number,
         min: 1,
-        max: 3,
+        max: 4,
         default: null,
       },
+
       detectedChamberId: {
         type: Number,
         min: 1,
-        max: 3,
+        max: 4,
         default: null,
       },
+
       expectedChamberIds: {
         type: [Number],
         default: [],
+        validate: {
+          validator: (values: number[]) =>
+            values.every(
+              (value) =>
+                Number.isInteger(value) &&
+                value >= 1 &&
+                value <= 4
+            ),
+          message:
+            'Every expected chamber must be 1, 2, 3, or 4.',
+        },
       },
+
       windowBeforeMinutes: {
         type: Number,
         default: 30,
       },
+
       windowAfterMinutes: {
         type: Number,
         default: 90,
       },
+
       lateAfterMinutes: {
         type: Number,
         default: 30,
       },
+
       countsTowardAdherence: {
         type: Boolean,
         default: true,
         index: true,
       },
+
       verificationNote: {
         type: String,
         default: '',
         maxlength: 300,
       },
+
       sensorDeviceId: {
         type: String,
         default: null,
@@ -185,10 +229,10 @@ MedicationLogSchema.index({
 
 const MedicationLog:
   Model<IMedicationLogDocument> =
-  mongoose.models.MedicationLog ||
-  mongoose.model<IMedicationLogDocument>(
-    'MedicationLog',
-    MedicationLogSchema
-  );
+    mongoose.models.MedicationLog ||
+    mongoose.model<IMedicationLogDocument>(
+      'MedicationLog',
+      MedicationLogSchema
+    );
 
 export default MedicationLog;
