@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import {
   ensureMedicationLogsForDate,
+  finalizeExpiredMedicationLogs,
   timeToMinutes,
 } from "@/lib/medicationVerification";
 
@@ -1036,6 +1037,13 @@ export async function runMedicationReminderScheduler(
               dateKey
             )
         )
+      );
+
+      // Finalize unresolved schedules only after their configured medication
+      // windows expire. This also creates the deduplicated family missed alert.
+      await finalizeExpiredMedicationLogs(
+        user._id.toString(),
+        schedulerNow
       );
 
       const logs = (

@@ -3,6 +3,7 @@ import MedicationLog, {
   type IMedicationLogDocument,
 } from '@/models/MedicationLog';
 import Medicine from '@/models/Medicine';
+import { processMedicationAlertEvent } from '@/lib/alertEngine';
 
 export type MedicationEventSource =
   | 'manual'
@@ -57,6 +58,110 @@ type CandidateLog = {
   windowAfterMinutes?: number;
   lateAfterMinutes?: number;
 };
+
+type FinalMedicationStatus =
+  | 'taken'
+  | 'late'
+  | 'missed'
+  | 'incorrect_chamber';
+
+type FinalMedicationLog = {
+  _id: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  medicineId?: mongoose.Types.ObjectId | null;
+  medicineName: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  takenAt?: Date | null;
+  status: FinalMedicationStatus;
+  detectedChamberId?: number | null;
+  expectedChamberId?: number | null;
+  expectedChamberIds?: number[];
+  verificationNote?: string;
+};
+
+const UNRESOLVED_STATUSES = [
+  'pending',
+  'reminder',
+  'dispensed',
+] as const;
+
+function finalAlertDetails(
+  log: FinalMedicationLog
+) {
+  switch (log.status) {
+    case 'taken':
+      return {
+        eventType: 'MEDICATION_VERIFIED' as const,
+        title: 'Medication taken',
+      };
+    case 'late':
+      return {
+        eventType: 'MEDICATION_LATE' as const,
+        title: 'Medication taken late',
+      };
+    case 'missed':
+      return {
+        eventType: 'MEDICATION_MISSED' as const,
+        title: 'Medication missed',
+      };
+    case 'incorrect_chamber':
+      return {
+        eventType: 'MEDICATION_EVENT_WARNING' as const,
+        title: 'Incorrect medication access',
+      };
+  }
+}
+
+async function sendFinalStatusAlert(
+  log: FinalMedicationLog,
+  occurredAt: Date
+): Promise<void> {
+  const details =
+    finalAlertDetails(log);
+
+  await processMedicationAlertEvent({
+    // alertEngine also normalizes final medication events to this key.
+    // Keeping it deterministic makes repeated processing idempotent.
+    eventKey:
+      `medication-final:${log._id.toString()}`,
+    patientId:
+      log.userId.toString(),
+    medicationId:
+      log.medicineId?.toString() ?? null,
+    medicationLogId:
+      log._id.toString(),
+    medicineName:
+      log.medicineName,
+    scheduledTime:
+      log.scheduledTime,
+    occurredAt,
+    eventType:
+      details.eventType,
+    title:
+      details.title,
+    message:
+      log.status === 'incorrect_chamber'
+        ? log.verificationNote
+        : undefined,
+    metadata: {
+      finalStatus:
+        log.status,
+      scheduledDate:
+        log.scheduledDate,
+      scheduledTime:
+        log.scheduledTime,
+      takenAt:
+        log.takenAt?.toISOString() ?? null,
+      expectedChamberId:
+        log.expectedChamberId ?? null,
+      detectedChamberId:
+        log.detectedChamberId ?? null,
+      verificationNote:
+        log.verificationNote ?? '',
+    },
+  });
+}
 
 export function timeToMinutes(
   time: string
@@ -296,7 +401,7 @@ export async function finalizeExpiredMedicationLogs(
       },
     });
 
-  const expiredIds = pending
+  const expiredLogs = pending
     .filter((log) => {
       const scheduled =
         scheduledDateTime(
@@ -314,14 +419,17 @@ export async function finalizeExpiredMedicationLogs(
       );
 
       return now > end;
-    })
-    .map((log) => log._id);
+    });
 
-  if (expiredIds.length > 0) {
-    await MedicationLog.updateMany(
+  for (const expiredLog of expiredLogs) {
+    const updated =
+      await MedicationLog.findOneAndUpdate(
       {
-        _id: {
-          $in: expiredIds,
+        _id:
+          expiredLog._id,
+        status: {
+          $in:
+            UNRESOLVED_STATUSES,
         },
       },
       {
@@ -332,8 +440,33 @@ export async function finalizeExpiredMedicationLogs(
           verificationNote:
             'No valid medication event was received before the medication window ended.',
         },
+      },
+      {
+        new: true,
       }
     );
+
+    if (!updated) {
+      continue;
+    }
+
+    try {
+      await sendFinalStatusAlert(
+        updated as FinalMedicationLog,
+        now
+      );
+    } catch (error) {
+      // The medication state is already safely finalized. A notification
+      // provider failure must not roll the dose back to pending.
+      console.error(
+        '[Medication Verification] Missed family alert failed:',
+        {
+          medicationLogId:
+            updated._id.toString(),
+          error,
+        }
+      );
+    }
   }
 }
 
@@ -422,6 +555,117 @@ async function createAuditLog(
   };
 }
 
+async function finalizeIncorrectAccess(
+  input: MedicationEventInput,
+  eventAt: Date,
+  target: CandidateLog,
+  expectedChamberIds: number[],
+  message: string
+): Promise<VerificationResult> {
+  const updated =
+    await MedicationLog.findOneAndUpdate(
+      {
+        _id:
+          target._id,
+        status: {
+          $in:
+            UNRESOLVED_STATUSES,
+        },
+      },
+      {
+        $set: {
+          status:
+            'incorrect_chamber',
+          takenAt:
+            eventAt,
+          source:
+            input.source,
+          eventType:
+            input.eventType,
+          sensorDeviceId:
+            input.deviceId ?? undefined,
+          detectedChamberId:
+            input.chamberId ?? null,
+          expectedChamberIds,
+          verificationNote:
+            message,
+        },
+      },
+      {
+        new: true,
+      }
+    );
+
+  if (!updated) {
+    throw new Error(
+      'This medication schedule was already finalized.'
+    );
+  }
+
+  await sendFinalStatusAlert(
+    updated as FinalMedicationLog,
+    eventAt
+  );
+
+  return {
+    verified: false,
+    status:
+      'incorrect_chamber',
+    message:
+      updated.verificationNote ||
+      message,
+    logId:
+      updated._id.toString(),
+    medicineName:
+      updated.medicineName,
+    scheduledTime:
+      updated.scheduledTime,
+    expectedChamberId:
+      updated.expectedChamberId ?? null,
+    detectedChamberId:
+      updated.detectedChamberId ?? null,
+    expectedChamberIds,
+    source:
+      input.source,
+  };
+}
+
+function resultFromFinalLog(
+  log: FinalMedicationLog,
+  source: MedicationEventSource
+): VerificationResult {
+  return {
+    verified:
+      log.status === 'taken' ||
+      log.status === 'late',
+    status:
+      log.status,
+    message:
+      log.verificationNote ||
+      `Medication marked ${log.status}.`,
+    logId:
+      log._id.toString(),
+    medicineName:
+      log.medicineName,
+    scheduledTime:
+      log.scheduledTime,
+    expectedChamberId:
+      log.expectedChamberId ?? null,
+    detectedChamberId:
+      log.detectedChamberId ?? null,
+    expectedChamberIds:
+      log.expectedChamberIds ??
+      (
+        log.expectedChamberId == null
+          ? []
+          : [
+              log.expectedChamberId,
+            ]
+      ),
+    source,
+  };
+}
+
 export async function processMedicationEvent(
   input: MedicationEventInput
 ): Promise<VerificationResult> {
@@ -484,6 +728,37 @@ export async function processMedicationEvent(
     input.userId,
     eventAt
   );
+
+  if (input.logId) {
+    const existingFinalLog =
+      await MedicationLog.findOne({
+        _id:
+          input.logId,
+        userId:
+          input.userId,
+        status: {
+          $in: [
+            'taken',
+            'late',
+            'missed',
+            'incorrect_chamber',
+          ],
+        },
+      }).lean<FinalMedicationLog | null>();
+
+    if (existingFinalLog) {
+      await sendFinalStatusAlert(
+        existingFinalLog,
+        existingFinalLog.takenAt ??
+          eventAt
+      );
+
+      return resultFromFinalLog(
+        existingFinalLog,
+        input.source
+      );
+    }
+  }
 
   const query: Record<
     string,
@@ -645,27 +920,38 @@ export async function processMedicationEvent(
       input.chamberId != null &&
       candidates.length > 0;
 
+    if (incorrect) {
+      const expected =
+        candidates[0];
+      const message =
+        `Chamber ${input.chamberId} was accessed, but the valid chamber${
+          expectedChamberIds.length === 1
+            ? ' is'
+            : 's are'
+        } ${
+          expectedChamberIds.join(
+            ', '
+          ) ||
+          'not assigned'
+        }.`;
+
+      return finalizeIncorrectAccess(
+        input,
+        eventAt,
+        expected,
+        expectedChamberIds,
+        message
+      );
+    }
+
     return createAuditLog(
       input,
       eventAt,
-      incorrect
-        ? 'incorrect_chamber'
-        : 'unverified',
+      'unverified',
       candidates[0] ??
         null,
       expectedChamberIds,
-      incorrect
-        ? `Chamber ${input.chamberId} was accessed, but the valid chamber${
-            expectedChamberIds.length === 1
-              ? ' is'
-              : 's are'
-          } ${
-            expectedChamberIds.join(
-              ', '
-            ) ||
-            'not assigned'
-          }.`
-        : 'No pending medication matched this event within its configured medication window.'
+      'No pending medication matched this event within its configured medication window.'
     );
   }
 
@@ -676,10 +962,9 @@ export async function processMedicationEvent(
     input.chamberId !==
       target.expectedChamberId
   ) {
-    return createAuditLog(
+    return finalizeIncorrectAccess(
       input,
       eventAt,
-      'incorrect_chamber',
       target,
       expectedChamberIds,
       `Chamber ${input.chamberId} was accessed instead of chamber ${target.expectedChamberId}.`
@@ -714,6 +999,28 @@ export async function processMedicationEvent(
           )
         ? 'late'
         : 'taken';
+
+  if (
+    status === 'missed'
+  ) {
+    const windowEndsAt =
+      new Date(
+        scheduled.getTime() +
+          (
+            target.windowAfterMinutes ??
+            90
+          ) *
+            60_000
+      );
+
+    if (
+      eventAt <= windowEndsAt
+    ) {
+      throw new Error(
+        'Medication cannot be marked missed until its medication window has expired.'
+      );
+    }
+  }
 
   const updated =
     await MedicationLog.findOneAndUpdate(
@@ -765,6 +1072,15 @@ export async function processMedicationEvent(
   if (!updated) {
     throw new Error(
       'This medication schedule was already finalized.'
+    );
+  }
+
+  if (
+    status !== 'dispensed'
+  ) {
+    await sendFinalStatusAlert(
+      updated as FinalMedicationLog,
+      eventAt
     );
   }
 

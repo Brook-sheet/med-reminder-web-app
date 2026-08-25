@@ -46,16 +46,16 @@ interface AlertPolicy {
 
 const ALERT_POLICIES: Record<AlertEventType, AlertPolicy> = {
   MEDICATION_VERIFIED: {
-    createAlert: false,
+    createAlert: true,
     severity: 'INFO',
-    push: false,
+    push: true,
     sms: false,
-    defaultTitle: 'Medication verified',
+    defaultTitle: 'Medication taken',
   },
   MEDICATION_LATE: {
     createAlert: true,
     severity: 'NOTICE',
-    push: false,
+    push: true,
     sms: false,
     defaultTitle: 'Medication taken late',
   },
@@ -113,7 +113,7 @@ function defaultMessage(
     case 'CRITICAL_MEDICATION_EVENT':
       return `${patientName} has a medication event requiring immediate attention.`;
     case 'MEDICATION_VERIFIED':
-      return `${patientName} verified ${medicine}.`;
+      return `${patientName} took ${medicine}${time}.`;
     default:
       return `${patientName} has a medication event requiring review.`;
   }
@@ -157,7 +157,18 @@ export async function processMedicationAlertEvent(
       alertIds: [],
     };
   }
-  if (!event.eventKey.trim() || event.eventKey.length > 180) {
+  const requestedEventKey = event.eventKey.trim();
+  const finalMedicationEvent = [
+    'MEDICATION_VERIFIED',
+    'MEDICATION_LATE',
+    'MEDICATION_MISSED',
+    'MEDICATION_EVENT_WARNING',
+  ].includes(event.eventType);
+  const eventKey = finalMedicationEvent && event.medicationLogId
+    ? `medication-final:${event.medicationLogId}`
+    : requestedEventKey;
+
+  if (!eventKey || eventKey.length > 180) {
     throw new Error('A valid alert eventKey is required.');
   }
   if (!mongoose.isValidObjectId(event.patientId)) {
@@ -219,7 +230,7 @@ export async function processMedicationAlertEvent(
         monitorId: recipient.id,
         medicationId: safeObjectId(event.medicationId),
         medicationLogId: safeObjectId(event.medicationLogId),
-        eventKey: event.eventKey.trim(),
+        eventKey,
         eventType: event.eventType,
         severity: policy.severity,
         title: event.title || policy.defaultTitle,
@@ -259,6 +270,8 @@ export async function processMedicationAlertEvent(
             severity: alert.severity,
             alertId: alert._id.toString(),
             medicineName: event.medicineName,
+            patientId: patient._id.toString(),
+            logId: event.medicationLogId || undefined,
             url: '/alerts',
           })
         : Promise.resolve<ChannelDeliveryResult>({ status: 'SKIPPED' }),
