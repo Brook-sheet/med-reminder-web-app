@@ -86,7 +86,20 @@ export default function Home() {
       30000
     );
 
-    return () => clearInterval(interval);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchDashboard();
+      }
+    };
+
+    window.addEventListener("focus", fetchDashboard);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", fetchDashboard);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [fetchDashboard]);
 
   useEffect(() => {

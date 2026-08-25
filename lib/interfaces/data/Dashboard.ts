@@ -1,8 +1,18 @@
 export interface DashboardStats {
   adherenceRate: number | null;
-  todayProgress: { taken: number; total: number };
-  nextReminder: { time: string; medicineName: string } | null;
+
+  todayProgress: {
+    taken: number;
+    total: number;
+  };
+
+  nextReminder: {
+    time: string;
+    medicineName: string;
+  } | null;
+
   weeklyData: WeeklyDayData[];
+
   todaySchedule: ScheduleItem[];
 }
 
@@ -18,6 +28,15 @@ export interface ScheduleItem {
   dosage: string;
   notes?: string;
   time: string;
-  status: 'Taken' | 'Upcoming' | 'Missed' | 'Scheduled' | 'Now';
+
+  status:
+    | 'Taken'
+    | 'Late'
+    | 'Upcoming'
+    | 'Missed'
+    | 'Wrong Chamber'
+    | 'Scheduled'
+    | 'Now';
+
   logId?: string;
 }

@@ -3,8 +3,14 @@ import mongoose from "mongoose";
 import {
   ensureMedicationLogsForDate,
   finalizeExpiredMedicationLogs,
-  timeToMinutes,
 } from "@/lib/medicationVerification";
+
+import {
+  addDaysToMedicationDateKey,
+  getMedicationDateKey,
+  medicationScheduledAt,
+  resolveMedicationTimeZone,
+} from "@/lib/medicationTime";
 
 import {
   sendWebPushToUser,
@@ -12,15 +18,14 @@ import {
 } from "@/lib/notificationChannels";
 
 import MedicationLog from "@/models/MedicationLog";
+
 import MedicationReminderDelivery, {
   type IMedicationReminderDeliveryDocument,
   type MedicationReminderType,
 } from "@/models/MedicationReminderDelivery";
+
 import Notification from "@/models/Notification";
 import User from "@/models/User";
-
-const DEFAULT_TIME_ZONE =
-  "Asia/Manila";
 
 const MINUTE_IN_MILLISECONDS =
   60_000;
@@ -102,14 +107,6 @@ interface ReminderContent {
   message: string;
 }
 
-interface ZonedDateParts {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-}
-
 export interface MedicationReminderSchedulerResult {
   timeZone: string;
 
@@ -161,249 +158,29 @@ function getNumberEnvironmentVariable(
   return Math.floor(parsedValue);
 }
 
-function getMedicationTimeZone(): string {
-  const configured =
-    process.env
-      .MEDICATION_TIME_ZONE
-      ?.trim();
-
-  const timeZone =
-    configured ||
-    DEFAULT_TIME_ZONE;
-
-  try {
-    new Intl.DateTimeFormat(
-      "en-US",
-      {
-        timeZone,
-      }
-    ).format(new Date());
-
-    return timeZone;
-  } catch {
-    console.warn(
-      `[Medication Reminder Scheduler] Invalid time zone "${timeZone}". Using ${DEFAULT_TIME_ZONE}.`
-    );
-
-    return DEFAULT_TIME_ZONE;
-  }
-}
-
-function getZonedDateParts(
-  date: Date,
-  timeZone: string
-): ZonedDateParts {
-  const formatter =
-    new Intl.DateTimeFormat(
-      "en-US",
-      {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-      }
-    );
-
-  const parts =
-    formatter.formatToParts(
-      date
-    );
-
-  const values =
-    new Map(
-      parts.map((part) => [
-        part.type,
-        part.value,
-      ])
-    );
-
-  return {
-    year: Number(
-      values.get("year")
-    ),
-
-    month: Number(
-      values.get("month")
-    ),
-
-    day: Number(
-      values.get("day")
-    ),
-
-    hour: Number(
-      values.get("hour")
-    ),
-
-    minute: Number(
-      values.get("minute")
-    ),
-  };
-}
-
-function formatDateKey(
-  year: number,
-  month: number,
-  day: number
-): string {
-  return [
-    String(year).padStart(
-      4,
-      "0"
-    ),
-
-    String(month).padStart(
-      2,
-      "0"
-    ),
-
-    String(day).padStart(
-      2,
-      "0"
-    ),
-  ].join("-");
-}
-
-function getDateKey(
-  date: Date,
-  timeZone: string
-): string {
-  const parts =
-    getZonedDateParts(
-      date,
-      timeZone
-    );
-
-  return formatDateKey(
-    parts.year,
-    parts.month,
-    parts.day
-  );
-}
-
-function addDaysToDateKey(
-  dateKey: string,
-  days: number
-): string {
-  const match =
-    dateKey.match(
-      /^(\d{4})-(\d{2})-(\d{2})$/
-    );
-
-  if (!match) {
-    throw new Error(
-      `Invalid date key: ${dateKey}`
-    );
-  }
-
-  const date =
-    new Date(
-      Date.UTC(
-        Number(match[1]),
-        Number(match[2]) - 1,
-        Number(match[3])
-      )
-    );
-
-  date.setUTCDate(
-    date.getUTCDate() +
-      days
-  );
-
-  return formatDateKey(
-    date.getUTCFullYear(),
-    date.getUTCMonth() + 1,
-    date.getUTCDate()
-  );
-}
-
-function getLogicalLocalTime(
-  date: Date,
-  timeZone: string
-): number {
-  const parts =
-    getZonedDateParts(
-      date,
-      timeZone
-    );
-
-  return Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute
-  );
-}
-
-function getLogicalScheduleTime(
-  dateKey: string,
-  scheduledTime: string
-): number | null {
-  const match =
-    dateKey.match(
-      /^(\d{4})-(\d{2})-(\d{2})$/
-    );
-
-  const scheduledMinutes =
-    timeToMinutes(
-      scheduledTime
-    );
-
-  if (
-    !match ||
-    scheduledMinutes < 0
-  ) {
-    return null;
-  }
-
-  const hour =
-    Math.floor(
-      scheduledMinutes / 60
-    );
-
-  const minute =
-    scheduledMinutes % 60;
-
-  return Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    hour,
-    minute
-  );
-}
-
 function getMinutesUntilSchedule(
   log: SchedulerMedicationLog,
   now: Date,
   timeZone: string
 ): number | null {
   const scheduleTime =
-    getLogicalScheduleTime(
+    medicationScheduledAt(
       log.scheduledDate,
-      log.scheduledTime
+      log.scheduledTime,
+      timeZone,
     );
 
-  if (scheduleTime === null) {
+  if (Number.isNaN(scheduleTime.getTime())) {
     return null;
   }
 
-  const currentTime =
-    getLogicalLocalTime(
-      now,
-      timeZone
-    );
+  const difference =
+    (scheduleTime.getTime() - now.getTime()) /
+    MINUTE_IN_MILLISECONDS;
 
-  return Math.floor(
-    (
-      scheduleTime -
-      currentTime
-    ) /
-      MINUTE_IN_MILLISECONDS
-  );
+  return difference > 0
+    ? Math.ceil(difference)
+    : Math.floor(difference);
 }
 
 function getReminderType(
@@ -958,7 +735,7 @@ export async function runMedicationReminderScheduler(
   schedulerNow = new Date()
 ): Promise<MedicationReminderSchedulerResult> {
   const timeZone =
-    getMedicationTimeZone();
+    resolveMedicationTimeZone();
 
   const result: MedicationReminderSchedulerResult =
     {
@@ -990,20 +767,20 @@ export async function runMedicationReminderScheduler(
     };
 
   const currentDateKey =
-    getDateKey(
+    getMedicationDateKey(
       schedulerNow,
       timeZone
     );
 
   const dateKeys = [
-    addDaysToDateKey(
+    addDaysToMedicationDateKey(
       currentDateKey,
       -1
     ),
 
     currentDateKey,
 
-    addDaysToDateKey(
+    addDaysToMedicationDateKey(
       currentDateKey,
       1
     ),

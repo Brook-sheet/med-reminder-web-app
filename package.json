@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsc -p tsconfig.tests.json && node --test .next/test-build/tests/medicationStatus.test.js"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

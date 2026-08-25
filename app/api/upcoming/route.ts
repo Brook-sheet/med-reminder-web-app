@@ -4,34 +4,40 @@ import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
+import { evaluateMedicationLog } from '@/lib/adherenceEngine';
+import {
+  addDaysToMedicationDateKey,
+  formatMedicationDateLabel,
+  getMedicationDateKey,
+  medicationScheduledAt,
+  parseMedicationTimeToMinutes,
+  resolveMedicationTimeZone,
+} from '@/lib/medicationTime';
 
-async function getAuthUser(request: NextRequest) {
-  const token = getTokenFromRequest(request);
+export const dynamic = 'force-dynamic';
+
+async function getAuthUser(
+  request: NextRequest,
+) {
+  const token =
+    getTokenFromRequest(request);
+
   if (!token) return null;
+
   return verifyToken(token);
 }
 
-function timeToMinutes(timeStr: string): number {
-  const ampm = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (ampm) {
-    let h = parseInt(ampm[1]);
-    const m = parseInt(ampm[2]);
-    if (ampm[3].toUpperCase() === 'PM' && h !== 12) h += 12;
-    if (ampm[3].toUpperCase() === 'AM' && h === 12) h = 0;
-    return h * 60 + m;
-  }
-  const plain = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (plain) return parseInt(plain[1]) * 60 + parseInt(plain[2]);
-  return 0;
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
+function formatDate(
+  dateString: string,
+): string {
+  return formatMedicationDateLabel(
+    dateString,
+    {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    },
+  );
 }
 
 export interface UpcomingItem {
@@ -46,109 +52,307 @@ export interface UpcomingItem {
   logId?: string;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+) {
   try {
-    const user = await getAuthUser(request);
+    const user =
+      await getAuthUser(request);
+
     if (!user) {
       return NextResponse.json<ApiResponse>(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        {
+          success: false,
+          error: 'Unauthorized',
+        },
+        {
+          status: 401,
+        },
       );
     }
 
     await connectDB();
 
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const nowMinutes = today.getHours() * 60 + today.getMinutes();
+    const now = new Date();
 
-    const medicines = await Medicine.find({
-      userId: user.userId,
-      isActive: true,
-    });
+    const timeZone =
+      resolveMedicationTimeZone();
 
-    const upcomingItems: UpcomingItem[] = [];
-    const lookAheadDays = 30;
+    const todayString =
+      getMedicationDateKey(
+        now,
+        timeZone,
+      );
 
-    for (const med of medicines) {
-      const startDate = med.startDate || todayStr;
-      const endDate = med.endDate || '';
+    const medicines =
+      await Medicine.find({
+        userId:
+          user.userId,
 
-      for (let i = 0; i <= lookAheadDays; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(today.getDate() + i);
-        const checkDateStr = checkDate.toISOString().split('T')[0];
+        isActive:
+          true,
+      });
 
-        if (checkDateStr < startDate) continue;
-        if (endDate && checkDateStr > endDate) continue;
+    const upcomingItems:
+      UpcomingItem[] = [];
 
-        for (const time of med.scheduledTimes) {
-          const timeMinutes = timeToMinutes(time);
+    const lookAheadDays =
+      30;
 
-          if (checkDateStr === todayStr) {
-            if (timeMinutes <= nowMinutes) continue;
+    const lastDate =
+      addDaysToMedicationDateKey(
+        todayString,
+        lookAheadDays,
+      );
+
+    const medicineIds =
+      medicines.map(
+        (medicine) =>
+          medicine._id,
+      );
+
+    const existingLogs =
+      await MedicationLog.find({
+        userId:
+          user.userId,
+
+        medicineId: {
+          $in:
+            medicineIds,
+        },
+
+        scheduledDate: {
+          $gte:
+            todayString,
+
+          $lte:
+            lastDate,
+        },
+
+        countsTowardAdherence: {
+          $ne:
+            false,
+        },
+      }).lean();
+
+    const logBySchedule =
+      new Map(
+        existingLogs.map(
+          (log) => [
+            `${log.medicineId?.toString()}:${log.scheduledDate}:${log.scheduledTime}`,
+            log,
+          ],
+        ),
+      );
+
+    for (
+      const medicine of medicines
+    ) {
+      const startDate =
+        medicine.startDate ||
+        todayString;
+
+      const endDate =
+        medicine.endDate || '';
+
+      for (
+        let index = 0;
+        index <= lookAheadDays;
+        index += 1
+      ) {
+        const checkDateString =
+          addDaysToMedicationDateKey(
+            todayString,
+            index,
+          );
+
+        if (
+          checkDateString <
+          startDate
+        ) {
+          continue;
+        }
+
+        if (
+          endDate &&
+          checkDateString >
+            endDate
+        ) {
+          continue;
+        }
+
+        for (
+          const time of
+          medicine.scheduledTimes
+        ) {
+          const scheduledAt =
+            medicationScheduledAt(
+              checkDateString,
+              time,
+              timeZone,
+            );
+
+          if (
+            Number.isNaN(
+              scheduledAt.getTime(),
+            ) ||
+            scheduledAt <= now
+          ) {
+            continue;
           }
 
-          const existingLog = await MedicationLog.findOne({
-            userId: user.userId,
-            medicineId: med._id,
-            scheduledDate: checkDateStr,
-            scheduledTime: time,
-          });
+          const existingLog =
+            logBySchedule.get(
+              `${medicine._id.toString()}:${checkDateString}:${time}`,
+            );
 
-          if (existingLog && existingLog.status === 'taken') continue;
+          if (existingLog) {
+            const evaluated =
+              evaluateMedicationLog(
+                {
+                  status:
+                    String(
+                      existingLog.status,
+                    ),
 
-          const isToday = checkDateStr === todayStr;
-          const status: 'Upcoming' | 'Scheduled' = isToday
-            ? 'Upcoming'
-            : 'Scheduled';
+                  scheduledDate:
+                    String(
+                      existingLog.scheduledDate,
+                    ),
+
+                  scheduledTime:
+                    String(
+                      existingLog.scheduledTime,
+                    ),
+
+                  takenAt:
+                    existingLog.takenAt ??
+                    null,
+
+                  lateAfterMinutes:
+                    existingLog
+                      .lateAfterMinutes,
+
+                  windowAfterMinutes:
+                    existingLog
+                      .windowAfterMinutes,
+
+                  countsTowardAdherence:
+                    existingLog
+                      .countsTowardAdherence !==
+                    false,
+                },
+                now,
+                timeZone,
+              );
+
+            if (
+              evaluated.lifecycle !==
+              'upcoming'
+            ) {
+              continue;
+            }
+          }
+
+          const isToday =
+            checkDateString ===
+            todayString;
+
+          const status:
+            | 'Upcoming'
+            | 'Scheduled' =
+              isToday
+                ? 'Upcoming'
+                : 'Scheduled';
 
           upcomingItems.push({
-            medicineId: med._id.toString(),
-            medicineName: med.name,
-            dosage: med.dosage,
+            medicineId:
+              medicine._id.toString(),
+
+            medicineName:
+              medicine.name,
+
+            dosage:
+              medicine.dosage,
+
             notes:
-              typeof med.notes === 'string'
-                ? med.notes.trim()
+              typeof medicine.notes ===
+                'string'
+                ? medicine.notes.trim()
                 : '',
-            scheduledDate: checkDateStr,
-            scheduledDateFormatted: isToday
-              ? 'Today'
-              : formatDate(checkDateStr),
-            scheduledTime: time,
+
+            scheduledDate:
+              checkDateString,
+
+            scheduledDateFormatted:
+              isToday
+                ? 'Today'
+                : formatDate(
+                    checkDateString,
+                  ),
+
+            scheduledTime:
+              time,
+
             status,
-            logId: existingLog?._id?.toString(),
+
+            logId:
+              existingLog?._id
+                ?.toString(),
           });
         }
       }
     }
 
-    upcomingItems.sort((a, b) => {
-      if (a.scheduledDate !== b.scheduledDate) {
-        return a.scheduledDate.localeCompare(b.scheduledDate);
-      }
+    upcomingItems.sort(
+      (first, second) => {
+        if (
+          first.scheduledDate !==
+          second.scheduledDate
+        ) {
+          return first.scheduledDate.localeCompare(
+            second.scheduledDate,
+          );
+        }
 
-      return (
-        timeToMinutes(a.scheduledTime) -
-        timeToMinutes(b.scheduledTime)
+        return (
+          parseMedicationTimeToMinutes(
+            first.scheduledTime,
+          ) -
+          parseMedicationTimeToMinutes(
+            second.scheduledTime,
+          )
+        );
+      },
+    );
+
+    const limitedItems =
+      upcomingItems.slice(
+        0,
+        20,
       );
-    });
-
-    const limitedItems = upcomingItems.slice(0, 20);
 
     return NextResponse.json<ApiResponse>({
-      success: true,
-      data: limitedItems,
+      success:
+        true,
+
+      data:
+        limitedItems,
     });
   } catch (error) {
-    console.error('[GET /api/upcoming]', error);
+    console.error(
+      '[GET /api/upcoming]',
+      error,
+    );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
         error: 'Internal server error',
       },
-      { status: 500 }
+      {
+        status: 500,
+      },
     );
   }
 }

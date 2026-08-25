@@ -4,6 +4,14 @@ import MedicationLog, {
 } from '@/models/MedicationLog';
 import Medicine from '@/models/Medicine';
 import { processMedicationAlertEvent } from '@/lib/alertEngine';
+import {
+  addDaysToMedicationDateKey,
+  formatMedicationTime,
+  getMedicationDateKey,
+  medicationScheduledAt,
+  parseMedicationTimeToMinutes,
+  resolveMedicationTimeZone,
+} from '@/lib/medicationTime';
 
 export type MedicationEventSource =
   | 'manual'
@@ -95,16 +103,19 @@ function finalAlertDetails(
         eventType: 'MEDICATION_VERIFIED' as const,
         title: 'Medication taken',
       };
+
     case 'late':
       return {
         eventType: 'MEDICATION_LATE' as const,
         title: 'Medication taken late',
       };
+
     case 'missed':
       return {
         eventType: 'MEDICATION_MISSED' as const,
         title: 'Medication missed',
       };
+
     case 'incorrect_chamber':
       return {
         eventType: 'MEDICATION_EVENT_WARNING' as const,
@@ -125,120 +136,73 @@ async function sendFinalStatusAlert(
     // Keeping it deterministic makes repeated processing idempotent.
     eventKey:
       `medication-final:${log._id.toString()}`,
+
     patientId:
       log.userId.toString(),
+
     medicationId:
       log.medicineId?.toString() ?? null,
+
     medicationLogId:
       log._id.toString(),
+
     medicineName:
       log.medicineName,
+
     scheduledTime:
       log.scheduledTime,
+
     occurredAt,
+
     eventType:
       details.eventType,
+
     title:
       details.title,
+
     message:
       log.status === 'incorrect_chamber'
         ? log.verificationNote
         : undefined,
+
     metadata: {
       finalStatus:
         log.status,
+
       scheduledDate:
         log.scheduledDate,
+
       scheduledTime:
         log.scheduledTime,
+
       takenAt:
         log.takenAt?.toISOString() ?? null,
+
       expectedChamberId:
         log.expectedChamberId ?? null,
+
       detectedChamberId:
         log.detectedChamberId ?? null,
+
       verificationNote:
         log.verificationNote ?? '',
     },
   });
 }
 
-export function timeToMinutes(
-  time: string
-): number {
-  const ampm = time.match(
-    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i
-  );
-
-  if (ampm) {
-    let hour = Number(ampm[1]);
-    const minute = Number(ampm[2]);
-
-    if (
-      ampm[3].toUpperCase() === 'PM' &&
-      hour !== 12
-    ) {
-      hour += 12;
-    }
-
-    if (
-      ampm[3].toUpperCase() === 'AM' &&
-      hour === 12
-    ) {
-      hour = 0;
-    }
-
-    return hour * 60 + minute;
-  }
-
-  const plain = time.match(
-    /^(\d{1,2}):(\d{2})$/
-  );
-
-  if (!plain) {
-    return -1;
-  }
-
-  return (
-    Number(plain[1]) * 60 +
-    Number(plain[2])
-  );
-}
+export const timeToMinutes =
+  parseMedicationTimeToMinutes;
 
 export function scheduledDateTime(
   date: string,
-  time: string
+  time: string,
+  requestedTimeZone?: string | null,
 ): Date {
-  const result = new Date(
-    `${date}T00:00:00`
+  return medicationScheduledAt(
+    date,
+    time,
+    requestedTimeZone,
   );
-
-  result.setMinutes(
-    timeToMinutes(time)
-  );
-
-  return result;
-}
-
-function toDateString(
-  date: Date
-): string {
-  return date
-    .toISOString()
-    .split('T')[0];
-}
-
-function addDays(
-  date: Date,
-  days: number
-): Date {
-  const result = new Date(date);
-
-  result.setDate(
-    result.getDate() + days
-  );
-
-  return result;
 }
 
 function isValidChamber(
@@ -264,9 +228,11 @@ export async function ensureMedicationLogsForDate(
   const medicines = await Medicine.find({
     userId,
     isActive: true,
+
     startDate: {
       $lte: dateString,
     },
+
     $or: [
       {
         endDate: null,
@@ -290,11 +256,15 @@ export async function ensureMedicationLogsForDate(
         MedicationLog.updateOne(
           {
             userId,
+
             medicineId:
               medicine._id,
+
             scheduledDate:
               dateString,
+
             scheduledTime,
+
             countsTowardAdherence: {
               $ne: false,
             },
@@ -302,40 +272,54 @@ export async function ensureMedicationLogsForDate(
           {
             $setOnInsert: {
               userId,
+
               medicineId:
                 medicine._id,
+
               medicineName:
                 medicine.name,
+
               dosage:
                 medicine.dosage,
+
               scheduledDate:
                 dateString,
+
               scheduledTime,
+
               status: 'pending',
+
               source: 'auto',
+
               eventType:
                 'SCHEDULED',
+
               expectedChamberId:
                 medicine.chamberId ??
                 null,
+
               expectedChamberIds:
                 medicine.chamberId
                   ? [
                       medicine.chamberId,
                     ]
                   : [],
+
               windowBeforeMinutes:
                 medicine
                   .windowBeforeMinutes ??
                 30,
+
               windowAfterMinutes:
                 medicine
                   .windowAfterMinutes ??
                 90,
+
               lateAfterMinutes:
                 medicine
                   .lateAfterMinutes ??
                 30,
+
               countsTowardAdherence:
                 true,
             },
@@ -357,22 +341,17 @@ export async function ensureMedicationLogsForRange(
   from: string,
   to: string
 ): Promise<void> {
-  const cursor = new Date(
-    `${from}T00:00:00`
-  );
+  let cursor = from;
 
-  const last = new Date(
-    `${to}T00:00:00`
-  );
-
-  while (cursor <= last) {
+  while (cursor <= to) {
     await ensureMedicationLogsForDate(
       userId,
-      toDateString(cursor)
+      cursor
     );
 
-    cursor.setDate(
-      cursor.getDate() + 1
+    cursor = addDaysToMedicationDateKey(
+      cursor,
+      1,
     );
   }
 }
@@ -381,14 +360,22 @@ export async function finalizeExpiredMedicationLogs(
   userId: string,
   now = new Date()
 ): Promise<void> {
-  const today = toDateString(now);
+  const timeZone =
+    resolveMedicationTimeZone();
+
+  const today = getMedicationDateKey(
+    now,
+    timeZone,
+  );
 
   const pending =
     await MedicationLog.find({
       userId,
+
       scheduledDate: {
         $lte: today,
       },
+
       status: {
         $in: [
           'pending',
@@ -396,17 +383,19 @@ export async function finalizeExpiredMedicationLogs(
           'dispensed',
         ],
       },
+
       countsTowardAdherence: {
         $ne: false,
       },
     });
 
-  const expiredLogs = pending
-    .filter((log) => {
+  const expiredLogs = pending.filter(
+    (log) => {
       const scheduled =
         scheduledDateTime(
           log.scheduledDate,
-          log.scheduledTime
+          log.scheduledTime,
+          timeZone,
         );
 
       const end = new Date(
@@ -419,32 +408,40 @@ export async function finalizeExpiredMedicationLogs(
       );
 
       return now > end;
-    });
+    }
+  );
 
   for (const expiredLog of expiredLogs) {
     const updated =
       await MedicationLog.findOneAndUpdate(
-      {
-        _id:
-          expiredLog._id,
-        status: {
-          $in:
-            UNRESOLVED_STATUSES,
+        {
+          _id:
+            expiredLog._id,
+
+          status: {
+            $in:
+              UNRESOLVED_STATUSES,
+          },
         },
-      },
-      {
-        $set: {
-          status: 'missed',
-          source: 'system',
-          eventType: 'MISSED',
-          verificationNote:
-            'No valid medication event was received before the medication window ended.',
+        {
+          $set: {
+            status:
+              'missed',
+
+            source:
+              'system',
+
+            eventType:
+              'MISSED',
+
+            verificationNote:
+              'No valid medication event was received before the medication window ended.',
+          },
         },
-      },
-      {
-        new: true,
-      }
-    );
+        {
+          new: true,
+        }
+      );
 
     if (!updated) {
       continue;
@@ -463,6 +460,7 @@ export async function finalizeExpiredMedicationLogs(
         {
           medicationLogId:
             updated._id.toString(),
+
           error,
         }
       );
@@ -478,7 +476,8 @@ function distanceFromSchedule(
     eventAt.getTime() -
       scheduledDateTime(
         log.scheduledDate,
-        log.scheduledTime
+        log.scheduledTime,
+        resolveMedicationTimeZone(),
       ).getTime()
   );
 }
@@ -486,51 +485,70 @@ function distanceFromSchedule(
 async function createAuditLog(
   input: MedicationEventInput,
   eventAt: Date,
+
   status:
     | 'unverified'
     | 'incorrect_chamber',
+
   expected: CandidateLog | null,
   expectedChamberIds: number[],
   message: string
 ): Promise<VerificationResult> {
   const log: IMedicationLogDocument =
     await MedicationLog.create({
-      userId: input.userId,
+      userId:
+        input.userId,
+
       medicineId:
         expected?.medicineId ?? null,
+
       medicineName:
         expected?.medicineName ??
         'Unmatched medication event',
+
       dosage:
         expected?.dosage ?? '',
+
       scheduledDate:
         expected?.scheduledDate ??
-        toDateString(eventAt),
+        getMedicationDateKey(
+          eventAt,
+          resolveMedicationTimeZone(),
+        ),
+
       scheduledTime:
         expected?.scheduledTime ??
-        eventAt.toLocaleTimeString(
-          'en-US',
-          {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          }
+        formatMedicationTime(
+          eventAt,
+          resolveMedicationTimeZone(),
         ),
-      takenAt: eventAt,
+
+      takenAt:
+        eventAt,
+
       status,
-      source: input.source,
+
+      source:
+        input.source,
+
       eventType:
         input.eventType,
+
       sensorDeviceId:
         input.deviceId ?? undefined,
+
       expectedChamberId:
         expected?.expectedChamberId ??
         null,
+
       detectedChamberId:
         input.chamberId ?? null,
+
       expectedChamberIds,
+
       countsTowardAdherence:
         false,
+
       verificationNote:
         message,
     });
@@ -539,17 +557,24 @@ async function createAuditLog(
     verified: false,
     status,
     message,
+
     logId:
       log._id.toString(),
+
     medicineName:
       log.medicineName,
+
     scheduledTime:
       log.scheduledTime,
+
     expectedChamberId:
       log.expectedChamberId ?? null,
+
     detectedChamberId:
       log.detectedChamberId ?? null,
+
     expectedChamberIds,
+
     source:
       input.source,
   };
@@ -567,6 +592,7 @@ async function finalizeIncorrectAccess(
       {
         _id:
           target._id,
+
         status: {
           $in:
             UNRESOLVED_STATUSES,
@@ -576,17 +602,24 @@ async function finalizeIncorrectAccess(
         $set: {
           status:
             'incorrect_chamber',
+
           takenAt:
             eventAt,
+
           source:
             input.source,
+
           eventType:
             input.eventType,
+
           sensorDeviceId:
             input.deviceId ?? undefined,
+
           detectedChamberId:
             input.chamberId ?? null,
+
           expectedChamberIds,
+
           verificationNote:
             message,
         },
@@ -609,22 +642,31 @@ async function finalizeIncorrectAccess(
 
   return {
     verified: false,
+
     status:
       'incorrect_chamber',
+
     message:
       updated.verificationNote ||
       message,
+
     logId:
       updated._id.toString(),
+
     medicineName:
       updated.medicineName,
+
     scheduledTime:
       updated.scheduledTime,
+
     expectedChamberId:
       updated.expectedChamberId ?? null,
+
     detectedChamberId:
       updated.detectedChamberId ?? null,
+
     expectedChamberIds,
+
     source:
       input.source,
   };
@@ -638,21 +680,29 @@ function resultFromFinalLog(
     verified:
       log.status === 'taken' ||
       log.status === 'late',
+
     status:
       log.status,
+
     message:
       log.verificationNote ||
       `Medication marked ${log.status}.`,
+
     logId:
       log._id.toString(),
+
     medicineName:
       log.medicineName,
+
     scheduledTime:
       log.scheduledTime,
+
     expectedChamberId:
       log.expectedChamberId ?? null,
+
     detectedChamberId:
       log.detectedChamberId ?? null,
+
     expectedChamberIds:
       log.expectedChamberIds ??
       (
@@ -662,6 +712,7 @@ function resultFromFinalLog(
               log.expectedChamberId,
             ]
       ),
+
     source,
   };
 }
@@ -704,14 +755,21 @@ export async function processMedicationEvent(
     );
   }
 
+  const timeZone =
+    resolveMedicationTimeZone();
+
+  const eventDate =
+    getMedicationDateKey(
+      eventAt,
+      timeZone,
+    );
+
   const dates =
     [-1, 0, 1].map(
       (offset) =>
-        toDateString(
-          addDays(
-            eventAt,
-            offset
-          )
+        addDaysToMedicationDateKey(
+          eventDate,
+          offset,
         )
     );
 
@@ -734,8 +792,10 @@ export async function processMedicationEvent(
       await MedicationLog.findOne({
         _id:
           input.logId,
+
         userId:
           input.userId,
+
         status: {
           $in: [
             'taken',
@@ -766,9 +826,11 @@ export async function processMedicationEvent(
   > = {
     userId:
       input.userId,
+
     scheduledDate: {
       $in: dates,
     },
+
     status: {
       $in: [
         'pending',
@@ -776,6 +838,7 @@ export async function processMedicationEvent(
         'dispensed',
       ],
     },
+
     countsTowardAdherence: {
       $ne: false,
     },
@@ -807,7 +870,8 @@ export async function processMedicationEvent(
         const scheduled =
           scheduledDateTime(
             log.scheduledDate,
-            log.scheduledTime
+            log.scheduledTime,
+            timeZone,
           );
 
         const start =
@@ -923,6 +987,7 @@ export async function processMedicationEvent(
     if (incorrect) {
       const expected =
         candidates[0];
+
       const message =
         `Chamber ${input.chamberId} was accessed, but the valid chamber${
           expectedChamberIds.length === 1
@@ -974,7 +1039,8 @@ export async function processMedicationEvent(
   const scheduled =
     scheduledDateTime(
       target.scheduledDate,
-      target.scheduledTime
+      target.scheduledTime,
+      timeZone,
     );
 
   const delayMinutes =
@@ -987,18 +1053,19 @@ export async function processMedicationEvent(
     );
 
   const status =
-    input.eventType === 'MEDICATION_DISPENSED'
+    input.eventType ===
+      'MEDICATION_DISPENSED'
       ? 'dispensed'
       : input.eventType ===
-    'MISSED'
-      ? 'missed'
-      : delayMinutes >
-          (
-            target.lateAfterMinutes ??
-            30
-          )
-        ? 'late'
-        : 'taken';
+          'MISSED'
+        ? 'missed'
+        : delayMinutes >
+            (
+              target.lateAfterMinutes ??
+              30
+            )
+          ? 'late'
+          : 'taken';
 
   if (
     status === 'missed'
@@ -1027,6 +1094,7 @@ export async function processMedicationEvent(
       {
         _id:
           target._id,
+
         status: {
           $in: [
             'pending',
@@ -1038,30 +1106,38 @@ export async function processMedicationEvent(
       {
         $set: {
           status,
+
           takenAt:
-            status === 'missed' || status === 'dispensed'
+            status === 'missed' ||
+            status === 'dispensed'
               ? null
               : eventAt,
+
           source:
             input.source,
+
           eventType:
             input.eventType,
+
           sensorDeviceId:
             input.deviceId ??
             undefined,
+
           detectedChamberId:
             input.chamberId ??
             null,
+
           expectedChamberIds,
+
           verificationNote:
             status === 'dispensed'
               ? 'Medication was dispensed and is waiting for intake confirmation.'
               : status === 'late'
-              ? `Medication access was verified ${delayMinutes} minutes after the scheduled time.`
-              : status ===
-                  'missed'
-                ? 'Medication was marked missed by an authorized event.'
-                : 'Medication access was verified within the configured time window.',
+                ? `Medication access was verified ${delayMinutes} minutes after the scheduled time.`
+                : status ===
+                    'missed'
+                  ? 'Medication was marked missed by an authorized event.'
+                  : 'Medication access was verified within the configured time window.',
         },
       },
       {
@@ -1088,23 +1164,32 @@ export async function processMedicationEvent(
     verified:
       status === 'taken' ||
       status === 'late',
+
     status,
+
     message:
       updated.verificationNote ||
       `Medication marked ${status}.`,
+
     logId:
       updated._id.toString(),
+
     medicineName:
       updated.medicineName,
+
     scheduledTime:
       updated.scheduledTime,
+
     expectedChamberId:
       updated.expectedChamberId ??
       null,
+
     detectedChamberId:
       updated.detectedChamberId ??
       null,
+
     expectedChamberIds,
+
     source:
       input.source,
   };
