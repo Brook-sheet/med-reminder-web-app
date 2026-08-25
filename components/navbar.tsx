@@ -4,19 +4,22 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import {
-  useRouter,
   usePathname,
+  useRouter,
 } from "next/navigation";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { MdOutlineSpaceDashboard } from "react-icons/md";
 import {
-  CiPill,
-  CiSettings,
   CiLogout,
   CiMonitor,
+  CiPill,
+  CiSettings,
 } from "react-icons/ci";
 import { GoHistory } from "react-icons/go";
-import { Bell, MessageCircle } from "lucide-react";
+import {
+  Bell,
+  MessageCircle,
+} from "lucide-react";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useMonitoringRequestCount } from "@/hooks/useMonitoringRequestCount";
 
@@ -47,8 +50,9 @@ const Navbar = ({ role }: NavbarProps) => {
     router.refresh();
   };
 
-  const closeSidebar = () =>
+  const closeSidebar = () => {
     setOpen(false);
+  };
 
   return (
     <div>
@@ -84,25 +88,21 @@ const Navbar = ({ role }: NavbarProps) => {
       >
         <div className="flex h-full flex-col gap-6 p-6">
           <div className="flex flex-col gap-3 rounded-[28px] border border-border/70 bg-background/90 p-5 shadow-sm shadow-slate-900/5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl md:h-12 md:w-12">
+            <div className="flex h-12 w-12 items-center justify-center md:h-14 md:w-14">
               <Image
                 src="/icon.png"
-                alt="Med App Reminder Logo"
-                width={48}
-                height={48}
+                alt="Rx Box: Smart Pillbox logo"
+                width={56}
+                height={56}
+                sizes="56px"
                 className="h-full w-full object-contain"
                 priority
               />
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Med App Reminder
-              </p>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Health-first medication
-                tracking.
+              <p className="text-sm font-semibold leading-relaxed text-slate-900 dark:text-slate-100">
+                Rx Box: Smart Pillbox
               </p>
             </div>
           </div>
@@ -147,6 +147,7 @@ const Navbar = ({ role }: NavbarProps) => {
                 }`}
               >
                 <Bell className="h-6 w-6" />
+
                 <span className="font-semibold">
                   Medication Alerts
                 </span>

@@ -25,8 +25,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Med App Reminder",
-  description: "a capstone project",
+  title: {
+    default: "Rx Box: Smart Pillbox",
+    template: "%s | Rx Box: Smart Pillbox",
+  },
+  description:
+    "Smart medication reminder and adherence monitoring system.",
+  applicationName: "Rx Box: Smart Pillbox",
+  icons: {
+    icon: [
+      {
+        url: "/icon.png",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
