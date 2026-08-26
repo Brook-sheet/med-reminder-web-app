@@ -14,6 +14,7 @@
     "lib/adaptiveIntervention.ts",
     "lib/adherenceEngine.ts",
     "lib/medicationTime.ts",
+    "lib/patientMedicationReportCore.ts",
     "lib/rxBoxPlanCore.ts",
     "lib/rxBoxSecurityCore.ts",
     "lib/rxBoxUi.ts",
