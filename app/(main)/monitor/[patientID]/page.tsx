@@ -14,8 +14,10 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle,
+  ClipboardCheck,
   Eye,
   Info,
+  Loader2,
   Minus,
   Pill,
   Sparkles,
@@ -23,26 +25,19 @@ import {
   TrendingUp,
   User,
 } from 'lucide-react';
+import { toast } from '@/components/ui/Toast';
 
-type RiskLevel =
-  | 'Low'
-  | 'Moderate'
-  | 'High';
+type RiskLevel = 'Low' | 'Moderate' | 'High';
 
-type Trend =
-  | 'improving'
-  | 'stable'
-  | 'declining';
+type Trend = 'improving' | 'stable' | 'declining';
 
 interface BehavioralInsight {
   id: string;
-
   tone:
     | 'positive'
     | 'warning'
     | 'critical'
     | 'neutral';
-
   title: string;
   detail: string;
 }
@@ -67,57 +62,42 @@ interface AdherenceInfo {
   riskReasons: string[];
   insight: string;
   recommendation: string;
-
   behavioral: {
-    insights:
-      BehavioralInsight[];
-
-    dailyTrend:
-      Array<{
-        date: string;
-        label: string;
-        eligible: number;
-        taken: number;
-        adherenceRate:
-          number | null;
-      }>;
-
-    timeOfDay:
-      Array<{
-        period:
-          | 'Morning'
-          | 'Afternoon'
-          | 'Evening';
-
-        eligible: number;
-        taken: number;
-        missed: number;
-        late: number;
-        adherenceRate: number;
-      }>;
-
-    byMedication:
-      Array<{
-        medicineId:
-          string | null;
-
-        medicineName: string;
-        eligible: number;
-        taken: number;
-        missed: number;
-        late: number;
-        incorrectChamber: number;
-        adherenceRate: number;
-      }>;
+    insights: BehavioralInsight[];
+    dailyTrend: Array<{
+      date: string;
+      label: string;
+      eligible: number;
+      taken: number;
+      adherenceRate: number | null;
+    }>;
+    timeOfDay: Array<{
+      period: 'Morning' | 'Afternoon' | 'Evening';
+      eligible: number;
+      taken: number;
+      missed: number;
+      late: number;
+      adherenceRate: number;
+    }>;
+    byMedication: Array<{
+      medicineId: string | null;
+      medicineName: string;
+      eligible: number;
+      taken: number;
+      missed: number;
+      late: number;
+      incorrectChamber: number;
+      adherenceRate: number;
+    }>;
   };
 }
 
 interface LogEntry {
+  _id: string;
   medicineName: string;
   scheduledDate: string;
   scheduledTime: string;
   status: string;
-
   lifecycle:
     | 'upcoming'
     | 'due'
@@ -127,7 +107,6 @@ interface LogEntry {
     | 'incorrect_chamber'
     | 'unverified'
     | 'audit';
-
   takenAt?: string | null;
   dosage?: string;
   source?: string;
@@ -135,6 +114,20 @@ interface LogEntry {
   detectedChamberId?: number | null;
   expectedChamberIds?: number[];
   verificationNote?: string;
+  verificationMethod: string;
+  finalizedAt?: string | null;
+  acknowledgedByCurrentFamily: boolean;
+  annotations: Array<{
+    _id: string;
+    type:
+      | 'patient_note'
+      | 'missed_explanation'
+      | 'family_acknowledgment';
+    text: string;
+    authorRole: 'patient' | 'family';
+    authorName: string;
+    createdAt: string;
+  }>;
 }
 
 interface DashboardData {
@@ -144,13 +137,8 @@ interface DashboardData {
     condition: string;
     memberSince: string;
   };
-
-  adherence:
-    AdherenceInfo;
-
-  recentLogs:
-    LogEntry[];
-
+  adherence: AdherenceInfo;
+  recentLogs: LogEntry[];
   reportSummary: {
     range: string;
     scheduled: number;
@@ -159,7 +147,6 @@ interface DashboardData {
     late: number;
     incorrectChamber: number;
     unverified: number;
-
     today: {
       scheduled: number;
       verified: number;
@@ -168,7 +155,6 @@ interface DashboardData {
       incorrectChamber: number;
     };
   };
-
   readOnly: boolean;
 }
 
@@ -176,286 +162,306 @@ const RISK_STYLE = {
   Low: {
     badge:
       'border-green-300 bg-green-100 text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-300',
-
-    text:
-      'text-green-700 dark:text-green-400',
-
-    bar:
-      'bg-green-500',
-
-    Icon:
-      CheckCircle,
+    text: 'text-green-700 dark:text-green-400',
+    bar: 'bg-green-500',
+    Icon: CheckCircle,
   },
-
   Moderate: {
     badge:
       'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-
-    text:
-      'text-amber-700 dark:text-amber-400',
-
-    bar:
-      'bg-amber-500',
-
-    Icon:
-      AlertTriangle,
+    text: 'text-amber-700 dark:text-amber-400',
+    bar: 'bg-amber-500',
+    Icon: AlertTriangle,
   },
-
   High: {
     badge:
       'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300',
-
-    text:
-      'text-red-700 dark:text-red-400',
-
-    bar:
-      'bg-red-500',
-
-    Icon:
-      AlertTriangle,
+    text: 'text-red-700 dark:text-red-400',
+    bar: 'bg-red-500',
+    Icon: AlertTriangle,
   },
 } as const;
 
 const TREND_STYLE = {
   improving: {
-    label:
-      'Improving',
-
-    color:
-      'text-green-600',
-
-    Icon:
-      TrendingUp,
+    label: 'Improving',
+    color: 'text-green-600',
+    Icon: TrendingUp,
   },
-
   stable: {
-    label:
-      'Stable',
-
-    color:
-      'text-gray-500',
-
-    Icon:
-      Minus,
+    label: 'Stable',
+    color: 'text-gray-500',
+    Icon: Minus,
   },
-
   declining: {
-    label:
-      'Declining',
-
-    color:
-      'text-red-600',
-
-    Icon:
-      TrendingDown,
+    label: 'Declining',
+    color: 'text-red-600',
+    Icon: TrendingDown,
   },
 } as const;
 
-const LOG_STYLE:
-  Record<
-    LogEntry['lifecycle'],
-    {
-      label: string;
-      color: string;
-      dot: string;
-    }
-  > = {
-    upcoming: {
-      label:
-        'Upcoming',
+const LOG_STYLE: Record<
+  LogEntry['lifecycle'],
+  {
+    label: string;
+    color: string;
+    dot: string;
+  }
+> = {
+  upcoming: {
+    label: 'Upcoming',
+    color: 'text-blue-700 dark:text-blue-300',
+    dot: 'bg-blue-500',
+  },
+  due: {
+    label: 'Due / Pending',
+    color: 'text-amber-700 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+  taken: {
+    label: 'Taken',
+    color: 'text-green-700 dark:text-green-300',
+    dot: 'bg-green-500',
+  },
+  late: {
+    label: 'Late',
+    color: 'text-amber-700 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+  missed: {
+    label: 'Missed',
+    color: 'text-red-700 dark:text-red-300',
+    dot: 'bg-red-500',
+  },
+  incorrect_chamber: {
+    label: 'Wrong Chamber',
+    color: 'text-red-700 dark:text-red-300',
+    dot: 'bg-red-500',
+  },
+  unverified: {
+    label: 'Unverified',
+    color: 'text-gray-600 dark:text-gray-300',
+    dot: 'bg-gray-400',
+  },
+  audit: {
+    label: 'Verification Event',
+    color: 'text-gray-600 dark:text-gray-300',
+    dot: 'bg-gray-400',
+  },
+};
 
-      color:
-        'text-blue-700 dark:text-blue-300',
+function formattedDateTime(
+  value?: string | null,
+): string {
+  if (!value) {
+    return '—';
+  }
 
-      dot:
-        'bg-blue-500',
-    },
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
-    due: {
-      label:
-        'Due / Pending',
+function annotationTitle(
+  type: LogEntry['annotations'][number]['type'],
+): string {
+  if (type === 'family_acknowledgment') {
+    return 'Family Acknowledgment';
+  }
 
-      color:
-        'text-amber-700 dark:text-amber-300',
+  if (type === 'missed_explanation') {
+    return 'Missed-dose explanation';
+  }
 
-      dot:
-        'bg-amber-500',
-    },
+  return 'Patient note';
+}
 
-    taken: {
-      label:
-        'Taken',
+interface AcknowledgeDialogProps {
+  log: LogEntry;
+  note: string;
+  saving: boolean;
+  onNoteChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
 
-      color:
-        'text-green-700 dark:text-green-300',
+function AcknowledgeDialog({
+  log,
+  note,
+  saving,
+  onNoteChange,
+  onCancel,
+  onConfirm,
+}: AcknowledgeDialogProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+      onClick={saving ? undefined : onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="acknowledge-title"
+        className="w-full max-w-md rounded-[28px] border border-border/80 bg-card p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+            <ClipboardCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          </div>
 
-      dot:
-        'bg-green-500',
-    },
+          <div>
+            <h2
+              id="acknowledge-title"
+              className="text-lg font-semibold text-gray-900 dark:text-white"
+            >
+              Acknowledge this medication record?
+            </h2>
 
-    late: {
-      label:
-        'Late',
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {log.medicineName} {log.dosage} ·{' '}
+              {log.scheduledDate} at {log.scheduledTime}
+            </p>
 
-      color:
-        'text-amber-700 dark:text-amber-300',
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Acknowledgment records that you reviewed the
+              entry. It will not change the patient&apos;s
+              final medication status.
+            </p>
+          </div>
+        </div>
 
-      dot:
-        'bg-amber-500',
-    },
+        <label className="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Optional response note
 
-    missed: {
-      label:
-        'Missed',
+          <textarea
+            value={note}
+            onChange={(event) =>
+              onNoteChange(event.target.value)
+            }
+            maxLength={500}
+            rows={4}
+            disabled={saving}
+            placeholder="Example: I checked in with the patient."
+            className="mt-2 w-full resize-none rounded-2xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+        </label>
 
-      color:
-        'text-red-700 dark:text-red-300',
+        <p className="mt-1 text-right text-xs text-gray-400">
+          {note.length}/500
+        </p>
 
-      dot:
-        'bg-red-500',
-    },
+        <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="flex-1 rounded-2xl border border-border px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Cancel
+          </button>
 
-    incorrect_chamber: {
-      label:
-        'Wrong Chamber',
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
 
-      color:
-        'text-red-700 dark:text-red-300',
-
-      dot:
-        'bg-red-500',
-    },
-
-    unverified: {
-      label:
-        'Unverified',
-
-      color:
-        'text-gray-600 dark:text-gray-300',
-
-      dot:
-        'bg-gray-400',
-    },
-
-    audit: {
-      label:
-        'Verification Event',
-
-      color:
-        'text-gray-600 dark:text-gray-300',
-
-      dot:
-        'bg-gray-400',
-    },
-  };
+            {saving ? 'Saving...' : 'Acknowledge'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MonitorDashboardPage() {
-  const params =
-    useParams();
-
-  const router =
-    useRouter();
-
-  const patientID =
-    params.patientID as string;
+  const params = useParams();
+  const router = useRouter();
+  const patientID = params.patientID as string;
 
   const [data, setData] =
-    useState<DashboardData | null>(
-      null,
-    );
-
-  const [loading, setLoading] =
-    useState(true);
-
+    useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] =
-    useState<string | null>(
-      null,
-    );
+    useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] =
+    useState<Date | null>(null);
 
   const [
-    lastUpdated,
-    setLastUpdated,
-  ] =
-    useState<Date | null>(
-      null,
-    );
+    acknowledgmentLog,
+    setAcknowledgmentLog,
+  ] = useState<LogEntry | null>(null);
 
-  const fetchDashboard =
-    useCallback(async () => {
-      if (!patientID) return;
+  const [
+    acknowledgmentNote,
+    setAcknowledgmentNote,
+  ] = useState('');
 
-      try {
-        const response =
-          await fetch(
-            `/api/patient/monitor/${patientID}/dashboard`,
-            {
-              cache:
-                'no-store',
-            },
-          );
+  const [
+    savingAcknowledgment,
+    setSavingAcknowledgment,
+  ] = useState(false);
 
-        const json =
-          await response.json();
+  const fetchDashboard = useCallback(async () => {
+    if (!patientID) {
+      return;
+    }
 
-        if (
-          !response.ok ||
-          !json.success
-        ) {
-          throw new Error(
-            json.error ||
-              'Failed to load patient dashboard',
-          );
-        }
+    try {
+      const response = await fetch(
+        `/api/patient/monitor/${patientID}/dashboard`,
+        {
+          cache: 'no-store',
+        },
+      );
 
-        setData(
-          json.data,
-        );
+      const json = await response.json();
 
-        setError(
-          null,
-        );
-
-        setLastUpdated(
-          new Date(),
-        );
-      } catch (fetchError) {
-        setError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : 'Failed to connect to server',
-        );
-      } finally {
-        setLoading(
-          false,
+      if (!response.ok || !json.success) {
+        throw new Error(
+          json.error ||
+            'Failed to load patient dashboard',
         );
       }
-    }, [
-      patientID,
-    ]);
+
+      setData(json.data);
+      setError(null);
+      setLastUpdated(new Date());
+    } catch (fetchError) {
+      setError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : 'Failed to connect to server',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [patientID]);
 
   useEffect(() => {
     fetchDashboard();
 
-    const interval =
-      setInterval(
-        fetchDashboard,
-        60_000,
-      );
-
-    const refreshWhenVisible =
-      () => {
-        if (
-          document.visibilityState ===
-          'visible'
-        ) {
-          fetchDashboard();
-        }
-      };
-
-    window.addEventListener(
-      'focus',
+    const interval = setInterval(
       fetchDashboard,
+      60_000,
     );
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboard();
+      }
+    };
+
+    window.addEventListener('focus', fetchDashboard);
 
     document.addEventListener(
       'visibilitychange',
@@ -463,9 +469,7 @@ export default function MonitorDashboardPage() {
     );
 
     return () => {
-      clearInterval(
-        interval,
-      );
+      clearInterval(interval);
 
       window.removeEventListener(
         'focus',
@@ -477,9 +481,61 @@ export default function MonitorDashboardPage() {
         refreshWhenVisible,
       );
     };
-  }, [
-    fetchDashboard,
-  ]);
+  }, [fetchDashboard]);
+
+  const submitAcknowledgment = async () => {
+    if (
+      !acknowledgmentLog ||
+      savingAcknowledgment
+    ) {
+      return;
+    }
+
+    setSavingAcknowledgment(true);
+
+    try {
+      const response = await fetch(
+        `/api/medication-logs/${acknowledgmentLog._id}/annotations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'family_acknowledgment',
+            text: acknowledgmentNote.trim(),
+          }),
+        },
+      );
+
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(
+          json.error ||
+            'Unable to acknowledge this record.',
+        );
+      }
+
+      setAcknowledgmentLog(null);
+      setAcknowledgmentNote('');
+
+      toast.success(
+        json.message ||
+          'Medication record acknowledged.',
+      );
+
+      await fetchDashboard();
+    } catch (acknowledgmentError) {
+      toast.error(
+        acknowledgmentError instanceof Error
+          ? acknowledgmentError.message
+          : 'Unable to acknowledge this record.',
+      );
+    } finally {
+      setSavingAcknowledgment(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -495,24 +551,18 @@ export default function MonitorDashboardPage() {
     );
   }
 
-  if (
-    error ||
-    !data
-  ) {
+  if (error || !data) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="max-w-sm space-y-4 text-center">
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
 
           <p className="text-lg font-semibold text-gray-900 dark:text-white">
-            {error ||
-              'Patient not found'}
+            {error || 'Patient not found'}
           </p>
 
           <button
-            onClick={() =>
-              router.back()
-            }
+            onClick={() => router.back()}
             className="text-sm text-blue-600 underline dark:text-blue-400"
           >
             Go back
@@ -529,21 +579,10 @@ export default function MonitorDashboardPage() {
     reportSummary,
   } = data;
 
-  const risk =
-    RISK_STYLE[
-      adherence.riskLevel
-    ];
-
-  const RiskIcon =
-    risk.Icon;
-
-  const trend =
-    TREND_STYLE[
-      adherence.weeklyTrend
-    ];
-
-  const TrendIcon =
-    trend.Icon;
+  const risk = RISK_STYLE[adherence.riskLevel];
+  const RiskIcon = risk.Icon;
+  const trend = TREND_STYLE[adherence.weeklyTrend];
+  const TrendIcon = trend.Icon;
 
   return (
     <div className="min-h-screen bg-background">
@@ -552,21 +591,19 @@ export default function MonitorDashboardPage() {
           <Eye className="h-4 w-4 shrink-0 text-blue-500" />
 
           <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
-            Read-only monitoring mode — you cannot edit patient data
+            Read-only medication status — acknowledgment
+            cannot change the patient&apos;s record
           </p>
 
           {lastUpdated && (
             <p className="ml-auto text-xs text-blue-400">
-              Updated{' '}
-              {lastUpdated.toLocaleTimeString()}
+              Updated {lastUpdated.toLocaleTimeString()}
             </p>
           )}
         </div>
 
         <button
-          onClick={() =>
-            router.back()
-          }
+          onClick={() => router.back()}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -605,8 +642,7 @@ export default function MonitorDashboardPage() {
                 className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${risk.badge}`}
               >
                 <RiskIcon className="h-3.5 w-3.5" />
-                {adherence.riskLevel}
-                {' Behavioral Risk'}
+                {adherence.riskLevel} Behavioral Risk
               </span>
             )}
           </div>
@@ -624,56 +660,32 @@ export default function MonitorDashboardPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             {[
               {
-                label:
-                  'Verified',
-
-                value:
-                  `${reportSummary.today.verified} / ${reportSummary.today.scheduled}`,
-
-                color:
-                  'text-green-600',
+                label: 'Verified',
+                value: `${reportSummary.today.verified} / ${reportSummary.today.scheduled}`,
+                color: 'text-green-600',
               },
               {
-                label:
-                  'Missed',
-
-                value:
-                  reportSummary.today.missed,
-
-                color:
-                  'text-red-600',
+                label: 'Missed',
+                value: reportSummary.today.missed,
+                color: 'text-red-600',
               },
               {
-                label:
-                  'Late',
-
-                value:
-                  reportSummary.today.late,
-
-                color:
-                  'text-amber-600',
+                label: 'Late',
+                value: reportSummary.today.late,
+                color: 'text-amber-600',
               },
               {
-                label:
-                  'Wrong Chamber',
-
+                label: 'Wrong Chamber',
                 value:
                   reportSummary.today.incorrectChamber,
-
-                color:
-                  'text-red-600',
+                color: 'text-red-600',
               },
               {
-                label:
-                  'Adherence',
-
-                value:
-                  adherence.hasSufficientData
-                    ? `${adherence.adherenceRate}%`
-                    : '—',
-
-                color:
-                  'text-blue-600',
+                label: 'Adherence',
+                value: adherence.hasSufficientData
+                  ? `${adherence.adherenceRate}%`
+                  : '—',
+                color: 'text-blue-600',
               },
             ].map((item) => (
               <div
@@ -712,7 +724,9 @@ export default function MonitorDashboardPage() {
               </p>
 
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                More completed medication activity is needed before behavioral patterns can be identified.
+                More completed medication activity is
+                needed before behavioral patterns can be
+                identified.
               </p>
 
               <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
@@ -741,54 +755,40 @@ export default function MonitorDashboardPage() {
                   <div
                     className={`h-3 rounded-full ${risk.bar}`}
                     style={{
-                      width:
-                        `${Math.min(
-                          adherence.adherenceRate,
-                          100,
-                        )}%`,
+                      width: `${Math.min(
+                        adherence.adherenceRate,
+                        100,
+                      )}%`,
                     }}
                   />
                 </div>
 
                 <p className="mt-1 text-xs text-gray-400">
-                  Upcoming and active-window pending doses do not affect this rate.
+                  Upcoming and active-window pending doses
+                  do not affect this rate.
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                 {[
                   {
-                    label:
-                      'Eligible',
-
-                    value:
-                      adherence.totalScheduled,
+                    label: 'Eligible',
+                    value: adherence.totalScheduled,
                   },
                   {
-                    label:
-                      'Taken',
-
-                    value:
-                      adherence.totalTaken,
+                    label: 'Taken',
+                    value: adherence.totalTaken,
                   },
                   {
-                    label:
-                      'Missed',
-
-                    value:
-                      adherence.totalMissed,
+                    label: 'Missed',
+                    value: adherence.totalMissed,
                   },
                   {
-                    label:
-                      'Delayed',
-
-                    value:
-                      adherence.delayedDoses,
+                    label: 'Delayed',
+                    value: adherence.delayedDoses,
                   },
                   {
-                    label:
-                      'Wrong Chamber',
-
+                    label: 'Wrong Chamber',
                     value:
                       adherence.incorrectChamberEvents,
                   },
@@ -823,9 +823,8 @@ export default function MonitorDashboardPage() {
                   {adherence.trendAvailable && (
                     <p className="text-xs text-gray-500">
                       Previous 7 days{' '}
-                      {adherence.previousRate}%
-                      {' → Current 7 days '}
-                      {adherence.recentRate}%
+                      {adherence.previousRate}% → Current
+                      7 days {adherence.recentRate}%
                     </p>
                   )}
                 </div>
@@ -850,11 +849,10 @@ export default function MonitorDashboardPage() {
                                     : 'bg-red-500'
                               }`}
                               style={{
-                                height:
-                                  `${Math.max(
-                                    day.adherenceRate,
-                                    6,
-                                  )}%`,
+                                height: `${Math.max(
+                                  day.adherenceRate,
+                                  6,
+                                )}%`,
                               }}
                             />
                           )}
@@ -913,9 +911,11 @@ export default function MonitorDashboardPage() {
                 </h3>
 
                 <div className="mt-3 space-y-2">
-                  {adherence.behavioral.insights.length === 0 ? (
+                  {adherence.behavioral.insights.length ===
+                  0 ? (
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-                      No repeated negative behavior has been detected.
+                      No repeated negative behavior has been
+                      detected.
                     </div>
                   ) : (
                     adherence.behavioral.insights.map(
@@ -950,16 +950,14 @@ export default function MonitorDashboardPage() {
                 </p>
 
                 <ul className="mt-2 space-y-1">
-                  {adherence.riskReasons.map(
-                    (reason) => (
-                      <li
-                        key={reason}
-                        className="text-xs text-gray-600 dark:text-gray-300"
-                      >
-                        • {reason}
-                      </li>
-                    ),
-                  )}
+                  {adherence.riskReasons.map((reason) => (
+                    <li
+                      key={reason}
+                      className="text-xs text-gray-600 dark:text-gray-300"
+                    >
+                      • {reason}
+                    </li>
+                  ))}
                 </ul>
               </div>
             </>
@@ -985,27 +983,25 @@ export default function MonitorDashboardPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {recentLogs.map(
-                (log, index) => {
-                  const style =
-                    LOG_STYLE[
-                      log.lifecycle
-                    ];
+              {recentLogs.map((log, index) => {
+                const style = LOG_STYLE[log.lifecycle];
 
-                  const auditLabel =
-                    log.status ===
-                      'incorrect_chamber'
-                      ? 'Incorrect Chamber'
-                      : log.status ===
-                          'unverified'
-                        ? 'Unverified'
-                        : style.label;
+                const auditLabel =
+                  log.status === 'incorrect_chamber'
+                    ? 'Incorrect Chamber'
+                    : log.status === 'unverified'
+                      ? 'Unverified'
+                      : style.label;
 
-                  return (
-                    <div
-                      key={`${log.scheduledDate}-${log.scheduledTime}-${index}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border/30 bg-white/60 px-3 py-2.5 dark:bg-gray-800/60"
-                    >
+                return (
+                  <div
+                    key={
+                      log._id ||
+                      `${log.scheduledDate}-${log.scheduledTime}-${index}`
+                    }
+                    className="rounded-xl border border-border/30 bg-white/60 px-3 py-3 dark:bg-gray-800/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <span
                           className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`}
@@ -1026,20 +1022,19 @@ export default function MonitorDashboardPage() {
                             {log.scheduledDate}
                             {' · '}
                             {log.scheduledTime}
+                            {' · '}
+                            {log.verificationMethod}
                           </p>
 
                           {(log.expectedChamberId ||
                             log.detectedChamberId) && (
                             <p className="text-[11px] text-gray-400">
                               Expected{' '}
-                              {log.expectedChamberId ??
-                                '—'}
+                              {log.expectedChamberId ?? '—'}
                               {' · Detected '}
-                              {log.detectedChamberId ??
-                                '—'}
+                              {log.detectedChamberId ?? '—'}
                               {' · '}
-                              {log.source ??
-                                'system'}
+                              {log.source ?? 'system'}
                             </p>
                           )}
                         </div>
@@ -1051,17 +1046,111 @@ export default function MonitorDashboardPage() {
                         {auditLabel}
                       </span>
                     </div>
-                  );
-                },
-              )}
+
+                    {log.verificationNote && (
+                      <p className="mt-2 rounded-lg bg-background/70 px-2.5 py-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="font-semibold">
+                          System verification:
+                        </span>{' '}
+                        {log.verificationNote}
+                      </p>
+                    )}
+
+                    {log.finalizedAt && (
+                      <p className="mt-2 text-[11px] text-gray-400">
+                        Finalized{' '}
+                        {formattedDateTime(log.finalizedAt)}
+                      </p>
+                    )}
+
+                    {log.annotations.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {log.annotations.map(
+                          (annotation) => (
+                            <div
+                              key={annotation._id}
+                              className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-2"
+                            >
+                              <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                                {annotationTitle(
+                                  annotation.type,
+                                )}
+                              </p>
+
+                              {annotation.text && (
+                                <p className="mt-1 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-300">
+                                  {annotation.text}
+                                </p>
+                              )}
+
+                              <p className="mt-1 text-[11px] text-gray-400">
+                                {annotation.authorName} ·{' '}
+                                {formattedDateTime(
+                                  annotation.createdAt,
+                                )}
+                              </p>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+
+                    {[
+                      'taken',
+                      'late',
+                      'missed',
+                    ].includes(log.lifecycle) && (
+                      <div className="mt-3">
+                        {log.acknowledgedByCurrentFamily ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600 dark:text-green-400">
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            Acknowledged by you
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAcknowledgmentLog(log);
+                              setAcknowledgmentNote('');
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5" />
+                            Acknowledge
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
 
         <div className="pb-4 text-center text-xs text-gray-400">
-          Auto-refreshes every 60 seconds · Read-only monitoring mode
+          Auto-refreshes every 60 seconds · Medication
+          statuses are read-only
         </div>
       </div>
+
+      {acknowledgmentLog && (
+        <AcknowledgeDialog
+          log={acknowledgmentLog}
+          note={acknowledgmentNote}
+          saving={savingAcknowledgment}
+          onNoteChange={setAcknowledgmentNote}
+          onCancel={() => {
+            if (!savingAcknowledgment) {
+              setAcknowledgmentLog(null);
+              setAcknowledgmentNote('');
+            }
+          }}
+          onConfirm={() =>
+            void submitAcknowledgment()
+          }
+        />
+      )}
     </div>
   );
 }

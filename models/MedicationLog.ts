@@ -5,6 +5,21 @@ import mongoose, {
   Model,
 } from 'mongoose';
 
+export type MedicationAnnotationType =
+  | 'patient_note'
+  | 'missed_explanation'
+  | 'family_acknowledgment';
+
+export interface IMedicationAnnotation {
+  _id: mongoose.Types.ObjectId;
+  type: MedicationAnnotationType;
+  text: string;
+  authorId: mongoose.Types.ObjectId;
+  authorRole: 'patient' | 'family';
+  authorName: string;
+  createdAt: Date;
+}
+
 export interface IMedicationLogDocument
   extends Document<mongoose.Types.ObjectId> {
   userId: mongoose.Types.ObjectId;
@@ -38,18 +53,8 @@ export interface IMedicationLogDocument
     | 'MISSED'
     | 'SCHEDULED';
 
-  /**
-   * Backward-compatible first chamber.
-   * expectedChamberIds is authoritative.
-   */
   expectedChamberId?: number | null;
-
-  /**
-   * Legacy field. The tray ultrasonic sensor does not
-   * detect a chamber and must not populate this field.
-   */
   detectedChamberId?: number | null;
-
   expectedChamberIds: number[];
 
   windowBeforeMinutes: number;
@@ -58,9 +63,58 @@ export interface IMedicationLogDocument
   countsTowardAdherence: boolean;
   verificationNote?: string;
   sensorDeviceId?: string;
+  annotations: IMedicationAnnotation[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const MedicationAnnotationSchema =
+  new Schema<IMedicationAnnotation>(
+    {
+      type: {
+        type: String,
+        enum: [
+          'patient_note',
+          'missed_explanation',
+          'family_acknowledgment',
+        ],
+        required: true,
+      },
+
+      text: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+        default: '',
+      },
+
+      authorId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+      },
+
+      authorRole: {
+        type: String,
+        enum: ['patient', 'family'],
+        required: true,
+      },
+
+      authorName: {
+        type: String,
+        trim: true,
+        required: true,
+      },
+
+      createdAt: {
+        type: Date,
+        default: Date.now,
+      },
+    },
+    {
+      _id: true,
+    }
+  );
 
 const MedicationLogSchema =
   new Schema<IMedicationLogDocument>(
@@ -204,6 +258,11 @@ const MedicationLogSchema =
         type: String,
         default: null,
       },
+
+      annotations: {
+        type: [MedicationAnnotationSchema],
+        default: [],
+      },
     },
     {
       timestamps: true,
@@ -227,22 +286,6 @@ MedicationLogSchema.index({
   expectedChamberId: 1,
 });
 
-/*
- * CRITICAL: prevents duplicate logs for the same medicine's
- * dose slot on the same day.
- *
- * ensureMedicationLogsForDate() (called on every plan/dashboard
- * fetch) and the medicine-edit route's own log resync both
- * upsert against this exact key. Upsert alone is NOT safe
- * against two concurrent calls racing to insert the same
- * logical row - MongoDB can create two separate documents if
- * both "does this exist?" checks happen before either insert
- * commits. This unique index closes that gap: the loser of the
- * race gets a duplicate-key error instead of a phantom document.
- *
- * Scoped to medicineId being a real ObjectId so manual/free-form
- * log entries (medicineId: null) are never restricted by this.
- */
 MedicationLogSchema.index(
   {
     userId: 1,
@@ -253,9 +296,12 @@ MedicationLogSchema.index(
   {
     unique: true,
     partialFilterExpression: {
-      medicineId: { $type: 'objectId' },
+      medicineId: {
+        $type: 'objectId',
+      },
     },
-    name: 'unique_medicine_dose_slot_per_day',
+    name:
+      'unique_medicine_dose_slot_per_day',
   }
 );
 

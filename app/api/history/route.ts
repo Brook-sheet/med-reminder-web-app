@@ -1,15 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
 import MedicationLog from '@/models/MedicationLog';
 import User from '@/models/User';
-import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
+
+import {
+  getTokenFromRequest,
+  verifyToken,
+} from '@/lib/auth';
+
+import type {
+  ApiResponse,
+} from '@/lib/interfaces/data/Api';
+
 import {
   ensureMedicationLogsForRange,
   finalizeExpiredMedicationLogs,
   processMedicationEvent,
 } from '@/lib/medicationVerification';
-import { evaluateMedicationLog } from '@/lib/adherenceEngine';
+
+import {
+  evaluateMedicationLog,
+} from '@/lib/adherenceEngine';
+
 import {
   addDaysToMedicationDateKey,
   getMedicationDateKey,
@@ -17,7 +36,14 @@ import {
   resolveMedicationTimeZone,
 } from '@/lib/medicationTime';
 
-export const dynamic = 'force-dynamic';
+import {
+  appendPatientAnnotation,
+  normalizeAnnotationText,
+  serializeAnnotations,
+} from '@/lib/medicationAnnotations';
+
+export const dynamic =
+  'force-dynamic';
 
 type ReportRange =
   | 'today'
@@ -36,30 +62,49 @@ type ReportStatus =
   | 'incorrect_chamber';
 
 async function getAuthUser(
-  request: NextRequest,
+  request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(request);
+    getTokenFromRequest(
+      request
+    );
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
-  return verifyToken(token);
+  return verifyToken(
+    token
+  );
 }
 
 function resolveRange(
-  request: NextRequest,
-  now: Date,
-  timeZone: string,
+  request:
+    NextRequest,
+
+  now:
+    Date,
+
+  timeZone:
+    string
 ): {
-  range: ReportRange;
-  from: string;
-  to: string;
+  range:
+    ReportRange;
+
+  from:
+    string;
+
+  to:
+    string;
 } {
-  const range = (
-    request.nextUrl.searchParams.get(
-      'range',
-    ) || 'month'
-  ) as ReportRange;
+  const range =
+    (
+      request.nextUrl.searchParams.get(
+        'range'
+      ) ||
+      'month'
+    ) as
+      ReportRange;
 
   if (
     ![
@@ -67,47 +112,62 @@ function resolveRange(
       'week',
       'month',
       'custom',
-    ].includes(range)
+    ].includes(
+      range
+    )
   ) {
     throw new Error(
-      'range must be today, week, month, or custom.',
+      'range must be today, week, month, or custom.'
     );
   }
 
   const to =
     getMedicationDateKey(
       now,
-      timeZone,
+      timeZone
     );
 
-  if (range === 'today') {
+  if (
+    range ===
+    'today'
+  ) {
     return {
       range,
-      from: to,
+      from:
+        to,
       to,
     };
   }
 
-  if (range === 'week') {
+  if (
+    range ===
+    'week'
+  ) {
     return {
       range,
 
       from:
         addDaysToMedicationDateKey(
           to,
-          -6,
+          -6
         ),
 
       to,
     };
   }
 
-  if (range === 'month') {
+  if (
+    range ===
+    'month'
+  ) {
     return {
       range,
 
       from:
-        `${to.slice(0, 7)}-01`,
+        `${to.slice(
+          0,
+          7
+        )}-01`,
 
       to,
     };
@@ -115,67 +175,100 @@ function resolveRange(
 
   const from =
     request.nextUrl.searchParams.get(
-      'from',
-    ) || '';
+      'from'
+    ) ||
+    '';
 
   const customTo =
     request.nextUrl.searchParams.get(
-      'to',
-    ) || '';
+      'to'
+    ) ||
+    '';
 
   const datePattern =
     /^\d{4}-\d{2}-\d{2}$/;
 
   if (
-    !datePattern.test(from) ||
-    !datePattern.test(customTo) ||
-    from > customTo
+    !datePattern.test(
+      from
+    ) ||
+    !datePattern.test(
+      customTo
+    ) ||
+    from >
+      customTo
   ) {
     throw new Error(
-      'Custom range requires valid from and to dates in YYYY-MM-DD format.',
+      'Custom range requires valid from and to dates in YYYY-MM-DD format.'
     );
   }
 
-  const days = Math.ceil(
-    (
-      new Date(
-        `${customTo}T00:00:00Z`,
-      ).getTime() -
-      new Date(
-        `${from}T00:00:00Z`,
-      ).getTime()
-    ) /
-      86_400_000,
-  );
+  const days =
+    Math.ceil(
+      (
+        new Date(
+          `${customTo}T00:00:00Z`
+        ).getTime() -
+        new Date(
+          `${from}T00:00:00Z`
+        ).getTime()
+      ) /
+        86_400_000
+    );
 
-  if (days > 366) {
+  if (
+    days >
+    366
+  ) {
     throw new Error(
-      'Custom range cannot exceed 366 days.',
+      'Custom range cannot exceed 366 days.'
     );
   }
 
   return {
     range,
     from,
-    to: customTo,
+    to:
+      customTo,
   };
 }
 
 function normalizeStatus(
   log: {
-    status: string;
-    scheduledDate: string;
-    scheduledTime: string;
-    takenAt?: Date | null;
-    lateAfterMinutes?: number;
-    windowAfterMinutes?: number;
-    countsTowardAdherence?: boolean;
+    status:
+      string;
+
+    scheduledDate:
+      string;
+
+    scheduledTime:
+      string;
+
+    takenAt?:
+      | Date
+      | null;
+
+    lateAfterMinutes?:
+      number;
+
+    windowAfterMinutes?:
+      number;
+
+    countsTowardAdherence?:
+      boolean;
   },
-  now: Date,
-  timeZone: string,
+
+  now:
+    Date,
+
+  timeZone:
+    string
 ): {
-  status: ReportStatus;
-  delayMinutes: number | null;
+  status:
+    ReportStatus;
+
+  delayMinutes:
+    number | null;
 } {
   const evaluated =
     evaluateMedicationLog(
@@ -202,7 +295,7 @@ function normalizeStatus(
           log.countsTowardAdherence,
       },
       now,
-      timeZone,
+      timeZone
     );
 
   if (
@@ -214,7 +307,8 @@ function normalizeStatus(
         'incorrect_chamber',
 
       delayMinutes:
-        evaluated.calculatedDelayMinutes,
+        evaluated
+          .calculatedDelayMinutes,
     };
   }
 
@@ -229,7 +323,8 @@ function normalizeStatus(
         'unverified',
 
       delayMinutes:
-        evaluated.calculatedDelayMinutes,
+        evaluated
+          .calculatedDelayMinutes,
     };
   }
 
@@ -242,7 +337,8 @@ function normalizeStatus(
         'taken',
 
       delayMinutes:
-        evaluated.calculatedDelayMinutes,
+        evaluated
+          .calculatedDelayMinutes,
     };
   }
 
@@ -255,7 +351,8 @@ function normalizeStatus(
         'late',
 
       delayMinutes:
-        evaluated.calculatedDelayMinutes,
+        evaluated
+          .calculatedDelayMinutes,
     };
   }
 
@@ -308,25 +405,33 @@ function normalizeStatus(
 }
 
 export async function GET(
-  request: NextRequest,
+  request:
+    NextRequest
 ) {
   try {
     const auth =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
-          error: 'Unauthorized',
+          success:
+            false,
+
+          error:
+            'Unauthorized',
         },
         {
-          status: 401,
-        },
+          status:
+            401,
+        }
       );
     }
 
-    const now = new Date();
+    const now =
+      new Date();
 
     const timeZone =
       resolveMedicationTimeZone();
@@ -335,7 +440,7 @@ export async function GET(
       resolveRange(
         request,
         now,
-        timeZone,
+        timeZone
       );
 
     await connectDB();
@@ -343,23 +448,26 @@ export async function GET(
     await ensureMedicationLogsForRange(
       auth.userId,
       selectedRange.from,
-      selectedRange.to,
+      selectedRange.to
     );
 
     await finalizeExpiredMedicationLogs(
       auth.userId,
-      now,
+      now
     );
 
     const user =
       await User.findById(
-        auth.userId,
+        auth.userId
       ).select(
-        'dataResetAt',
+        'dataResetAt'
       );
 
     const query:
-      Record<string, unknown> = {
+      Record<
+        string,
+        unknown
+      > = {
         userId:
           auth.userId,
 
@@ -372,7 +480,9 @@ export async function GET(
         },
       };
 
-    if (user?.dataResetAt) {
+    if (
+      user?.dataResetAt
+    ) {
       query.createdAt = {
         $gt:
           user.dataResetAt,
@@ -381,139 +491,162 @@ export async function GET(
 
     const rawLogs =
       await MedicationLog.find(
-        query,
+        query
       )
         .sort({
-          scheduledDate: -1,
-          scheduledTime: -1,
-          createdAt: -1,
+          scheduledDate:
+            -1,
+
+          scheduledTime:
+            -1,
+
+          createdAt:
+            -1,
         })
         .lean();
 
     rawLogs.sort(
-      (first, second) =>
+      (
+        first,
+        second
+      ) =>
         medicationScheduledAt(
           String(
-            second.scheduledDate,
+            second.scheduledDate
           ),
           String(
-            second.scheduledTime,
+            second.scheduledTime
           ),
-          timeZone,
+          timeZone
         ).getTime() -
         medicationScheduledAt(
           String(
-            first.scheduledDate,
+            first.scheduledDate
           ),
           String(
-            first.scheduledTime,
+            first.scheduledTime
           ),
-          timeZone,
-        ).getTime(),
+          timeZone
+        ).getTime()
     );
 
     const logs =
-      rawLogs.map((log) => {
-        const normalized =
-          normalizeStatus(
-            {
-              status:
-                String(log.status),
+      rawLogs.map(
+        (log) => {
+          const normalized =
+            normalizeStatus(
+              {
+                status:
+                  String(
+                    log.status
+                  ),
 
-              scheduledDate:
-                String(
-                  log.scheduledDate,
-                ),
+                scheduledDate:
+                  String(
+                    log.scheduledDate
+                  ),
 
-              scheduledTime:
-                String(
-                  log.scheduledTime,
-                ),
+                scheduledTime:
+                  String(
+                    log.scheduledTime
+                  ),
 
-              takenAt:
-                log.takenAt ?? null,
+                takenAt:
+                  log.takenAt ??
+                  null,
 
-              lateAfterMinutes:
-                log.lateAfterMinutes,
+                lateAfterMinutes:
+                  log.lateAfterMinutes,
 
-              windowAfterMinutes:
-                log.windowAfterMinutes,
+                windowAfterMinutes:
+                  log.windowAfterMinutes,
 
-              countsTowardAdherence:
-                log.countsTowardAdherence !==
-                false,
-            },
-            now,
-            timeZone,
-          );
+                countsTowardAdherence:
+                  log.countsTowardAdherence !==
+                  false,
+              },
+              now,
+              timeZone
+            );
 
-        return {
-          _id:
-            log._id.toString(),
+          return {
+            _id:
+              log._id.toString(),
 
-          medicineId:
-            log.medicineId
-              ?.toString() ?? null,
+            medicineId:
+              log.medicineId
+                ?.toString() ??
+              null,
 
-          medicineName:
-            log.medicineName,
+            medicineName:
+              log.medicineName,
 
-          dosage:
-            log.dosage,
+            dosage:
+              log.dosage,
 
-          scheduledDate:
-            log.scheduledDate,
+            scheduledDate:
+              log.scheduledDate,
 
-          scheduledTime:
-            log.scheduledTime,
+            scheduledTime:
+              log.scheduledTime,
 
-          actualTime:
-            log.takenAt ?? null,
+            actualTime:
+              log.takenAt ??
+              null,
 
-          status:
-            normalized.status,
+            status:
+              normalized.status,
 
-          delayMinutes:
-            normalized.delayMinutes,
+            delayMinutes:
+              normalized.delayMinutes,
 
-          source:
-            log.source === 'auto'
-              ? 'system'
-              : log.source,
+            source:
+              log.source ===
+              'auto'
+                ? 'system'
+                : log.source,
 
-          verificationMethod:
-            log.source === 'sensor'
-              ? 'Sensor verification'
-              : log.source === 'manual'
-                ? 'Manual verification'
-                : 'System',
+            verificationMethod:
+              log.source ===
+              'sensor'
+                ? 'Sensor verification'
+                : log.source ===
+                    'manual'
+                  ? 'Manual verification'
+                  : 'System',
 
-          expectedChamberId:
-            log.expectedChamberId ??
-            null,
+            expectedChamberId:
+              log.expectedChamberId ??
+              null,
 
-          detectedChamberId:
-            log.detectedChamberId ??
-            null,
+            detectedChamberId:
+              log.detectedChamberId ??
+              null,
 
-          expectedChamberIds:
-            log.expectedChamberIds ??
-            [],
+            expectedChamberIds:
+              log.expectedChamberIds ??
+              [],
 
-          countsTowardAdherence:
-            log.countsTowardAdherence !==
-            false,
+            countsTowardAdherence:
+              log.countsTowardAdherence !==
+              false,
 
-          verificationNote:
-            log.verificationNote ??
-            '',
-        };
-      });
+            verificationNote:
+              log.verificationNote ??
+              '',
+
+            annotations:
+              serializeAnnotations(
+                log.annotations
+              ),
+          };
+        }
+      );
 
     const scheduledLogs =
       logs.filter(
         (log) =>
-          log.countsTowardAdherence,
+          log.countsTowardAdherence
       );
 
     const dueLogs =
@@ -524,54 +657,59 @@ export async function GET(
             'late',
             'missed',
           ].includes(
-            log.status,
-          ),
+            log.status
+          )
       );
 
     const onTime =
       dueLogs.filter(
         (log) =>
-          log.status === 'taken',
+          log.status ===
+          'taken'
       ).length;
 
     const late =
       dueLogs.filter(
         (log) =>
-          log.status === 'late',
+          log.status ===
+          'late'
       ).length;
 
     const missed =
       dueLogs.filter(
         (log) =>
-          log.status === 'missed',
+          log.status ===
+          'missed'
       ).length;
 
     const unverified =
       logs.filter(
         (log) =>
           log.status ===
-          'unverified',
+          'unverified'
       ).length;
 
     const incorrectChamber =
       logs.filter(
         (log) =>
           log.status ===
-          'incorrect_chamber',
+          'incorrect_chamber'
       ).length;
 
     const adherenceRate:
       number | null =
-        dueLogs.length > 0
+        dueLogs.length >
+        0
           ? Math.round(
               (
                 (
                   onTime +
-                  late * 0.5
+                  late *
+                    0.5
                 ) /
                 dueLogs.length
               ) *
-                100,
+                100
             )
           : null;
 
@@ -605,13 +743,18 @@ export async function GET(
         }
       >();
 
-    for (const log of logs) {
+    for (
+      const log
+      of logs
+    ) {
       const key =
         log.medicineId ||
         log.medicineName;
 
       const item =
-        medicineMap.get(key) || {
+        medicineMap.get(
+          key
+        ) || {
           medicineId:
             log.medicineId,
 
@@ -643,33 +786,45 @@ export async function GET(
           'taken',
           'late',
           'missed',
-        ].includes(log.status)
+        ].includes(
+          log.status
+        )
       ) {
-        item.scheduled += 1;
+        item.scheduled +=
+          1;
 
         if (
-          log.status === 'taken'
+          log.status ===
+          'taken'
         ) {
-          item.onTime += 1;
+          item.onTime +=
+            1;
         }
 
         if (
-          log.status === 'late'
+          log.status ===
+          'late'
         ) {
-          item.late += 1;
+          item.late +=
+            1;
         }
 
         if (
-          log.status === 'taken' ||
-          log.status === 'late'
+          log.status ===
+            'taken' ||
+          log.status ===
+            'late'
         ) {
-          item.verified += 1;
+          item.verified +=
+            1;
         }
 
         if (
-          log.status === 'missed'
+          log.status ===
+          'missed'
         ) {
-          item.missed += 1;
+          item.missed +=
+            1;
         }
       }
 
@@ -677,46 +832,56 @@ export async function GET(
         log.status ===
         'incorrect_chamber'
       ) {
-        item.incorrectChamber += 1;
+        item.incorrectChamber +=
+          1;
       }
 
       medicineMap.set(
         key,
-        item,
+        item
       );
     }
 
     const byMedicine =
       Array.from(
-        medicineMap.values(),
+        medicineMap.values()
       )
         .filter(
           (item) =>
-            item.scheduled > 0 ||
-            item.incorrectChamber > 0,
+            item.scheduled >
+              0 ||
+            item.incorrectChamber >
+              0
         )
-        .map((item) => ({
-          ...item,
+        .map(
+          (item) => ({
+            ...item,
 
-          adherenceRate:
-            item.scheduled > 0
-              ? Math.round(
-                  (
+            adherenceRate:
+              item.scheduled >
+              0
+                ? Math.round(
                     (
-                      item.onTime +
-                      item.late * 0.5
-                    ) /
-                    item.scheduled
-                  ) *
-                    100,
-                )
-              : null,
-        }))
+                      (
+                        item.onTime +
+                        item.late *
+                          0.5
+                      ) /
+                      item.scheduled
+                    ) *
+                      100
+                  )
+                : null,
+          })
+        )
         .sort(
-          (a, b) =>
-            a.medicineName.localeCompare(
-              b.medicineName,
-            ),
+          (
+            first,
+            second
+          ) =>
+            first.medicineName.localeCompare(
+              second.medicineName
+            )
         );
 
     return NextResponse.json<ApiResponse>({
@@ -732,124 +897,160 @@ export async function GET(
             dueLogs.length,
 
           verified:
-            onTime + late,
+            onTime +
+            late,
 
           onTime,
-
           late,
-
           missed,
-
           unverified,
-
           incorrectChamber,
-
           adherenceRate,
         },
 
         byMedicine,
-
         logs,
       },
     });
   } catch (error) {
     const message =
-      error instanceof Error
+      error instanceof
+      Error
         ? error.message
         : 'Internal server error';
 
     const clientError =
       /range|Custom/i.test(
-        message,
+        message
       );
 
     console.error(
       '[GET /api/history]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
-        error: message,
+        success:
+          false,
+
+        error:
+          message,
       },
       {
         status:
           clientError
             ? 400
             : 500,
-      },
+      }
     );
   }
 }
 
 export async function PATCH(
-  request: NextRequest,
+  request:
+    NextRequest
 ) {
   try {
     const auth =
-      await getAuthUser(request);
+      await getAuthUser(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
-          error: 'Unauthorized',
+          success:
+            false,
+
+          error:
+            'Unauthorized',
         },
         {
-          status: 401,
-        },
+          status:
+            401,
+        }
       );
     }
 
     await connectDB();
 
     const body =
-      await request.json() as {
-        logId?: string;
-        status?: string;
+      (
+        await request.json()
+      ) as {
+        logId?:
+          string;
+
+        status?:
+          string;
+
+        note?:
+          unknown;
       };
 
     if (
       !body.logId ||
-      ![
-        'taken',
-        'missed',
-      ].includes(
-        body.status || '',
-      )
+      body.status !==
+        'taken'
     ) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
-            'logId and a status of taken or missed are required.',
+            'logId and a status of taken are required. Missed doses are finalized automatically after the medication window expires.',
         },
         {
-          status: 400,
-        },
+          status:
+            400,
+        }
       );
     }
 
+    if (
+      auth.role !==
+      'patient'
+    ) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success:
+            false,
+
+          error:
+            'Only Patient accounts can mark medication as taken.',
+        },
+        {
+          status:
+            403,
+        }
+      );
+    }
+
+    const note =
+      normalizeAnnotationText(
+        body.note
+      );
+
     const result =
-      await processMedicationEvent({
-        userId:
-          auth.userId,
+      await processMedicationEvent(
+        {
+          userId:
+            auth.userId,
 
-        source:
-          'manual',
+          source:
+            'manual',
 
-        eventType:
-          body.status === 'missed'
-            ? 'MISSED'
-            : 'MEDICATION_CONFIRMED',
+          eventType:
+            'MEDICATION_CONFIRMED',
 
-        logId:
-          body.logId,
-      });
+          logId:
+            body.logId,
+        }
+      );
 
     if (
-      body.status === 'taken' &&
       !result.verified
     ) {
       return NextResponse.json<ApiResponse>(
@@ -866,39 +1067,68 @@ export async function PATCH(
         {
           status:
             409,
-        },
+        }
       );
+    }
+
+    let annotation =
+      null;
+
+    if (note) {
+      annotation =
+        await appendPatientAnnotation(
+          {
+            patientId:
+              auth.userId,
+
+            logId:
+              result.logId,
+
+            type:
+              'patient_note',
+
+            text:
+              note,
+          }
+        );
     }
 
     return NextResponse.json<ApiResponse>({
       success:
         true,
 
-      data:
-        result,
+      data: {
+        ...result,
+        annotation,
+      },
 
       message:
         result.message,
     });
   } catch (error) {
     const message =
-      error instanceof Error
+      error instanceof
+      Error
         ? error.message
         : 'Internal server error';
 
     console.error(
       '[PATCH /api/history]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
-        error: message,
+        success:
+          false,
+
+        error:
+          message,
       },
       {
-        status: 400,
-      },
+        status:
+          400,
+      }
     );
   }
 }

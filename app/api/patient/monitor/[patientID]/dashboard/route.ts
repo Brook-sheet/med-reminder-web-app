@@ -19,16 +19,16 @@ import {
   getMedicationDateKey,
   resolveMedicationTimeZone,
 } from '@/lib/medicationTime';
+import { serializeAnnotations } from '@/lib/medicationAnnotations';
 
 export const dynamic = 'force-dynamic';
 
-async function getAuthUser(
-  request: NextRequest,
-) {
-  const token =
-    getTokenFromRequest(request);
+async function getAuthUser(request: NextRequest) {
+  const token = getTokenFromRequest(request);
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
   return verifyToken(token);
 }
@@ -44,8 +44,7 @@ export async function GET(
   },
 ) {
   try {
-    const auth =
-      await getAuthUser(request);
+    const auth = await getAuthUser(request);
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
@@ -61,12 +60,9 @@ export async function GET(
 
     await connectDB();
 
-    const currentUser =
-      await User.findById(
-        auth.userId,
-      ).select(
-        'role monitoredPatients isDeleted',
-      );
+    const currentUser = await User.findById(auth.userId).select(
+      'role monitoredPatients isDeleted',
+    );
 
     if (!currentUser) {
       return NextResponse.json<ApiResponse>(
@@ -80,14 +76,10 @@ export async function GET(
       );
     }
 
-    if (
-      currentUser.isDeleted ||
-      currentUser.role !== 'family'
-    ) {
+    if (currentUser.isDeleted || currentUser.role !== 'family') {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-
           error:
             'Only Family accounts can view Patient monitoring data.',
         },
@@ -97,13 +89,8 @@ export async function GET(
       );
     }
 
-    const { patientID } =
-      await params;
-
-    const normalizedId =
-      patientID
-        ?.trim()
-        .toUpperCase();
+    const { patientID } = await params;
+    const normalizedId = patientID?.trim().toUpperCase();
 
     if (!normalizedId) {
       return NextResponse.json<ApiResponse>(
@@ -117,21 +104,15 @@ export async function GET(
       );
     }
 
-    const patient =
-      await User.findOne({
-        patientId:
-          normalizedId,
-
-        role:
-          'patient',
-
-        isDeleted: {
-          $ne:
-            true,
-        },
-      }).select(
-        'firstName lastName condition patientId createdAt',
-      );
+    const patient = await User.findOne({
+      patientId: normalizedId,
+      role: 'patient',
+      isDeleted: {
+        $ne: true,
+      },
+    }).select(
+      'firstName lastName condition patientId createdAt',
+    );
 
     if (!patient) {
       return NextResponse.json<ApiResponse>(
@@ -145,24 +126,15 @@ export async function GET(
       );
     }
 
-    const relationship =
-      await MonitoringRequest.findOne({
-        patientId:
-          patient._id,
+    const relationship = await MonitoringRequest.findOne({
+      patientId: patient._id,
+      familyId: currentUser._id,
+    });
 
-        familyId:
-          currentUser._id,
-      });
-
-    if (
-      relationship &&
-      relationship.status !==
-        'approved'
-    ) {
+    if (relationship && relationship.status !== 'approved') {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-
           error:
             'Access denied. Monitoring approval is not active.',
         },
@@ -174,22 +146,14 @@ export async function GET(
 
     if (!relationship) {
       const monitoredNormalized =
-        currentUser.monitoredPatients.map(
-          (id: string) =>
-            id
-              .trim()
-              .toUpperCase(),
+        currentUser.monitoredPatients.map((id: string) =>
+          id.trim().toUpperCase(),
         );
 
-      if (
-        !monitoredNormalized.includes(
-          normalizedId,
-        )
-      ) {
+      if (!monitoredNormalized.includes(normalizedId)) {
         return NextResponse.json<ApiResponse>(
           {
             success: false,
-
             error:
               'Access denied. You are not authorized to monitor this Patient.',
           },
@@ -201,55 +165,35 @@ export async function GET(
 
       await MonitoringRequest.findOneAndUpdate(
         {
-          patientId:
-            patient._id,
-
-          familyId:
-            currentUser._id,
+          patientId: patient._id,
+          familyId: currentUser._id,
         },
         {
           $setOnInsert: {
-            status:
-              'approved',
-
-            respondedAt:
-              new Date(),
+            status: 'approved',
+            respondedAt: new Date(),
           },
         },
         {
-          upsert:
-            true,
-
-          runValidators:
-            true,
+          upsert: true,
+          runValidators: true,
         },
       );
     }
 
     const now = new Date();
-
-    const timeZone =
-      resolveMedicationTimeZone();
-
-    const today =
-      getMedicationDateKey(
-        now,
-        timeZone,
-      );
+    const timeZone = resolveMedicationTimeZone();
+    const today = getMedicationDateKey(now, timeZone);
 
     const range =
-      request.nextUrl.searchParams.get(
-        'range',
-      ) || 'week';
+      request.nextUrl.searchParams.get('range') || 'week';
 
     const from =
       range === 'today'
         ? today
         : addDaysToMedicationDateKey(
             today,
-            range === 'month'
-              ? -29
-              : -6,
+            range === 'month' ? -29 : -6,
           );
 
     await ensureMedicationLogsForRange(
@@ -263,384 +207,220 @@ export async function GET(
       now,
     );
 
-    const logs =
-      await MedicationLog.find({
-        userId:
-          patient._id,
-
-        scheduledDate: {
-          $gte:
-            from,
-
-          $lte:
-            today,
-        },
+    const logs = await MedicationLog.find({
+      userId: patient._id,
+      scheduledDate: {
+        $gte: from,
+        $lte: today,
+      },
+    })
+      .sort({
+        scheduledDate: -1,
+        scheduledTime: -1,
       })
-        .sort({
-          scheduledDate:
-            -1,
+      .lean();
 
-          scheduledTime:
-            -1,
-        })
-        .lean();
+    const rawLogs: RawLog[] = logs.map((log) => ({
+      id: log._id.toString(),
+      medicineId: log.medicineId?.toString() ?? null,
+      medicineName: log.medicineName,
+      status: String(log.status),
+      scheduledDate: String(log.scheduledDate),
+      scheduledTime: String(log.scheduledTime),
+      takenAt: log.takenAt ?? null,
+      lateAfterMinutes: log.lateAfterMinutes,
+      windowAfterMinutes: log.windowAfterMinutes,
+      expectedChamberId: log.expectedChamberId ?? null,
+      detectedChamberId: log.detectedChamberId ?? null,
+      countsTowardAdherence:
+        log.countsTowardAdherence !== false,
+    }));
 
-    const rawLogs:
-      RawLog[] =
-        logs.map((log) => ({
-          id:
-            log._id.toString(),
+    const analysis = analyzeAdherence(
+      rawLogs,
+      now,
+      timeZone,
+    );
 
-          medicineId:
-            log.medicineId
-              ?.toString() ?? null,
+    const evaluatedById = new Map(
+      rawLogs.map((log) => [
+        log.id,
+        evaluateMedicationLog(log, now, timeZone),
+      ]),
+    );
 
-          medicineName:
-            log.medicineName,
+    const logsByScheduledTime = [...logs].sort(
+      (first, second) =>
+        (evaluatedById
+          .get(second._id.toString())
+          ?.scheduledAt.getTime() ?? 0) -
+        (evaluatedById
+          .get(first._id.toString())
+          ?.scheduledAt.getTime() ?? 0),
+    );
 
-          status:
-            String(log.status),
+    const recentLogs = logsByScheduledTime
+      .slice(0, 30)
+      .map((log) => {
+        const annotations = serializeAnnotations(
+          log.annotations,
+        );
 
-          scheduledDate:
-            String(
-              log.scheduledDate,
-            ),
+        const acknowledgedByCurrentFamily = (
+          log.annotations ?? []
+        ).some(
+          (annotation) =>
+            annotation.type === 'family_acknowledgment' &&
+            annotation.authorId?.toString() === auth.userId,
+        );
 
-          scheduledTime:
-            String(
-              log.scheduledTime,
-            ),
-
-          takenAt:
-            log.takenAt ?? null,
-
-          lateAfterMinutes:
-            log.lateAfterMinutes,
-
-          windowAfterMinutes:
-            log.windowAfterMinutes,
-
-          expectedChamberId:
-            log.expectedChamberId ??
-            null,
-
-          detectedChamberId:
-            log.detectedChamberId ??
-            null,
-
-          countsTowardAdherence:
-            log.countsTowardAdherence !==
-            false,
-        }));
-
-    const analysis =
-      analyzeAdherence(
-        rawLogs,
-        now,
-        timeZone,
-      );
-
-    const evaluatedById =
-      new Map(
-        rawLogs.map(
-          (log) => [
-            log.id,
-
-            evaluateMedicationLog(
-              log,
-              now,
-              timeZone,
-            ),
-          ],
-        ),
-      );
-
-    const logsByScheduledTime =
-      [...logs].sort(
-        (first, second) =>
-          (
-            evaluatedById.get(
-              second._id.toString(),
-            )?.scheduledAt.getTime() ??
-            0
-          ) -
-          (
-            evaluatedById.get(
-              first._id.toString(),
-            )?.scheduledAt.getTime() ??
-            0
-          ),
-      );
-
-    const recentLogs =
-      logsByScheduledTime
-        .slice(0, 30)
-        .map((log) => ({
-          medicineName:
-            log.medicineName,
-
-          scheduledDate:
-            log.scheduledDate,
-
-          scheduledTime:
-            log.scheduledTime,
-
-          status:
-            log.status,
-
-          takenAt:
-            log.takenAt,
-
-          dosage:
-            log.dosage,
-
+        return {
+          _id: log._id.toString(),
+          medicineName: log.medicineName,
+          scheduledDate: log.scheduledDate,
+          scheduledTime: log.scheduledTime,
+          status: log.status,
+          takenAt: log.takenAt,
+          dosage: log.dosage,
           source:
             log.source === 'auto'
               ? 'system'
               : log.source,
-
           expectedChamberId:
-            log.expectedChamberId ??
-            null,
-
+            log.expectedChamberId ?? null,
           detectedChamberId:
-            log.detectedChamberId ??
-            null,
-
+            log.detectedChamberId ?? null,
           expectedChamberIds:
-            log.expectedChamberIds ??
-            [],
-
+            log.expectedChamberIds ?? [],
           verificationNote:
-            log.verificationNote ??
-            '',
-
+            log.verificationNote ?? '',
+          verificationMethod:
+            log.source === 'sensor'
+              ? 'Rx Box'
+              : log.source === 'manual'
+                ? 'Manual'
+                : 'System',
+          finalizedAt: [
+            'taken',
+            'late',
+            'missed',
+          ].includes(String(log.status))
+            ? log.updatedAt
+            : null,
+          annotations,
+          acknowledgedByCurrentFamily,
           lifecycle:
-            evaluatedById.get(
-              log._id.toString(),
-            )?.lifecycle ??
-            'audit',
-        }));
+            evaluatedById.get(log._id.toString())
+              ?.lifecycle ?? 'audit',
+        };
+      });
 
-    const adherenceLogs =
-      logs.filter(
-        (log) =>
-          log.countsTowardAdherence !==
-          false,
-      );
+    const adherenceLogs = logs.filter(
+      (log) => log.countsTowardAdherence !== false,
+    );
 
-    const eligibleLogs =
-      adherenceLogs.filter(
-        (log) =>
-          evaluatedById.get(
-            log._id.toString(),
-          )?.eligible,
-      );
+    const eligibleLogs = adherenceLogs.filter(
+      (log) =>
+        evaluatedById.get(log._id.toString())?.eligible,
+    );
 
-    const todayEligible =
-      eligibleLogs.filter(
-        (log) =>
-          log.scheduledDate ===
-          today,
-      );
+    const todayEligible = eligibleLogs.filter(
+      (log) => log.scheduledDate === today,
+    );
 
-    const verifiedStatuses = [
-      'taken',
-      'late',
-    ];
+    const verifiedStatuses = ['taken', 'late'];
 
     const reportSummary = {
       range,
       from,
-      to:
-        today,
-
-      scheduled:
-        eligibleLogs.length,
-
-      verified:
-        eligibleLogs.filter(
-          (log) =>
-            verifiedStatuses.includes(
-              log.status,
-            ),
-        ).length,
-
-      missed:
-        eligibleLogs.filter(
-          (log) =>
-            evaluatedById.get(
-              log._id.toString(),
-            )?.lifecycle ===
-            'missed',
-        ).length,
-
-      late:
-        eligibleLogs.filter(
-          (log) =>
-            evaluatedById.get(
-              log._id.toString(),
-            )?.lifecycle ===
-            'late',
-        ).length,
-
-      incorrectChamber:
-        logs.filter(
-          (log) =>
-            log.status ===
-            'incorrect_chamber',
-        ).length,
-
-      unverified:
-        logs.filter(
-          (log) =>
-            log.status ===
-            'unverified',
-        ).length,
-
+      to: today,
+      scheduled: eligibleLogs.length,
+      verified: eligibleLogs.filter((log) =>
+        verifiedStatuses.includes(log.status),
+      ).length,
+      missed: eligibleLogs.filter(
+        (log) =>
+          evaluatedById.get(log._id.toString())
+            ?.lifecycle === 'missed',
+      ).length,
+      late: eligibleLogs.filter(
+        (log) =>
+          evaluatedById.get(log._id.toString())
+            ?.lifecycle === 'late',
+      ).length,
+      incorrectChamber: logs.filter(
+        (log) => log.status === 'incorrect_chamber',
+      ).length,
+      unverified: logs.filter(
+        (log) => log.status === 'unverified',
+      ).length,
       today: {
-        scheduled:
-          todayEligible.length,
-
-        verified:
-          todayEligible.filter(
-            (log) =>
-              verifiedStatuses.includes(
-                log.status,
-              ),
-          ).length,
-
-        missed:
-          todayEligible.filter(
-            (log) =>
-              evaluatedById.get(
-                log._id.toString(),
-              )?.lifecycle ===
-              'missed',
-          ).length,
-
-        late:
-          todayEligible.filter(
-            (log) =>
-              evaluatedById.get(
-                log._id.toString(),
-              )?.lifecycle ===
-              'late',
-          ).length,
-
-        incorrectChamber:
-          logs.filter(
-            (log) =>
-              log.scheduledDate ===
-                today &&
-              log.status ===
-                'incorrect_chamber',
-          ).length,
+        scheduled: todayEligible.length,
+        verified: todayEligible.filter((log) =>
+          verifiedStatuses.includes(log.status),
+        ).length,
+        missed: todayEligible.filter(
+          (log) =>
+            evaluatedById.get(log._id.toString())
+              ?.lifecycle === 'missed',
+        ).length,
+        late: todayEligible.filter(
+          (log) =>
+            evaluatedById.get(log._id.toString())
+              ?.lifecycle === 'late',
+        ).length,
+        incorrectChamber: logs.filter(
+          (log) =>
+            log.scheduledDate === today &&
+            log.status === 'incorrect_chamber',
+        ).length,
       },
     };
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
+      success: true,
       data: {
         patient: {
-          patientId:
-            patient.patientId,
-
-          name:
-            `${patient.firstName} ${patient.lastName}`,
-
-          condition:
-            patient.condition,
-
-          memberSince:
-            patient.createdAt,
+          patientId: patient.patientId,
+          name: `${patient.firstName} ${patient.lastName}`,
+          condition: patient.condition,
+          memberSince: patient.createdAt,
         },
-
         adherence: {
           hasSufficientData:
-            analysis.features
-              .hasSufficientData,
-
-          riskLevel:
-            analysis.finalRiskLevel,
-
+            analysis.features.hasSufficientData,
+          riskLevel: analysis.finalRiskLevel,
           adherenceRate:
-            analysis.features
-              .adherenceRate,
-
-          totalScheduled:
-            analysis.features
-              .totalDue,
-
-          totalTaken:
-            analysis.features
-              .totalTaken,
-
-          totalMissed:
-            analysis.features
-              .missedDoses,
-
-          totalPending:
-            analysis.features
-              .duePending,
-
+            analysis.features.adherenceRate,
+          totalScheduled: analysis.features.totalDue,
+          totalTaken: analysis.features.totalTaken,
+          totalMissed: analysis.features.missedDoses,
+          totalPending: analysis.features.duePending,
           totalUpcoming:
-            analysis.features
-              .upcomingDoses,
-
+            analysis.features.upcomingDoses,
           consecutiveMissed:
-            analysis.features
-              .consecutiveMissed,
-
+            analysis.features.consecutiveMissed,
           delayedDoses:
-            analysis.features
-              .delayedDoses,
-
+            analysis.features.delayedDoses,
           avgDelayMinutes:
-            analysis.features
-              .avgDelayMinutes,
-
+            analysis.features.avgDelayMinutes,
           recentRate:
-            analysis.features
-              .recentAdherenceRate,
-
-          weeklyTrend:
-            analysis.features
-              .trend,
-
+            analysis.features.recentAdherenceRate,
+          weeklyTrend: analysis.features.trend,
           trendAvailable:
-            analysis.features
-              .trendAvailable,
-
+            analysis.features.trendAvailable,
           previousRate:
-            analysis.features
-              .previousAdherenceRate,
-
+            analysis.features.previousAdherenceRate,
           incorrectChamberEvents:
-            analysis.features
-              .incorrectChamberEvents,
-
-          riskReasons:
-            analysis.riskReasons,
-
-          behavioral:
-            analysis.behavioral,
-
-          insight:
-            analysis.insight,
-
-          recommendation:
-            analysis.recommendation,
+            analysis.features.incorrectChamberEvents,
+          riskReasons: analysis.riskReasons,
+          behavioral: analysis.behavioral,
+          insight: analysis.insight,
+          recommendation: analysis.recommendation,
         },
-
         recentLogs,
-
         reportSummary,
-
-        readOnly:
-          true,
+        readOnly: true,
       },
     });
   } catch (error) {
