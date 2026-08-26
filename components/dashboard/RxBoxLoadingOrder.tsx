@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import {
-  buildFourChamberRows,
+  buildChamberRows,
 } from "@/lib/rxBoxUi";
 
 interface LoadingItem {
@@ -177,9 +177,27 @@ export default function RxBoxLoadingOrder() {
       : plan?.loadingPlan ??
         [];
 
+  /*
+   * Normally there are exactly 4 physical chambers, so 4 rows
+   * is correct. But when capacity is exceeded, the plan's
+   * "required" count is higher than 4 - and every proposed
+   * item (including the one(s) that don't fit) needs its own
+   * row, or the overflow banner's number won't match what's
+   * actually shown in the table below it.
+   */
+  const rowCount = plan
+    ? Math.max(
+        plan.capacity.maximum,
+        plan.capacity.exceeded
+          ? plan.capacity.required
+          : 0
+      )
+    : 4;
+
   const chamberRows =
-    buildFourChamberRows(
-      displayedItems
+    buildChamberRows(
+      displayedItems,
+      rowCount
     );
 
   return (
@@ -283,16 +301,27 @@ export default function RxBoxLoadingOrder() {
             const chamberId =
               index + 1;
 
+            const isOverflow =
+              !!plan &&
+              chamberId >
+                plan.capacity
+                  .maximum;
+
             return (
               <div
                 key={
                   chamberId
                 }
-                className="grid grid-cols-[92px_1fr] gap-3 border-b border-border/70 px-4 py-4 last:border-b-0 sm:grid-cols-[110px_1fr_auto] sm:items-center"
+                className={`grid grid-cols-[92px_1fr] gap-3 border-b border-border/70 px-4 py-4 last:border-b-0 sm:grid-cols-[110px_1fr_auto] sm:items-center ${
+                  isOverflow
+                    ? "bg-red-50 dark:bg-red-950/20"
+                    : ""
+                }`}
               >
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  Chamber{" "}
-                  {chamberId}
+                  {isOverflow
+                    ? "No chamber"
+                    : `Chamber ${chamberId}`}
                 </span>
 
                 {loading &&
@@ -308,6 +337,11 @@ export default function RxBoxLoadingOrder() {
                         {
                           item.dosage
                         }
+                        {isOverflow && (
+                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/50 dark:text-red-200">
+                            Doesn&apos;t fit
+                          </span>
+                        )}
                       </p>
 
                       {item.pillsPerDose >

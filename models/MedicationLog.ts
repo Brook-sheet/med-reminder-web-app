@@ -227,6 +227,38 @@ MedicationLogSchema.index({
   expectedChamberId: 1,
 });
 
+/*
+ * CRITICAL: prevents duplicate logs for the same medicine's
+ * dose slot on the same day.
+ *
+ * ensureMedicationLogsForDate() (called on every plan/dashboard
+ * fetch) and the medicine-edit route's own log resync both
+ * upsert against this exact key. Upsert alone is NOT safe
+ * against two concurrent calls racing to insert the same
+ * logical row - MongoDB can create two separate documents if
+ * both "does this exist?" checks happen before either insert
+ * commits. This unique index closes that gap: the loser of the
+ * race gets a duplicate-key error instead of a phantom document.
+ *
+ * Scoped to medicineId being a real ObjectId so manual/free-form
+ * log entries (medicineId: null) are never restricted by this.
+ */
+MedicationLogSchema.index(
+  {
+    userId: 1,
+    medicineId: 1,
+    scheduledDate: 1,
+    scheduledTime: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      medicineId: { $type: 'objectId' },
+    },
+    name: 'unique_medicine_dose_slot_per_day',
+  }
+);
+
 const MedicationLog:
   Model<IMedicationLogDocument> =
     mongoose.models.MedicationLog ||

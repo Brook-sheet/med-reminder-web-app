@@ -461,8 +461,8 @@ function validateMedicinePayload(
         : getMedicationDateKey();
 
     if (
-      endDate <
-      scheduleStart
+      endDate &&
+      endDate < scheduleStart
     ) {
       return {
         valid: false,
@@ -624,11 +624,7 @@ export async function PUT(
 
     try {
       body =
-        (await request.json()) as
-          Record<
-            string,
-            unknown
-          >;
+        (await request.json()) as Record<string, unknown>;
     } catch (parseError) {
       console.error(
         '[PUT /api/medicines/[id]] JSON parse error:',
@@ -872,37 +868,14 @@ export async function PUT(
           const time of
           normalizedTimes
         ) {
-          await MedicationLog.updateOne(
-            {
-              userId:
-                user.userId,
-
-              medicineId:
-                id,
-
-              scheduledDate:
-                today,
-
-              scheduledTime:
-                time,
-
-              countsTowardAdherence: {
-                $ne: false,
-              },
-            },
-            {
-              $setOnInsert: {
+          try {
+            await MedicationLog.updateOne(
+              {
                 userId:
                   user.userId,
 
                 medicineId:
                   id,
-
-                medicineName:
-                  medicine.name,
-
-                dosage:
-                  medicine.dosage,
 
                 scheduledDate:
                   today,
@@ -910,41 +883,91 @@ export async function PUT(
                 scheduledTime:
                   time,
 
-                status:
-                  'pending',
-
-                source:
-                  'auto',
-
-                eventType:
-                  'SCHEDULED',
-
-                expectedChamberId:
-                  null,
-
-                expectedChamberIds:
-                  [],
-
-                windowBeforeMinutes:
-                  medicine
-                    .windowBeforeMinutes,
-
-                windowAfterMinutes:
-                  medicine
-                    .windowAfterMinutes,
-
-                lateAfterMinutes:
-                  medicine
-                    .lateAfterMinutes,
-
-                countsTowardAdherence:
-                  true,
+                countsTowardAdherence: {
+                  $ne: false,
+                },
               },
-            },
-            {
-              upsert: true,
+              {
+                $setOnInsert: {
+                  userId:
+                    user.userId,
+
+                  medicineId:
+                    id,
+
+                  medicineName:
+                    medicine.name,
+
+                  dosage:
+                    medicine.dosage,
+
+                  scheduledDate:
+                    today,
+
+                  scheduledTime:
+                    time,
+
+                  status:
+                    'pending',
+
+                  source:
+                    'auto',
+
+                  eventType:
+                    'SCHEDULED',
+
+                  expectedChamberId:
+                    null,
+
+                  expectedChamberIds:
+                    [],
+
+                  windowBeforeMinutes:
+                    medicine
+                      .windowBeforeMinutes,
+
+                  windowAfterMinutes:
+                    medicine
+                      .windowAfterMinutes,
+
+                  lateAfterMinutes:
+                    medicine
+                      .lateAfterMinutes,
+
+                  countsTowardAdherence:
+                    true,
+                },
+              },
+              {
+                upsert: true,
+              }
+            );
+          } catch (
+            upsertError
+          ) {
+            /*
+             * Code 11000 = duplicate key on the unique
+             * (userId, medicineId, scheduledDate,
+             * scheduledTime) index. This means a concurrent
+             * ensureMedicationLogsForDate() call (triggered
+             * by a dashboard/plan fetch happening at the
+             * same moment as this save) already created the
+             * exact same log first. The correct single log
+             * already exists - this is the race being
+             * guarded against, not a real failure.
+             */
+            const isDuplicateKeyError =
+              typeof upsertError ===
+                'object' &&
+              upsertError !== null &&
+              'code' in upsertError &&
+              (upsertError as { code?: number }).code ===
+                11000;
+
+            if (!isDuplicateKeyError) {
+              throw upsertError;
             }
-          );
+          }
         }
       }
     } catch (logError) {

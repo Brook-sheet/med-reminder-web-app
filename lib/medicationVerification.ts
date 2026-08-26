@@ -297,79 +297,107 @@ export async function ensureMedicationLogsForDate(
           medicine.scheduledTimes as string[];
 
         return scheduledTimes.map(
-          (scheduledTime) =>
-            MedicationLog.updateOne(
-              {
-                userId,
-
-                medicineId:
-                  medicine._id,
-
-                scheduledDate:
-                  dateString,
-
-                scheduledTime,
-
-                countsTowardAdherence: {
-                  $ne: false,
-                },
-              },
-              {
-                $setOnInsert: {
+          async (scheduledTime) => {
+            try {
+              await MedicationLog.updateOne(
+                {
                   userId,
 
                   medicineId:
                     medicine._id,
-
-                  medicineName:
-                    medicine.name,
-
-                  dosage:
-                    medicine.dosage,
 
                   scheduledDate:
                     dateString,
 
                   scheduledTime,
 
-                  status:
-                    'pending',
-
-                  source:
-                    'auto',
-
-                  eventType:
-                    'SCHEDULED',
-
-                  expectedChamberId:
-                    null,
-
-                  expectedChamberIds:
-                    [],
-
-                  windowBeforeMinutes:
-                    medicine
-                      .windowBeforeMinutes ??
-                    30,
-
-                  windowAfterMinutes:
-                    medicine
-                      .windowAfterMinutes ??
-                    90,
-
-                  lateAfterMinutes:
-                    medicine
-                      .lateAfterMinutes ??
-                    30,
-
-                  countsTowardAdherence:
-                    true,
+                  countsTowardAdherence: {
+                    $ne: false,
+                  },
                 },
-              },
-              {
-                upsert: true,
+                {
+                  $setOnInsert: {
+                    userId,
+
+                    medicineId:
+                      medicine._id,
+
+                    medicineName:
+                      medicine.name,
+
+                    dosage:
+                      medicine.dosage,
+
+                    scheduledDate:
+                      dateString,
+
+                    scheduledTime,
+
+                    status:
+                      'pending',
+
+                    source:
+                      'auto',
+
+                    eventType:
+                      'SCHEDULED',
+
+                    expectedChamberId:
+                      null,
+
+                    expectedChamberIds:
+                      [],
+
+                    windowBeforeMinutes:
+                      medicine
+                        .windowBeforeMinutes ??
+                      30,
+
+                    windowAfterMinutes:
+                      medicine
+                        .windowAfterMinutes ??
+                      90,
+
+                    lateAfterMinutes:
+                      medicine
+                        .lateAfterMinutes ??
+                      30,
+
+                    countsTowardAdherence:
+                      true,
+                  },
+                },
+                {
+                  upsert: true,
+                }
+              );
+            } catch (
+              upsertError
+            ) {
+              /*
+               * Code 11000 = duplicate key on the unique
+               * (userId, medicineId, scheduledDate,
+               * scheduledTime) index. This means another
+               * concurrent call (the medicine-edit route's
+               * own resync, or a parallel dashboard fetch)
+               * already created this exact log first. That
+               * is the race being guarded against, not a
+               * real failure - the correct single log
+               * already exists, so there is nothing to do.
+               */
+              const isDuplicateKeyError =
+                typeof upsertError ===
+                  'object' &&
+                upsertError !== null &&
+                'code' in upsertError &&
+                (upsertError as { code?: number }).code ===
+                  11000;
+
+              if (!isDuplicateKeyError) {
+                throw upsertError;
               }
-            )
+            }
+          }
         );
       }
     );
