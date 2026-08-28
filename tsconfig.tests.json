@@ -18,6 +18,11 @@
     "lib/rxBoxPlanCore.ts",
     "lib/rxBoxSecurityCore.ts",
     "lib/rxBoxUi.ts",
+    "lib/sms/index.ts",
+    "lib/sms/phone.ts",
+    "lib/sms/textbee.ts",
+    "lib/sms/twilio.ts",
+    "lib/sms/types.ts",
     "tests/**/*.test.ts"
   ]
 }

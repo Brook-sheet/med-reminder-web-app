@@ -2,52 +2,79 @@ import {
   NextRequest,
   NextResponse,
 } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
-import Alert from '@/models/Alert';
-import MedicationLog from '@/models/MedicationLog';
+
 import {
   getTokenFromRequest,
   verifyToken,
 } from '@/lib/auth';
-import { serializeAlert } from '@/lib/alertSerializer';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import { getApprovedPatientIdsForMonitor } from '@/lib/monitoringAuthorization';
 
-export const dynamic = 'force-dynamic';
+import type {
+  ApiResponse,
+} from '@/lib/interfaces/data/Api';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
+import {
+  getApprovedPatientIdsForMonitor,
+} from '@/lib/monitoringAuthorization';
+
+import {
+  serializeAlert,
+} from '@/lib/alertSerializer';
+
+import Alert from '@/models/Alert';
+import Medicine from '@/models/Medicine';
+import MedicationLog from '@/models/MedicationLog';
+import User from '@/models/User';
+
+export const dynamic =
+  'force-dynamic';
 
 async function authorizeFamily(
-  request: NextRequest,
+  request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(request);
+    getTokenFromRequest(
+      request
+    );
 
   const auth =
     token
-      ? await verifyToken(token)
+      ? await verifyToken(
+          token
+        )
       : null;
 
-  return auth?.role === 'family'
+  return auth?.role ===
+    'family'
     ? auth
     : null;
 }
 
 export async function GET(
-  request: NextRequest,
+  request: NextRequest
 ) {
   try {
     const auth =
-      await authorizeFamily(request);
+      await authorizeFamily(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Only authorized Family accounts can access alerts.',
         },
         {
-          status: 403,
-        },
+          status:
+            403,
+        }
       );
     }
 
@@ -55,42 +82,52 @@ export async function GET(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId,
+        auth.userId
       );
 
     const rawLimit =
       Number(
-        request.nextUrl.searchParams.get(
-          'limit',
-        ) || 50,
+        request.nextUrl
+          .searchParams
+          .get(
+            'limit'
+          ) ||
+          50
       );
 
     const limit =
       Math.min(
         Math.max(
-          Number.isFinite(rawLimit)
+          Number.isFinite(
+            rawLimit
+          )
             ? rawLimit
             : 50,
-          1,
+          1
         ),
-        100,
+        100
       );
 
     const status =
-      request.nextUrl.searchParams.get(
-        'status',
-      );
+      request.nextUrl
+        .searchParams
+        .get(
+          'status'
+        );
 
     const query:
-      Record<string, unknown> = {
-        monitorId:
-          auth.userId,
+      Record<
+        string,
+        unknown
+      > = {
+      monitorId:
+        auth.userId,
 
-        patientId: {
-          $in:
-            patientIds,
-        },
-      };
+      patientId: {
+        $in:
+          patientIds,
+      },
+    };
 
     if (
       status &&
@@ -98,26 +135,43 @@ export async function GET(
         'UNREAD',
         'READ',
         'ACKNOWLEDGED',
-      ].includes(status)
+      ].includes(
+        status
+      )
     ) {
       query.status =
         status;
     }
 
     /*
-     * The medication log is populated only for its annotations.
-     * This does not update the alert or medication log.
+     * Explicit model references ensure that
+     * Mongoose registers User, Medicine, and
+     * MedicationLog before populate executes.
      */
     const alerts =
-      await Alert.find(query)
-        .populate(
-          'patientId',
-          'firstName lastName patientId',
-        )
-        .populate(
-          'medicationId',
-          'name dosage',
-        )
+      await Alert.find(
+        query
+      )
+        .populate({
+          path:
+            'patientId',
+
+          model:
+            User,
+
+          select:
+            'firstName lastName patientId',
+        })
+        .populate({
+          path:
+            'medicationId',
+
+          model:
+            Medicine,
+
+          select:
+            'name dosage',
+        })
         .populate({
           path:
             'medicationLogId',
@@ -132,22 +186,26 @@ export async function GET(
           createdAt:
             -1,
         })
-        .limit(limit)
+        .limit(
+          limit
+        )
         .lean();
 
     const unreadCount =
-      await Alert.countDocuments({
-        monitorId:
-          auth.userId,
+      await Alert.countDocuments(
+        {
+          monitorId:
+            auth.userId,
 
-        patientId: {
-          $in:
-            patientIds,
-        },
+          patientId: {
+            $in:
+              patientIds,
+          },
 
-        isRead:
-          false,
-      });
+          isRead:
+            false,
+        }
+      );
 
     return NextResponse.json<ApiResponse>({
       success:
@@ -156,7 +214,7 @@ export async function GET(
       data: {
         alerts:
           alerts.map(
-            serializeAlert,
+            serializeAlert
           ),
 
         unreadCount,
@@ -165,45 +223,54 @@ export async function GET(
   } catch (error) {
     console.error(
       '[GET /api/alerts]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
+        success:
+          false,
+
         error:
           'Internal server error',
       },
       {
-        status: 500,
-      },
+        status:
+          500,
+      }
     );
   }
 }
 
 export async function PATCH(
-  request: NextRequest,
+  request: NextRequest
 ) {
   try {
     const auth =
-      await authorizeFamily(request);
+      await authorizeFamily(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Only authorized Family accounts can update alerts.',
         },
         {
-          status: 403,
-        },
+          status:
+            403,
+        }
       );
     }
 
     const body =
       (await request.json()) as {
-        action?: string;
+        action?:
+          string;
       };
 
     if (
@@ -212,13 +279,16 @@ export async function PATCH(
     ) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'action must be markAllRead.',
         },
         {
-          status: 400,
-        },
+          status:
+            400,
+        }
       );
     }
 
@@ -226,7 +296,7 @@ export async function PATCH(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId,
+        auth.userId
       );
 
     const now =
@@ -256,7 +326,7 @@ export async function PATCH(
           readAt:
             now,
         },
-      },
+      }
     );
 
     return NextResponse.json<ApiResponse>({
@@ -269,18 +339,21 @@ export async function PATCH(
   } catch (error) {
     console.error(
       '[PATCH /api/alerts]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
+        success:
+          false,
+
         error:
           'Internal server error',
       },
       {
-        status: 500,
-      },
+        status:
+          500,
+      }
     );
   }
 }

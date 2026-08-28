@@ -1,81 +1,114 @@
 import mongoose from 'mongoose';
+
 import {
   NextRequest,
   NextResponse,
 } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
-import Alert from '@/models/Alert';
-import MedicationLog from '@/models/MedicationLog';
+
 import {
   getTokenFromRequest,
   verifyToken,
 } from '@/lib/auth';
-import { serializeAlert } from '@/lib/alertSerializer';
-import type { ApiResponse } from '@/lib/interfaces/data/Api';
-import { getApprovedPatientIdsForMonitor } from '@/lib/monitoringAuthorization';
 
-export const dynamic = 'force-dynamic';
+import type {
+  ApiResponse,
+} from '@/lib/interfaces/data/Api';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
+import {
+  getApprovedPatientIdsForMonitor,
+} from '@/lib/monitoringAuthorization';
+
+import {
+  serializeAlert,
+} from '@/lib/alertSerializer';
+
+import Alert from '@/models/Alert';
+import Medicine from '@/models/Medicine';
+import MedicationLog from '@/models/MedicationLog';
+import User from '@/models/User';
+
+export const dynamic =
+  'force-dynamic';
+
+type AlertRouteContext = {
+  params: Promise<{
+    alertId: string;
+  }>;
+};
 
 async function authorizeFamily(
-  request: NextRequest,
+  request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(request);
+    getTokenFromRequest(
+      request
+    );
 
   const auth =
     token
-      ? await verifyToken(token)
+      ? await verifyToken(
+          token
+        )
       : null;
 
-  return auth?.role === 'family'
+  return auth?.role ===
+    'family'
     ? auth
     : null;
 }
 
 export async function GET(
   request: NextRequest,
-  {
-    params,
-  }: {
-    params: Promise<{
-      alertId: string;
-    }>;
-  },
+  context: AlertRouteContext
 ) {
   try {
     const auth =
-      await authorizeFamily(request);
+      await authorizeFamily(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Access denied.',
         },
         {
-          status: 403,
-        },
+          status:
+            403,
+        }
       );
     }
 
-    const { alertId } =
-      await params;
+    const {
+      alertId,
+    } =
+      await context.params;
 
     if (
       !mongoose.isValidObjectId(
-        alertId,
+        alertId
       )
     ) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Invalid alert ID.',
         },
         {
-          status: 400,
-        },
+          status:
+            400,
+        }
       );
     }
 
@@ -83,30 +116,44 @@ export async function GET(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId,
+        auth.userId
       );
 
     const alert =
-      await Alert.findOne({
-        _id:
-          alertId,
+      await Alert.findOne(
+        {
+          _id:
+            alertId,
 
-        monitorId:
-          auth.userId,
+          monitorId:
+            auth.userId,
 
-        patientId: {
-          $in:
-            patientIds,
-        },
-      })
-        .populate(
-          'patientId',
-          'firstName lastName patientId',
-        )
-        .populate(
-          'medicationId',
-          'name dosage',
-        )
+          patientId: {
+            $in:
+              patientIds,
+          },
+        }
+      )
+        .populate({
+          path:
+            'patientId',
+
+          model:
+            User,
+
+          select:
+            'firstName lastName patientId',
+        })
+        .populate({
+          path:
+            'medicationId',
+
+          model:
+            Medicine,
+
+          select:
+            'name dosage',
+        })
         .populate({
           path:
             'medicationLogId',
@@ -122,13 +169,16 @@ export async function GET(
     if (!alert) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Alert not found.',
         },
         {
-          status: 404,
-        },
+          status:
+            404,
+        }
       );
     }
 
@@ -137,71 +187,80 @@ export async function GET(
         true,
 
       data:
-        serializeAlert(alert),
+        serializeAlert(
+          alert
+        ),
     });
   } catch (error) {
     console.error(
       '[GET /api/alerts/[alertId]]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
+        success:
+          false,
+
         error:
           'Internal server error',
       },
       {
-        status: 500,
-      },
+        status:
+          500,
+      }
     );
   }
 }
 
 export async function PATCH(
   request: NextRequest,
-  {
-    params,
-  }: {
-    params: Promise<{
-      alertId: string;
-    }>;
-  },
+  context: AlertRouteContext
 ) {
   try {
     const auth =
-      await authorizeFamily(request);
+      await authorizeFamily(
+        request
+      );
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Access denied.',
         },
         {
-          status: 403,
-        },
+          status:
+            403,
+        }
       );
     }
 
-    const { alertId } =
-      await params;
+    const {
+      alertId,
+    } =
+      await context.params;
 
     if (
       !mongoose.isValidObjectId(
-        alertId,
+        alertId
       )
     ) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Invalid alert ID.',
         },
         {
-          status: 400,
-        },
+          status:
+            400,
+        }
       );
     }
 
@@ -217,17 +276,22 @@ export async function PATCH(
       ![
         'read',
         'acknowledge',
-      ].includes(body.action)
+      ].includes(
+        body.action
+      )
     ) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'action must be read or acknowledge.',
         },
         {
-          status: 400,
-        },
+          status:
+            400,
+        }
       );
     }
 
@@ -235,19 +299,20 @@ export async function PATCH(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId,
+        auth.userId
       );
 
     const now =
       new Date();
 
     /*
-     * Alert acknowledgment affects only the alert's
-     * read/acknowledged state. It does not change the
-     * patient's medication status.
+     * Acknowledgment changes only the alert state.
+     * It does not modify the medication log and
+     * does not send another SMS.
      */
     const update =
-      body.action === 'acknowledge'
+      body.action ===
+      'acknowledge'
         ? {
             status:
               'ACKNOWLEDGED',
@@ -293,16 +358,28 @@ export async function PATCH(
         {
           new:
             true,
-        },
+        }
       )
-        .populate(
-          'patientId',
-          'firstName lastName patientId',
-        )
-        .populate(
-          'medicationId',
-          'name dosage',
-        )
+        .populate({
+          path:
+            'patientId',
+
+          model:
+            User,
+
+          select:
+            'firstName lastName patientId',
+        })
+        .populate({
+          path:
+            'medicationId',
+
+          model:
+            Medicine,
+
+          select:
+            'name dosage',
+        })
         .populate({
           path:
             'medicationLogId',
@@ -318,13 +395,16 @@ export async function PATCH(
     if (!alert) {
       return NextResponse.json<ApiResponse>(
         {
-          success: false,
+          success:
+            false,
+
           error:
             'Alert not found.',
         },
         {
-          status: 404,
-        },
+          status:
+            404,
+        }
       );
     }
 
@@ -333,23 +413,28 @@ export async function PATCH(
         true,
 
       data:
-        serializeAlert(alert),
+        serializeAlert(
+          alert
+        ),
     });
   } catch (error) {
     console.error(
       '[PATCH /api/alerts/[alertId]]',
-      error,
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
-        success: false,
+        success:
+          false,
+
         error:
           'Internal server error',
       },
       {
-        status: 500,
-      },
+        status:
+          500,
+      }
     );
   }
 }

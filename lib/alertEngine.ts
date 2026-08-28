@@ -1,36 +1,72 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 import {
   connectDB,
-} from '@/lib/mongodb';
+} from "@/lib/mongodb";
+
+import {
+  sendWebPushToUser,
+  type ChannelDeliveryResult,
+} from "@/lib/notificationChannels";
+
+import {
+  claimAndSendSms,
+} from "@/lib/sms/delivery";
+
+import {
+  normalizePhilippineMobileNumber,
+} from "@/lib/sms/phone";
+
+import type {
+  SmsAlertType,
+  SmsSendResult,
+} from "@/lib/sms/types";
 
 import Alert, {
   type AlertEventType,
   type AlertSeverity,
+  type DeliveryStatus,
   type IAlertDocument,
-} from '@/models/Alert';
+} from "@/models/Alert";
 
-import MonitoringRequest from '@/models/MonitoringRequest';
-import User from '@/models/User';
-
-import {
-  sendConfiguredSms,
-  sendWebPushToUser,
-  type ChannelDeliveryResult,
-} from '@/lib/notificationChannels';
+import MonitoringRequest from "@/models/MonitoringRequest";
+import User from "@/models/User";
 
 export interface MedicationAlertEvent {
   eventKey: string;
   patientId: string;
-  medicationId?: string | null;
-  medicationLogId?: string | null;
-  medicineName?: string;
-  scheduledTime?: string;
-  occurredAt?: Date;
-  eventType: AlertEventType;
-  title?: string;
-  message?: string;
-  metadata?: Record<string, unknown>;
+
+  medicationId?:
+    | string
+    | null;
+
+  medicationLogId?:
+    | string
+    | null;
+
+  medicineName?:
+    string;
+
+  scheduledTime?:
+    string;
+
+  occurredAt?:
+    Date;
+
+  eventType:
+    AlertEventType;
+
+  title?:
+    string;
+
+  message?:
+    string;
+
+  metadata?:
+    Record<
+      string,
+      unknown
+    >;
 }
 
 export interface AlertEngineResult {
@@ -50,113 +86,131 @@ interface AlertPolicy {
   defaultTitle: string;
 }
 
+interface AlertRecipient {
+  id:
+    | mongoose.Types.ObjectId
+    | null;
+
+  pushEnabled:
+    boolean;
+
+  smsEnabled:
+    boolean;
+
+  smsConsented:
+    boolean;
+
+  phone?:
+    string;
+}
+
 const ALERT_POLICIES:
   Record<
     AlertEventType,
     AlertPolicy
   > = {
-    MEDICATION_VERIFIED: {
-      createAlert:
-        true,
+  MEDICATION_VERIFIED: {
+    createAlert:
+      true,
 
-      severity:
-        'INFO',
+    severity:
+      "INFO",
 
-      push:
-        true,
+    push:
+      true,
 
-      sms:
-        false,
+    sms:
+      true,
 
-      defaultTitle:
-        'Medication taken',
-    },
+    defaultTitle:
+      "Medication taken",
+  },
 
-    MEDICATION_LATE: {
-      createAlert:
-        true,
+  MEDICATION_LATE: {
+    createAlert:
+      true,
 
-      severity:
-        'NOTICE',
+    severity:
+      "NOTICE",
 
-      push:
-        true,
+    push:
+      true,
 
-      sms:
-        false,
+    sms:
+      true,
 
-      defaultTitle:
-        'Medication taken late',
-    },
+    defaultTitle:
+      "Medication taken late",
+  },
 
-    MEDICATION_MISSED: {
-      createAlert:
-        true,
+  MEDICATION_MISSED: {
+    createAlert:
+      true,
 
-      severity:
-        'WARNING',
+    severity:
+      "WARNING",
 
-      push:
-        true,
+    push:
+      true,
 
-      sms:
-        true,
+    sms:
+      true,
 
-      defaultTitle:
-        'Medication missed',
-    },
+    defaultTitle:
+      "Medication missed",
+  },
 
-    MEDICATION_EVENT_WARNING: {
-      createAlert:
-        true,
+  MEDICATION_EVENT_WARNING: {
+    createAlert:
+      true,
 
-      severity:
-        'WARNING',
+    severity:
+      "WARNING",
 
-      push:
-        true,
+    push:
+      true,
 
-      sms:
-        false,
+    sms:
+      false,
 
-      defaultTitle:
-        'Medication event warning',
-    },
+    defaultTitle:
+      "Medication event warning",
+  },
 
-    CRITICAL_MEDICATION_EVENT: {
-      createAlert:
-        true,
+  CRITICAL_MEDICATION_EVENT: {
+    createAlert:
+      true,
 
-      severity:
-        'CRITICAL',
+    severity:
+      "CRITICAL",
 
-      push:
-        true,
+    push:
+      true,
 
-      sms:
-        true,
+    sms:
+      true,
 
-      defaultTitle:
-        'Critical medication alert',
-    },
+    defaultTitle:
+      "Critical medication alert",
+  },
 
-    POSSIBLE_EXCESS_INTAKE: {
-      createAlert:
-        false,
+  POSSIBLE_EXCESS_INTAKE: {
+    createAlert:
+      false,
 
-      severity:
-        'CRITICAL',
+    severity:
+      "CRITICAL",
 
-      push:
-        false,
+    push:
+      false,
 
-      sms:
-        false,
+    sms:
+      false,
 
-      defaultTitle:
-        'Potential medication incident',
-    },
-  };
+    defaultTitle:
+      "Potential medication incident",
+  },
+};
 
 function safeObjectId(
   value?:
@@ -184,33 +238,219 @@ function defaultMessage(
 ): string {
   const medicine =
     event.medicineName ||
-    'a scheduled medication';
+    "a scheduled medication";
 
   const time =
     event.scheduledTime
       ? ` scheduled for ${event.scheduledTime}`
-      : '';
+      : "";
 
   switch (
     event.eventType
   ) {
-    case 'MEDICATION_LATE':
+    case "MEDICATION_LATE":
       return `${patientName} took ${medicine} later than scheduled${time}.`;
 
-    case 'MEDICATION_MISSED':
+    case "MEDICATION_MISSED":
       return `${patientName} did not verify ${medicine} before its medication window ended${time}.`;
 
-    case 'MEDICATION_EVENT_WARNING':
+    case "MEDICATION_EVENT_WARNING":
       return `${patientName} has a medication verification event that requires attention for ${medicine}.`;
 
-    case 'CRITICAL_MEDICATION_EVENT':
+    case "CRITICAL_MEDICATION_EVENT":
       return `${patientName} has a medication event requiring immediate attention.`;
 
-    case 'MEDICATION_VERIFIED':
+    case "MEDICATION_VERIFIED":
       return `${patientName} took ${medicine}${time}.`;
 
     default:
       return `${patientName} has a medication event requiring review.`;
+  }
+}
+
+function safePatientFirstName(
+  value: string
+): string {
+  const firstName =
+    value
+      .replace(
+        /[^\p{L}\p{N} .'-]/gu,
+        ""
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim()
+      .slice(
+        0,
+        40
+      );
+
+  return (
+    firstName ||
+    "The patient"
+  );
+}
+
+function formatSmsTime(
+  date: Date
+): string {
+  const options:
+    Intl.DateTimeFormatOptions = {
+    hour:
+      "numeric",
+
+    minute:
+      "2-digit",
+
+    hour12:
+      true,
+
+    timeZone:
+      process.env
+        .MEDICATION_TIME_ZONE ||
+      "Asia/Manila",
+  };
+
+  try {
+    return new Intl.DateTimeFormat(
+      "en-PH",
+      options
+    ).format(
+      date
+    );
+  } catch {
+    return new Intl.DateTimeFormat(
+      "en-PH",
+      {
+        ...options,
+
+        timeZone:
+          "Asia/Manila",
+      }
+    ).format(
+      date
+    );
+  }
+}
+
+function smsMessage(
+  event:
+    MedicationAlertEvent,
+
+  patientFirstName:
+    string
+): string {
+  const name =
+    safePatientFirstName(
+      patientFirstName
+    );
+
+  const occurredAt =
+    event.occurredAt ||
+    new Date();
+
+  switch (
+    event.eventType
+  ) {
+    case "MEDICATION_VERIFIED":
+      return `Rx Box Alert: ${name}'s scheduled medication was marked as taken at ${formatSmsTime(
+        occurredAt
+      )}. Open Rx Box for details.`;
+
+    case "MEDICATION_LATE":
+      return `Rx Box Alert: ${name}'s scheduled medication was marked as taken late at ${formatSmsTime(
+        occurredAt
+      )}. Open Rx Box for details.`;
+
+    case "MEDICATION_MISSED":
+      return `Rx Box Alert: ${name} missed a scheduled medication at ${
+        event.scheduledTime ||
+        "the scheduled time"
+      }. Please check on the patient.`;
+
+    case "CRITICAL_MEDICATION_EVENT":
+      return `Rx Box Alert: ${name} has a medication event requiring immediate attention. Open Rx Box for details.`;
+
+    default:
+      return `Rx Box Alert: ${name} has a medication update. Open Rx Box for details.`;
+  }
+}
+
+function smsDedupeEventKey(
+  event:
+    MedicationAlertEvent,
+
+  fallbackEventKey:
+    string
+): string {
+  const scheduledDate =
+    typeof event.metadata
+      ?.scheduledDate ===
+    "string"
+      ? event.metadata
+          .scheduledDate
+          .trim()
+      : "";
+
+  if (
+    [
+      "MEDICATION_VERIFIED",
+      "MEDICATION_LATE",
+      "MEDICATION_MISSED",
+    ].includes(
+      event.eventType
+    ) &&
+    scheduledDate &&
+    event.scheduledTime
+  ) {
+    /*
+     * All medicines with the same
+     * patient/date/time use one
+     * concise group SMS.
+     */
+    return `medication-final-group:${event.patientId}:${scheduledDate}:${event.scheduledTime}`;
+  }
+
+  return fallbackEventKey;
+}
+
+function smsAlertType(
+  eventType:
+    AlertEventType
+): SmsAlertType {
+  if (
+    eventType ===
+      "MEDICATION_EVENT_WARNING" ||
+    eventType ===
+      "POSSIBLE_EXCESS_INTAKE"
+  ) {
+    return "OTHER";
+  }
+
+  return eventType;
+}
+
+function smsDeliveryStatus(
+  result:
+    | SmsSendResult
+    | null
+): DeliveryStatus {
+  switch (
+    result?.status
+  ) {
+    case "queued":
+      return "QUEUED";
+
+    case "sent":
+      return "SENT";
+
+    case "failed":
+      return "FAILED";
+
+    default:
+      return "SKIPPED";
   }
 }
 
@@ -222,7 +462,8 @@ async function updateDelivery(
     ChannelDeliveryResult,
 
   smsResult:
-    ChannelDeliveryResult
+    | SmsSendResult
+    | null
 ): Promise<void> {
   await Alert.updateOne(
     {
@@ -231,32 +472,41 @@ async function updateDelivery(
     },
     {
       $set: {
-        'delivery.pushStatus':
-          alert.channels.push
-            ? pushResult.status
-            : 'NOT_REQUESTED',
+        "delivery.pushStatus":
+          alert.channels
+            .push
+            ? pushResult
+                .status
+            : "NOT_REQUESTED",
 
-        'delivery.smsStatus':
-          alert.channels.sms
-            ? smsResult.status
-            : 'NOT_REQUESTED',
+        "delivery.smsStatus":
+          alert.channels
+            .sms
+            ? smsDeliveryStatus(
+                smsResult
+              )
+            : "NOT_REQUESTED",
 
-        'delivery.pushError':
-          pushResult.error ||
-          '',
+        "delivery.pushError":
+          pushResult
+            .error ||
+          "",
 
-        'delivery.smsError':
-          smsResult.error ||
-          '',
+        "delivery.smsError":
+          smsResult
+            ?.errorMessage ||
+          "",
       },
     }
   );
 }
 
-export async function processMedicationAlertEvent(
+async function processMedicationAlertEventInternal(
   event:
     MedicationAlertEvent
-): Promise<AlertEngineResult> {
+): Promise<
+  AlertEngineResult
+> {
   const policy =
     ALERT_POLICIES[
       event.eventType
@@ -280,9 +530,9 @@ export async function processMedicationAlertEvent(
 
       reason:
         event.eventType ===
-        'POSSIBLE_EXCESS_INTAKE'
-          ? 'Excess-intake detection is reserved for Phase 6.'
-          : 'This informational event is stored in medication history only.',
+        "POSSIBLE_EXCESS_INTAKE"
+          ? "Excess-intake detection is reserved for Phase 6."
+          : "This event is stored in medication history only.",
 
       alertIds:
         [],
@@ -292,18 +542,18 @@ export async function processMedicationAlertEvent(
   const requestedEventKey =
     event.eventKey.trim();
 
-  const finalMedicationEvent =
+  const isFinalMedicationEvent =
     [
-      'MEDICATION_VERIFIED',
-      'MEDICATION_LATE',
-      'MEDICATION_MISSED',
-      'MEDICATION_EVENT_WARNING',
+      "MEDICATION_VERIFIED",
+      "MEDICATION_LATE",
+      "MEDICATION_MISSED",
+      "MEDICATION_EVENT_WARNING",
     ].includes(
       event.eventType
     );
 
   const eventKey =
-    finalMedicationEvent &&
+    isFinalMedicationEvent &&
     event.medicationLogId
       ? `medication-final:${event.medicationLogId}`
       : requestedEventKey;
@@ -314,7 +564,7 @@ export async function processMedicationAlertEvent(
       180
   ) {
     throw new Error(
-      'A valid alert eventKey is required.'
+      "A valid alert eventKey is required."
     );
   }
 
@@ -324,37 +574,45 @@ export async function processMedicationAlertEvent(
     )
   ) {
     throw new Error(
-      'A valid patientId is required for alert processing.'
+      "A valid patientId is required for alert processing."
     );
   }
 
   await connectDB();
 
   const patient =
-    await User.findOne({
-      _id:
-        event.patientId,
+    await User.findOne(
+      {
+        _id:
+          event.patientId,
 
-      role:
-        'patient',
+        role:
+          "patient",
 
-      isDeleted: {
-        $ne:
-          true,
-      },
-    }).select(
-      'firstName lastName'
+        isDeleted: {
+          $ne:
+            true,
+        },
+      }
+    ).select(
+      "firstName lastName"
     );
 
   if (!patient) {
     throw new Error(
-      'Alert patient was not found.'
+      "Alert patient was not found."
     );
   }
 
   const patientName =
-    `${patient.firstName || ''} ${patient.lastName || ''}`.trim() ||
-    'Patient';
+    `${patient.firstName || ""} ${
+      patient.lastName || ""
+    }`.trim() ||
+    "Patient";
+
+  const patientFirstName =
+    patient.firstName ||
+    "Patient";
 
   const relationships =
     await MonitoringRequest.find(
@@ -363,102 +621,116 @@ export async function processMedicationAlertEvent(
           patient._id,
 
         status:
-          'approved',
+          "approved",
       }
     )
       .select(
-        'familyId'
+        "familyId"
       )
       .lean();
 
   const monitorIds =
     relationships.map(
-      (relationship) =>
-        relationship.familyId
+      (
+        relationship
+      ) =>
+        relationship
+          .familyId
     );
 
+  /*
+   * This projection fixes the
+   * MongoDB path-collision error.
+   *
+   * It does not select both the
+   * notificationPreferences parent
+   * and smsPhoneNumber child.
+   */
   const monitors =
     monitorIds.length >
     0
-      ? await User.find({
-          _id: {
-            $in:
-              monitorIds,
-          },
+      ? await User.find(
+          {
+            _id: {
+              $in:
+                monitorIds,
+            },
 
-          role:
-            'family',
+            role:
+              "family",
 
-          isDeleted: {
-            $ne:
-              true,
-          },
-        })
+            isDeleted: {
+              $ne:
+                true,
+            },
+          }
+        )
           .select({
-            'notificationPreferences.push':
+            "notificationPreferences.push":
               1,
 
-            'notificationPreferences.sms':
+            "notificationPreferences.sms":
               1,
 
-            'notificationPreferences.smsPhoneNumber':
+            "notificationPreferences.smsConsent":
+              1,
+
+            "notificationPreferences.smsPhoneNumber":
               1,
           })
           .lean()
       : [];
 
   const recipients:
-    Array<{
-      id:
-        | mongoose.Types.ObjectId
-        | null;
+    AlertRecipient[] =
+    monitors.length >
+    0
+      ? monitors.map(
+          (
+            monitor
+          ) => ({
+            id:
+              monitor._id,
 
-      pushEnabled:
-        boolean;
+            pushEnabled:
+              monitor
+                .notificationPreferences
+                ?.push !==
+              false,
 
-      smsEnabled:
-        boolean;
+            smsEnabled:
+              monitor
+                .notificationPreferences
+                ?.sms ===
+              true,
 
-      phone?:
-        string;
-    }> =
-      monitors.length >
-      0
-        ? monitors.map(
-            (monitor) => ({
-              id:
-                monitor._id,
+            smsConsented:
+              monitor
+                .notificationPreferences
+                ?.smsConsent ===
+              true,
 
-              pushEnabled:
-                monitor
-                  .notificationPreferences
-                  ?.push !==
-                false,
+            phone:
+              monitor
+                .notificationPreferences
+                ?.smsPhoneNumber,
+          })
+        )
+      : [
+          {
+            id:
+              null,
 
-              smsEnabled:
-                monitor
-                  .notificationPreferences
-                  ?.sms ===
-                true,
+            pushEnabled:
+              false,
 
-              phone:
-                monitor
-                  .notificationPreferences
-                  ?.smsPhoneNumber,
-            })
-          )
-        : [
-            {
-              id:
-                null,
+            smsEnabled:
+              false,
 
-              pushEnabled:
-                false,
-
-              smsEnabled:
-                false,
-            },
-          ];
+            smsConsented:
+              false,
+          },
+        ];
 
   let created =
     0;
@@ -480,14 +752,24 @@ export async function processMedicationAlertEvent(
       Boolean(
         recipient.id &&
         policy.push &&
-        recipient.pushEnabled
+        recipient
+          .pushEnabled
+      );
+
+    const normalizedPhone =
+      normalizePhilippineMobileNumber(
+        recipient.phone
       );
 
     const smsRequested =
       Boolean(
         recipient.id &&
         policy.sms &&
-        recipient.smsEnabled
+        recipient
+          .smsEnabled &&
+        recipient
+          .smsConsented &&
+        normalizedPhone
       );
 
     let alert:
@@ -495,87 +777,93 @@ export async function processMedicationAlertEvent(
 
     try {
       alert =
-        await Alert.create({
-          patientId:
-            patient._id,
+        await Alert.create(
+          {
+            patientId:
+              patient._id,
 
-          monitorId:
-            recipient.id,
+            monitorId:
+              recipient.id,
 
-          medicationId:
-            safeObjectId(
-              event.medicationId
-            ),
+            medicationId:
+              safeObjectId(
+                event.medicationId
+              ),
 
-          medicationLogId:
-            safeObjectId(
-              event.medicationLogId
-            ),
+            medicationLogId:
+              safeObjectId(
+                event.medicationLogId
+              ),
 
-          eventKey,
+            eventKey,
 
-          eventType:
-            event.eventType,
+            eventType:
+              event.eventType,
 
-          severity:
-            policy.severity,
+            severity:
+              policy.severity,
 
-          title:
-            event.title ||
-            policy.defaultTitle,
+            title:
+              event.title ||
+              policy.defaultTitle,
 
-          message:
-            event.message ||
-            defaultMessage(
-              event,
-              patientName
-            ),
+            message:
+              event.message ||
+              defaultMessage(
+                event,
+                patientName
+              ),
 
-          status:
-            'UNREAD',
+            status:
+              "UNREAD",
 
-          isRead:
-            false,
+            isRead:
+              false,
 
-          occurredAt:
-            event.occurredAt ||
-            new Date(),
+            occurredAt:
+              event.occurredAt ||
+              new Date(),
 
-          channels: {
-            inApp:
-              true,
+            channels: {
+              inApp:
+                true,
 
-            push:
-              pushRequested,
+              push:
+                pushRequested,
 
-            sms:
-              smsRequested,
-          },
+              sms:
+                smsRequested,
+            },
 
-          delivery: {
-            pushStatus:
-              pushRequested
-                ? 'PENDING'
-                : 'NOT_REQUESTED',
+            delivery: {
+              pushStatus:
+                pushRequested
+                  ? "PENDING"
+                  : "NOT_REQUESTED",
 
-            smsStatus:
-              smsRequested
-                ? 'PENDING'
-                : 'NOT_REQUESTED',
-          },
+              smsStatus:
+                smsRequested
+                  ? "PENDING"
+                  : "NOT_REQUESTED",
+            },
 
-          metadata:
-            event.metadata ||
-            {},
-        });
+            metadata:
+              event.metadata ||
+              {},
+          }
+        );
     } catch (error) {
       if (
+        typeof error ===
+          "object" &&
+        error !== null &&
+        "code" in error &&
         (
           error as {
             code?: number;
           }
         ).code ===
-        11000
+          11000
       ) {
         duplicates +=
           1;
@@ -599,9 +887,15 @@ export async function processMedicationAlertEvent(
       continue;
     }
 
+    const smsKey =
+      `${smsDedupeEventKey(
+        event,
+        eventKey
+      )}:${recipient.id.toString()}:sms`;
+
     const [
       pushResult,
-      smsResult,
+      smsDelivery,
     ] =
       await Promise.all(
         [
@@ -616,7 +910,7 @@ export async function processMedicationAlertEvent(
                     alert.message,
 
                   type:
-                    'medication_alert',
+                    "medication_alert",
 
                   severity:
                     alert.severity,
@@ -635,29 +929,57 @@ export async function processMedicationAlertEvent(
                     undefined,
 
                   url:
-                    '/alerts',
+                    "/alerts",
                 }
               )
-            : Promise.resolve<ChannelDeliveryResult>(
-                {
-                  status:
-                    'SKIPPED',
-                }
-              ),
+            : Promise.resolve<
+                ChannelDeliveryResult
+              >({
+                status:
+                  "SKIPPED",
+              }),
 
-          smsRequested
-            ? sendConfiguredSms(
-                recipient.phone,
-                `Med App Reminder: ${alert.title}. ${alert.message}`
-              )
-            : Promise.resolve<ChannelDeliveryResult>(
+          smsRequested &&
+          normalizedPhone
+            ? claimAndSendSms(
                 {
-                  status:
-                    'SKIPPED',
+                  dedupeKey:
+                    smsKey,
+
+                  recipientId:
+                    recipient.id.toString(),
+
+                  patientId:
+                    patient._id.toString(),
+
+                  alertId:
+                    alert._id.toString(),
+
+                  alertType:
+                    smsAlertType(
+                      event.eventType
+                    ),
+
+                  to:
+                    normalizedPhone,
+
+                  message:
+                    smsMessage(
+                      event,
+                      patientFirstName
+                    ),
                 }
+              )
+            : Promise.resolve(
+                null
               ),
         ]
       );
+
+    const smsResult =
+      smsDelivery
+        ?.result ||
+      null;
 
     await updateDelivery(
       alert,
@@ -666,10 +988,12 @@ export async function processMedicationAlertEvent(
     );
 
     if (
-      pushResult.status ===
-        'SENT' ||
-      smsResult.status ===
-        'SENT'
+      pushResult
+        .status ===
+        "SENT" ||
+      smsResult
+        ?.accepted ===
+        true
     ) {
       delivered +=
         1;
@@ -680,8 +1004,66 @@ export async function processMedicationAlertEvent(
     created,
     duplicates,
     delivered,
+
     skipped:
       false,
+
     alertIds,
   };
+}
+
+export async function processMedicationAlertEvent(
+  event:
+    MedicationAlertEvent
+): Promise<
+  AlertEngineResult
+> {
+  try {
+    return await processMedicationAlertEventInternal(
+      event
+    );
+  } catch (error) {
+    /*
+     * SMS, push, or alert failures must
+     * never roll back taken, late, or
+     * missed medication status.
+     */
+    console.error(
+      "[Alert Engine] Processing failed:",
+      {
+        eventType:
+          event.eventType,
+
+        medicationLogId:
+          event.medicationLogId ||
+          "",
+
+        message:
+          error instanceof
+            Error
+            ? error.message
+            : "Unknown alert error",
+      }
+    );
+
+    return {
+      created:
+        0,
+
+      duplicates:
+        0,
+
+      delivered:
+        0,
+
+      skipped:
+        true,
+
+      reason:
+        "Alert delivery failed without affecting the medication status.",
+
+      alertIds:
+        [],
+    };
+  }
 }

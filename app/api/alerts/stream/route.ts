@@ -1,14 +1,29 @@
-import { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { connectDB } from '@/lib/mongodb';
-import Alert from '@/models/Alert';
-import MedicationLog from '@/models/MedicationLog';
+import {
+  NextRequest,
+} from 'next/server';
+
 import {
   getTokenFromRequest,
   verifyToken,
 } from '@/lib/auth';
-import { serializeAlert } from '@/lib/alertSerializer';
-import { getApprovedPatientIdsForMonitor } from '@/lib/monitoringAuthorization';
+
+import {
+  connectDB,
+} from '@/lib/mongodb';
+
+import {
+  getApprovedPatientIdsForMonitor,
+} from '@/lib/monitoringAuthorization';
+
+import {
+  serializeAlert,
+} from '@/lib/alertSerializer';
+
+import Alert from '@/models/Alert';
+import Medicine from '@/models/Medicine';
+import MedicationLog from '@/models/MedicationLog';
+import User from '@/models/User';
 
 export const dynamic =
   'force-dynamic';
@@ -18,35 +33,41 @@ export const runtime =
 
 function sseEvent(
   event: string,
-  data: unknown,
+  data: unknown
 ): Uint8Array {
   return new TextEncoder().encode(
     `event: ${event}\ndata: ${JSON.stringify(
-      data,
-    )}\n\n`,
+      data
+    )}\n\n`
   );
 }
 
 export async function GET(
-  request: NextRequest,
+  request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(request);
+    getTokenFromRequest(
+      request
+    );
 
   const auth =
     token
-      ? await verifyToken(token)
+      ? await verifyToken(
+          token
+        )
       : null;
 
   if (
     !auth ||
-    auth.role !== 'family'
+    auth.role !==
+      'family'
   ) {
     return new Response(
       'Access denied.',
       {
-        status: 403,
-      },
+        status:
+          403,
+      }
     );
   }
 
@@ -54,41 +75,51 @@ export async function GET(
 
   let patientIds =
     await getApprovedPatientIdsForMonitor(
-      auth.userId,
+      auth.userId
     );
 
   const afterParam =
-    request.nextUrl.searchParams.get(
-      'after',
-    );
+    request.nextUrl
+      .searchParams
+      .get(
+        'after'
+      );
 
   const parsedAfter =
     afterParam
-      ? new Date(afterParam)
+      ? new Date(
+          afterParam
+        )
       : new Date();
 
   let cursor =
     Number.isNaN(
-      parsedAfter.getTime(),
+      parsedAfter.getTime()
     )
       ? new Date()
       : parsedAfter;
 
   let cursorId:
     mongoose.Types.ObjectId | null =
-      null;
+    null;
 
   let pollTimer:
-    ReturnType<typeof setInterval> | null =
-      null;
+    ReturnType<
+      typeof setInterval
+    > | null =
+    null;
 
   let heartbeatTimer:
-    ReturnType<typeof setInterval> | null =
-      null;
+    ReturnType<
+      typeof setInterval
+    > | null =
+    null;
 
   let maximumTimer:
-    ReturnType<typeof setTimeout> | null =
-      null;
+    ReturnType<
+      typeof setTimeout
+    > | null =
+    null;
 
   let polling =
     false;
@@ -98,31 +129,41 @@ export async function GET(
 
   const stream =
     new ReadableStream<Uint8Array>({
-      start(controller) {
+      start(
+        controller
+      ) {
         const close =
           () => {
-            if (closed) {
+            if (
+              closed
+            ) {
               return;
             }
 
             closed =
               true;
 
-            if (pollTimer) {
+            if (
+              pollTimer
+            ) {
               clearInterval(
-                pollTimer,
+                pollTimer
               );
             }
 
-            if (heartbeatTimer) {
+            if (
+              heartbeatTimer
+            ) {
               clearInterval(
-                heartbeatTimer,
+                heartbeatTimer
               );
             }
 
-            if (maximumTimer) {
+            if (
+              maximumTimer
+            ) {
               clearTimeout(
-                maximumTimer,
+                maximumTimer
               );
             }
 
@@ -130,8 +171,8 @@ export async function GET(
               controller.close();
             } catch {
               /*
-               * The browser may already have closed
-               * the connection.
+               * The browser may already have
+               * closed the connection.
                */
             }
           };
@@ -151,7 +192,7 @@ export async function GET(
             try {
               patientIds =
                 await getApprovedPatientIdsForMonitor(
-                  auth.userId,
+                  auth.userId
                 );
 
               const cursorQuery =
@@ -164,6 +205,7 @@ export async function GET(
                               cursor,
                           },
                         },
+
                         {
                           createdAt:
                             cursor,
@@ -183,25 +225,39 @@ export async function GET(
                     };
 
               const alerts =
-                await Alert.find({
-                  monitorId:
-                    auth.userId,
+                await Alert.find(
+                  {
+                    monitorId:
+                      auth.userId,
 
-                  patientId: {
-                    $in:
-                      patientIds,
-                  },
+                    patientId: {
+                      $in:
+                        patientIds,
+                    },
 
-                  ...cursorQuery,
-                })
-                  .populate(
-                    'patientId',
-                    'firstName lastName patientId',
-                  )
-                  .populate(
-                    'medicationId',
-                    'name dosage',
-                  )
+                    ...cursorQuery,
+                  }
+                )
+                  .populate({
+                    path:
+                      'patientId',
+
+                    model:
+                      User,
+
+                    select:
+                      'firstName lastName patientId',
+                  })
+                  .populate({
+                    path:
+                      'medicationId',
+
+                    model:
+                      Medicine,
+
+                    select:
+                      'name dosage',
+                  })
                   .populate({
                     path:
                       'medicationLogId',
@@ -219,24 +275,28 @@ export async function GET(
                     _id:
                       1,
                   })
-                  .limit(20)
+                  .limit(
+                    20
+                  )
                   .lean();
 
               for (
-                const alert of alerts
+                const alert
+                of alerts
               ) {
                 controller.enqueue(
                   sseEvent(
                     'alert',
+
                     serializeAlert(
-                      alert,
-                    ),
-                  ),
+                      alert
+                    )
+                  )
                 );
 
                 const createdAt =
                   new Date(
-                    alert.createdAt,
+                    alert.createdAt
                   );
 
                 cursor =
@@ -247,46 +307,53 @@ export async function GET(
               }
 
               if (
-                alerts.length > 0
+                alerts.length >
+                0
               ) {
                 const unreadCount =
-                  await Alert.countDocuments({
-                    monitorId:
-                      auth.userId,
+                  await Alert.countDocuments(
+                    {
+                      monitorId:
+                        auth.userId,
 
-                    patientId: {
-                      $in:
-                        patientIds,
-                    },
+                      patientId: {
+                        $in:
+                          patientIds,
+                      },
 
-                    isRead:
-                      false,
-                  });
+                      isRead:
+                        false,
+                    }
+                  );
 
                 controller.enqueue(
                   sseEvent(
                     'unread',
                     {
                       unreadCount,
-                    },
-                  ),
+                    }
+                  )
                 );
               }
             } catch (error) {
               console.error(
                 '[Alert SSE] Poll failed:',
-                error,
+                error
               );
 
-              controller.enqueue(
-                sseEvent(
-                  'server-error',
-                  {
-                    message:
-                      'Temporary alert stream error.',
-                  },
-                ),
-              );
+              if (
+                !closed
+              ) {
+                controller.enqueue(
+                  sseEvent(
+                    'server-error',
+                    {
+                      message:
+                        'Temporary alert stream error.',
+                    }
+                  )
+                );
+              }
             } finally {
               polling =
                 false;
@@ -298,46 +365,51 @@ export async function GET(
             'connected',
             {
               connectedAt:
-                new Date().toISOString(),
-            },
-          ),
+                new Date()
+                  .toISOString(),
+            }
+          )
         );
 
         pollTimer =
           setInterval(
             () =>
               void poll(),
-            2_000,
+            2_000
           );
 
         heartbeatTimer =
           setInterval(
             () => {
-              if (!closed) {
+              if (
+                !closed
+              ) {
                 controller.enqueue(
                   new TextEncoder().encode(
-                    ': heartbeat\n\n',
-                  ),
+                    ': heartbeat\n\n'
+                  )
                 );
               }
             },
-            15_000,
+            15_000
           );
 
         maximumTimer =
           setTimeout(
             close,
-            25 * 60_000,
+            25 *
+              60_000
           );
 
-        request.signal.addEventListener(
-          'abort',
-          close,
-          {
-            once:
-              true,
-          },
-        );
+        request.signal
+          .addEventListener(
+            'abort',
+            close,
+            {
+              once:
+                true,
+            }
+          );
 
         void poll();
       },
@@ -346,39 +418,48 @@ export async function GET(
         closed =
           true;
 
-        if (pollTimer) {
+        if (
+          pollTimer
+        ) {
           clearInterval(
-            pollTimer,
+            pollTimer
           );
         }
 
-        if (heartbeatTimer) {
+        if (
+          heartbeatTimer
+        ) {
           clearInterval(
-            heartbeatTimer,
+            heartbeatTimer
           );
         }
 
-        if (maximumTimer) {
+        if (
+          maximumTimer
+        ) {
           clearTimeout(
-            maximumTimer,
+            maximumTimer
           );
         }
       },
     });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type':
-        'text/event-stream',
+  return new Response(
+    stream,
+    {
+      headers: {
+        'Content-Type':
+          'text/event-stream',
 
-      'Cache-Control':
-        'no-cache, no-transform',
+        'Cache-Control':
+          'no-cache, no-transform',
 
-      Connection:
-        'keep-alive',
+        Connection:
+          'keep-alive',
 
-      'X-Accel-Buffering':
-        'no',
-    },
-  });
+        'X-Accel-Buffering':
+          'no',
+      },
+    }
+  );
 }

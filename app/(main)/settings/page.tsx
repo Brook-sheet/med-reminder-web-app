@@ -4,6 +4,7 @@ import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import ResetDataCard from "@/components/dashboard/settings/ResetDataCard";
 import FamilyMonitoringCard from "@/components/dashboard/settings/FamilyMonitoringCard";
+import SmsNotificationCard from "@/components/dashboard/settings/SmsNotificationCard";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const Settings = () => {
@@ -48,6 +49,8 @@ const Settings = () => {
           </div>
 
           <PushNotificationCard />
+
+          <SmsNotificationCard />
 
           <ResetDataCard />
         </div>

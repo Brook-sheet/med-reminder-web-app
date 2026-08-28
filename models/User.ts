@@ -26,12 +26,16 @@ export interface IUser
   isDeleted?: boolean;
   dataResetAt?: Date;
   lastRiskLevel?: string;
+
   notificationPreferences?: {
     inApp: boolean;
     push: boolean;
     sms: boolean;
+    smsConsent: boolean;
+    smsConsentAt?: Date | null;
     smsPhoneNumber?: string;
   };
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -174,17 +178,30 @@ const UserSchema =
           type: Boolean,
           default: true,
         },
+
         push: {
           type: Boolean,
           default: true,
         },
+
         sms: {
           type: Boolean,
           default: false,
         },
+
+        smsConsent: {
+          type: Boolean,
+          default: false,
+        },
+
+        smsConsentAt: {
+          type: Date,
+          default: null,
+        },
+
         smsPhoneNumber: {
           type: String,
-          default: '',
+          default: "",
           trim: true,
           select: false,
         },
