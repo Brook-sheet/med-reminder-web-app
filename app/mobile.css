@@ -1,0 +1,369 @@
+/* Mobile overrides only. Keep desktop and printed reports unchanged. */
+@media screen and (max-width: 767px) {
+  .rx-app {
+    --mobile-gutter: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  /* One page gutter instead of padding at both layout and page levels. */
+  .rx-main {
+    min-width: 0;
+    padding-inline:
+      max(var(--mobile-gutter), env(safe-area-inset-left))
+      max(var(--mobile-gutter), env(safe-area-inset-right));
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .rx-page {
+    min-height: 0;
+    padding-top: calc(68px + env(safe-area-inset-top));
+  }
+
+  .rx-page > :is(.p-4, .p-6) {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .rx-page > .min-h-screen > .mx-auto.px-4 {
+    padding: 0;
+  }
+
+  .rx-page > .mx-auto.px-4 {
+    padding-inline: 0;
+    padding-bottom: 12px;
+  }
+
+  /* Allow flex/grid children to shrink around long content. */
+  .rx-app :is(.flex, .grid) > :is(div, section, article, form, fieldset),
+  .rx-app :is(input, select, textarea) {
+    min-width: 0;
+  }
+
+  .rx-app :is(h1, h2, h3, p, dd, label) {
+    overflow-wrap: anywhere;
+  }
+
+  .rx-app :is(img, video, canvas) {
+    max-width: 100%;
+  }
+
+  .rx-app .flex > svg {
+    flex-shrink: 0;
+  }
+
+  /* Keep mobile form text readable and avoid automatic input zoom. */
+  .rx-app :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    select,
+    textarea
+  ) {
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  .rx-app :is(button, a)[class*="rounded"]:not([role="switch"]) {
+    min-height: 40px;
+  }
+
+  .rx-app button[aria-label]:not([role="switch"]) {
+    min-width: 40px;
+    flex-shrink: 0;
+  }
+
+  /* Shared card surfaces, including cards built without Card components. */
+  .rx-app :is(div, section, article)[class*="rounded"]:is(.p-5, .p-6, .p-8) {
+    padding: 16px;
+  }
+
+  .rx-app :is(div, section, article)[class*="rounded"].p-4 {
+    padding: 12px;
+  }
+
+  .rx-app [data-slot="card"] {
+    gap: 16px;
+    padding-block: 16px;
+  }
+
+  .rx-app :is(
+    [data-slot="card-header"],
+    [data-slot="card-content"],
+    [data-slot="card-footer"]
+  ) {
+    min-width: 0;
+    padding-inline: 16px;
+  }
+
+  .rx-app [data-slot="card-header"].pt-8 {
+    padding-top: 8px;
+  }
+
+  .rx-app [data-slot="card-content"].pt-6 {
+    padding-top: 12px;
+  }
+
+  .rx-app [data-slot="card-content"].pb-8 {
+    padding-bottom: 16px;
+  }
+
+  .rx-app [data-slot="card-footer"] {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .rx-page :is(.gap-5, .gap-6, .gap-8) {
+    gap: 16px;
+  }
+
+  .rx-page :is(.mb-6, .mb-8) {
+    margin-bottom: 16px;
+  }
+
+  .rx-page :is(.mt-6, .mt-8) {
+    margin-top: 16px;
+  }
+
+  .rx-page :is(
+    .space-y-5,
+    .space-y-6,
+    .space-y-7,
+    .space-y-8
+  ) > :not(:last-child) {
+    margin-block-end: 16px;
+  }
+
+  .rx-page h1.text-3xl {
+    font-size: 24px;
+    line-height: 1.25;
+  }
+
+  .rx-page h2.text-2xl {
+    font-size: 20px;
+    line-height: 1.3;
+  }
+
+  .rx-page h1 + p.text-lg {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  /* Let action rows reflow when their content cannot fit. */
+  .rx-page .flex.justify-between:not(.flex-col) {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Wide report tables scroll inside their own container. */
+  .rx-page .overflow-x-auto {
+    min-width: 0;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
+  .rx-page table {
+    font-size: 12px;
+  }
+
+  .rx-page :is(th, td) {
+    padding: 8px;
+  }
+
+  /* Authentication pages. */
+  .rx-app > div > .relative.min-h-screen.px-4.py-10 {
+    padding: 24px 12px;
+  }
+
+  .rx-app > div > .relative.min-h-screen > header {
+    flex-direction: row;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+  }
+
+  /* Existing custom dialogs, including medication, notes and onboarding. */
+  .rx-app .fixed.inset-0.flex.items-center.justify-center {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      12px
+      max(12px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .rx-app .fixed.inset-0 > :is(.max-w-sm, .max-w-md, .max-w-lg),
+  .rx-app [role="dialog"] {
+    min-width: 0;
+    max-width: 100%;
+    max-height: calc(
+      100dvh - 24px -
+      env(safe-area-inset-top) -
+      env(safe-area-inset-bottom)
+    );
+    margin-inline: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Allow navigation to scroll on short phones and in landscape. */
+  .rx-shell > div:first-child > aside {
+    width: min(18rem, calc(100vw - 48px));
+    height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .rx-shell > div:first-child > aside > div {
+    height: auto;
+    min-height: 100%;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .rx-shell > div:first-child > button:first-child {
+    top: calc(12px + env(safe-area-inset-top));
+  }
+
+  /* Floating notification controls and their panels. */
+  .rx-notification-controls > .fixed {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .rx-notification-controls > .fixed > .absolute {
+    max-width: calc(100vw - 24px);
+    max-height: calc(
+      100dvh - 112px - env(safe-area-inset-bottom)
+    );
+    overflow-y: auto;
+  }
+
+  /* Chat list: banners scroll without squeezing contacts out of view. */
+  .rx-chats {
+    min-width: 0;
+    height: calc(
+      100dvh - 156px -
+      env(safe-area-inset-top) -
+      env(safe-area-inset-bottom)
+    );
+    min-height: 320px;
+    max-height: none;
+    border-radius: 20px;
+  }
+
+  .rx-chat-list-tools {
+    display: block;
+    flex-shrink: 0;
+    max-height: 45%;
+    overflow-y: auto;
+  }
+
+  .rx-chat-list-tools .flex.justify-between {
+    flex-wrap: wrap;
+  }
+
+  .rx-chat-panes > div > .flex.h-full {
+    min-height: 0;
+  }
+
+  .rx-chat-panes .overflow-y-auto {
+    min-height: 0;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Active conversations fill the mobile viewport. */
+  .rx-chats[data-conversation-open="true"] {
+    position: fixed;
+    z-index: 40;
+    inset-inline: 0;
+    top: var(--chat-top, 0px);
+    height: var(--chat-height, 100dvh);
+    min-height: 0;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-inline:
+      env(safe-area-inset-left)
+      env(safe-area-inset-right);
+  }
+
+  /* Hide these only while an individual conversation is active. */
+  .rx-chats[data-conversation-open="true"] .rx-chat-list-tools,
+  .rx-shell:has(
+    .rx-chats[data-conversation-open="true"]
+  ) > div:first-child,
+  .rx-shell:has(
+    .rx-chats[data-conversation-open="true"]
+  ) .rx-notification-controls {
+    display: none;
+  }
+
+  html:has(.rx-chats[data-conversation-open="true"]),
+  body:has(.rx-chats[data-conversation-open="true"]) {
+    overflow: hidden;
+  }
+
+  /* Existing ChatWindow structure: header, messages and composer. */
+  .rx-conversation > .flex.h-full {
+    min-height: 0;
+  }
+
+  .rx-conversation > .flex.h-full > :first-child {
+    flex-shrink: 0;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .rx-conversation > .flex.h-full > .overflow-y-auto {
+    min-height: 0;
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .rx-conversation > .flex.h-full > .border-t {
+    flex-shrink: 0;
+    max-height: 45%;
+    overflow-y: auto;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .rx-conversation .flex.justify-between:not(.flex-col) {
+    flex-wrap: nowrap;
+  }
+
+  .rx-conversation textarea {
+    min-width: 0;
+    width: 0;
+    min-height: 40px;
+    max-height: 128px;
+    line-height: 24px;
+  }
+
+  .rx-conversation .whitespace-pre-wrap {
+    overflow-wrap: anywhere;
+  }
+
+  .rx-conversation [class~="max-w-[78%]"] {
+    max-width: 85%;
+  }
+
+  .rx-conversation button[aria-label="Back to chats"] {
+    width: 40px;
+  }
+}
+
+@media screen and (max-width: 374px) {
+  .rx-page .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rx-page .grid-cols-7 {
+    gap: 4px;
+  }
+
+  .rx-page [class~="grid-cols-[92px_1fr]"] {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .rx-chat-list-tools > .flex > button {
+    width: 100%;
+    justify-content: center;
+  }
+}

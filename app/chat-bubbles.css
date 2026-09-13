@@ -1,0 +1,56 @@
+/* Message bubbles only; preserve the existing desktop layout. */
+@media screen and (max-width: 767px) {
+  /* Give percentage limits a stable reference width. */
+  .rx-conversation [id^="msg-"] > .flex.max-w-full {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .rx-conversation [id^="msg-"].items-end > .flex.max-w-full {
+    justify-content: flex-end;
+  }
+
+  .rx-conversation [id^="msg-"].items-start > .flex.max-w-full {
+    justify-content: flex-start;
+  }
+
+  /* Fit the content while retaining the existing mobile width limit. */
+  .rx-conversation [id^="msg-"] [class~="max-w-[78%]"] {
+    width: max-content;
+    min-width: 0;
+    max-width: 85%;
+    flex: 0 1 auto;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  .rx-conversation [id^="msg-"] .touch-pan-y {
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .rx-conversation [id^="msg-"] .touch-pan-y > div:last-child {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /*
+   * Preserve intentional newlines and wrap normally at spaces.
+   * Only oversized unbroken text, such as a URL, may split.
+   */
+  .rx-conversation [id^="msg-"] .whitespace-pre-wrap {
+    min-width: 0;
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: none;
+  }
+
+  /* Contain reply previews and attachment filenames. */
+  .rx-conversation [id^="msg-"] .truncate {
+    min-width: 0;
+    max-width: 100%;
+  }
+}

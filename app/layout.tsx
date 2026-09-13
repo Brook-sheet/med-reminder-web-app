@@ -4,7 +4,11 @@ import {
   Geist_Mono,
   Inter,
 } from "next/font/google";
+
 import "./globals.css";
+import "./mobile.css";
+import "./chat-bubbles.css";
+
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -59,7 +63,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`rx-app ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider
           attribute="class"
