@@ -16,11 +16,7 @@ import {
   X,
 } from "lucide-react";
 
-export type ToastType =
-  | "success"
-  | "error"
-  | "warning"
-  | "info";
+export type ToastType = "success" | "error" | "warning" | "info";
 
 export interface ToastProps {
   type: ToastType;
@@ -37,10 +33,10 @@ interface ToastItem {
   onClose?: () => void;
 }
 
-const DEFAULT_DURATION: Record<
-  ToastType,
-  number
-> = {
+/** Matches --rx-duration-base so the exit animation and unmount line up. */
+const EXIT_DURATION = 220;
+
+const DEFAULT_DURATION: Record<ToastType, number> = {
   success: 4000,
   info: 4500,
   warning: 5000,
@@ -73,8 +69,7 @@ function getSnapshot() {
 function addToast(item: ToastItem) {
   const duplicate = items.find(
     (existing) =>
-      existing.type === item.type &&
-      existing.message === item.message
+      existing.type === item.type && existing.message === item.message
   );
 
   if (duplicate) {
@@ -84,10 +79,7 @@ function addToast(item: ToastItem) {
 
   const nextItems = [...items, item];
 
-  const removedItems =
-    nextItems.length > 5
-      ? nextItems.slice(0, -5)
-      : [];
+  const removedItems = nextItems.length > 5 ? nextItems.slice(0, -5) : [];
 
   items = nextItems.slice(-5);
 
@@ -101,13 +93,9 @@ function addToast(item: ToastItem) {
 }
 
 function removeToast(id: string) {
-  const item = items.find(
-    (current) => current.id === id
-  );
+  const item = items.find((current) => current.id === id);
 
-  items = items.filter(
-    (current) => current.id !== id
-  );
+  items = items.filter((current) => current.id !== id);
 
   emit();
   item?.onClose?.();
@@ -122,10 +110,7 @@ function createToast(
 
   if (!cleanMessage) return "";
 
-  const id =
-    `toast-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
+  const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   return addToast({
     id,
@@ -136,95 +121,61 @@ function createToast(
 }
 
 export const toast = {
-  success: (
-    message: string,
-    duration?: number
-  ) =>
-    createToast(
-      "success",
-      message,
-      duration
-    ),
+  success: (message: string, duration?: number) =>
+    createToast("success", message, duration),
 
-  error: (
-    message: string,
-    duration?: number
-  ) =>
-    createToast(
-      "error",
-      message,
-      duration
-    ),
+  error: (message: string, duration?: number) =>
+    createToast("error", message, duration),
 
-  warning: (
-    message: string,
-    duration?: number
-  ) =>
-    createToast(
-      "warning",
-      message,
-      duration
-    ),
+  warning: (message: string, duration?: number) =>
+    createToast("warning", message, duration),
 
-  info: (
-    message: string,
-    duration?: number
-  ) =>
-    createToast(
-      "info",
-      message,
-      duration
-    ),
+  info: (message: string, duration?: number) =>
+    createToast("info", message, duration),
 
   dismiss: removeToast,
 };
 
-const styles: Record<
-  ToastType,
-  {
-    icon: React.ReactNode;
-    accent: string;
-    iconBox: string;
-    title: string;
-  }
-> = {
+interface ToastStyle {
+  icon: React.ReactNode;
+  accent: string;
+  iconBox: string;
+  bar: string;
+  title: string;
+}
+
+const styles: Record<ToastType, ToastStyle> = {
   success: {
-    icon: (
-      <CheckCircle2 className="h-5 w-5" />
-    ),
+    icon: <CheckCircle2 className="h-5 w-5" />,
     accent: "border-l-emerald-500",
     iconBox:
       "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300",
+    bar: "bg-emerald-500",
     title: "Success",
   },
 
   error: {
-    icon: (
-      <AlertCircle className="h-5 w-5" />
-    ),
+    icon: <AlertCircle className="h-5 w-5" />,
     accent: "border-l-red-500",
-    iconBox:
-      "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-300",
+    iconBox: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-300",
+    bar: "bg-red-500",
     title: "Error",
   },
 
   warning: {
-    icon: (
-      <AlertTriangle className="h-5 w-5" />
-    ),
+    icon: <AlertTriangle className="h-5 w-5" />,
     accent: "border-l-amber-500",
     iconBox:
       "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300",
+    bar: "bg-amber-500",
     title: "Attention",
   },
 
   info: {
-    icon: (
-      <Info className="h-5 w-5" />
-    ),
+    icon: <Info className="h-5 w-5" />,
     accent: "border-l-blue-500",
-    iconBox:
-      "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300",
+    iconBox: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300",
+    bar: "bg-blue-500",
     title: "Information",
   },
 };
@@ -238,33 +189,44 @@ function ToastCard({
 }) {
   const config = styles[item.type];
 
+  // Hovering pauses both the countdown bar (CSS) and the timer (JS),
+  // so the visual and the behaviour never disagree.
+  const [paused, setPaused] = useState(false);
+  const remainingRef = useRef(item.duration);
+  const startedRef = useRef(0);
+
   useEffect(() => {
-    const timer = window.setTimeout(
-      () => onDismiss(item.id),
-      item.duration
-    );
+    if (paused) return;
+
+    startedRef.current = Date.now();
+
+    const timer = window.setTimeout(() => {
+      onDismiss(item.id);
+    }, remainingRef.current);
 
     return () => {
       window.clearTimeout(timer);
+
+      remainingRef.current = Math.max(
+        0,
+        remainingRef.current - (Date.now() - startedRef.current)
+      );
     };
-  }, [
-    item.duration,
-    item.id,
-    onDismiss,
-  ]);
+  }, [paused, item.id, onDismiss]);
 
   return (
     <div
       role={
-        item.type === "error" ||
-        item.type === "warning"
-          ? "alert"
-          : "status"
+        item.type === "error" || item.type === "warning" ? "alert" : "status"
       }
-      className={`pointer-events-auto flex w-full items-start gap-3 rounded-2xl border border-border/80 border-l-4 ${config.accent} bg-card/95 p-3.5 text-card-foreground shadow-xl shadow-slate-900/15 backdrop-blur-xl animate-in fade-in slide-in-from-top-3 duration-200`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+      className={`rx-toast-card pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border border-border/80 border-l-4 ${config.accent} bg-card/95 p-3.5 text-card-foreground shadow-xl shadow-slate-900/15 backdrop-blur-xl transition-transform duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] hover:-translate-y-0.5`}
     >
       <div
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${config.iconBox}`}
+        className={`rx-pop-in flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${config.iconBox}`}
       >
         {config.icon}
       </div>
@@ -284,52 +246,50 @@ function ToastCard({
         onClick={() => {
           onDismiss(item.id);
         }}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        className="rx-press flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:rotate-90 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         aria-label="Dismiss notification"
       >
         <X className="h-4 w-4" />
       </button>
+
+      {/* Countdown — the toast's own progress language, paused on hover. */}
+      <span
+        aria-hidden="true"
+        className={`rx-toast-countdown absolute bottom-0 left-0 h-0.5 w-full ${config.bar} opacity-70`}
+        style={
+          {
+            "--rx-toast-duration": `${item.duration}ms`,
+          } as React.CSSProperties
+        }
+      />
     </div>
   );
 }
 
-export function ToastProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const toastItems =
-    useSyncExternalStore(
-      subscribe,
-      getSnapshot,
-      () => EMPTY_TOASTS
-    );
-
-  const [leavingIds, setLeavingIds] =
-    useState<Set<string>>(new Set());
-
-  const handleDismiss = useCallback(
-    (id: string) => {
-      setLeavingIds(
-        (current) =>
-          new Set(current).add(id)
-      );
-
-      window.setTimeout(() => {
-        removeToast(id);
-
-        setLeavingIds((current) => {
-          const next =
-            new Set(current);
-
-          next.delete(id);
-
-          return next;
-        });
-      }, 180);
-    },
-    []
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const toastItems = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => EMPTY_TOASTS
   );
+
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(new Set());
+
+  const handleDismiss = useCallback((id: string) => {
+    setLeavingIds((current) => new Set(current).add(id));
+
+    window.setTimeout(() => {
+      removeToast(id);
+
+      setLeavingIds((current) => {
+        const next = new Set(current);
+
+        next.delete(id);
+
+        return next;
+      });
+    }, EXIT_DURATION);
+  }, []);
 
   return (
     <>
@@ -343,18 +303,11 @@ export function ToastProvider({
         {toastItems.map((item) => (
           <div
             key={item.id}
-            className={`w-full transition-all duration-200 ${
-              leavingIds.has(item.id)
-                ? "translate-x-3 opacity-0"
-                : "translate-x-0 opacity-100"
+            className={`w-full ${
+              leavingIds.has(item.id) ? "rx-toast-out" : "rx-toast-in"
             }`}
           >
-            <ToastCard
-              item={item}
-              onDismiss={
-                handleDismiss
-              }
-            />
+            <ToastCard item={item} onDismiss={handleDismiss} />
           </div>
         ))}
       </div>
@@ -365,17 +318,10 @@ export function ToastProvider({
 /**
  * Backward-compatible bridge for existing Toast call sites.
  */
-const Toast: React.FC<ToastProps> = ({
-  type,
-  message,
-  duration,
-  onClose,
-}) => {
+const Toast: React.FC<ToastProps> = ({ type, message, duration, onClose }) => {
   const generatedId = useId();
 
-  const idRef = useRef(
-    `toast-${generatedId}`
-  );
+  const idRef = useRef(`toast-${generatedId}`);
 
   const onCloseRef = useRef(onClose);
 
@@ -390,32 +336,20 @@ const Toast: React.FC<ToastProps> = ({
       id,
       type,
       message: message.trim(),
-      duration:
-        duration ??
-        DEFAULT_DURATION[type],
+      duration: duration ?? DEFAULT_DURATION[type],
       onClose: () => {
         onCloseRef.current();
       },
     });
 
     return () => {
-      if (
-        items.some(
-          (item) => item.id === id
-        )
-      ) {
-        items = items.filter(
-          (item) => item.id !== id
-        );
+      if (items.some((item) => item.id === id)) {
+        items = items.filter((item) => item.id !== id);
 
         emit();
       }
     };
-  }, [
-    duration,
-    message,
-    type,
-  ]);
+  }, [duration, message, type]);
 
   return null;
 };

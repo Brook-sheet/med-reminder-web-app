@@ -102,21 +102,23 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
     onChange(buildTimeString({ ...state, ampm: a }));
   };
 
+  // `min-w-0` lets each select shrink below its intrinsic width, which is what
+  // keeps the row intact at 320px. Widths are proportional, never fixed.
   const cls =
-    "h-9 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm outline-none " +
+    "h-10 min-w-0 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm outline-none " +
     "focus:border-blue-400 focus:ring-2 focus:ring-blue-200 " +
     "disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer " +
     "dark:bg-gray-700 dark:border-gray-600 dark:text-white " +
     "dark:focus:border-blue-400 dark:focus:ring-blue-200";
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex w-full min-w-0 flex-1 items-center gap-1.5">
       {/* Hour 1–12 */}
       <select
         value={state.hour12}
         onChange={handleHour}
         disabled={disabled}
-        className={cls}
+        className={`${cls} flex-1`}
         aria-label="Hour"
       >
         {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
@@ -126,14 +128,14 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
         ))}
       </select>
 
-      <span className="text-gray-500 font-bold select-none">:</span>
+      <span className="shrink-0 font-bold text-gray-500 select-none">:</span>
 
       {/* Minutes 00–55 in 5-minute steps */}
       <select
         value={state.minute}
         onChange={handleMinute}
         disabled={disabled}
-        className={cls}
+        className={`${cls} flex-1`}
         aria-label="Minute"
       >
         {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59].map((m) => (
@@ -148,7 +150,7 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
         value={state.ampm}
         onChange={handleAmpm}
         disabled={disabled}
-        className={cls}
+        className={`${cls} flex-[0_1_4.5rem]`}
         aria-label="AM or PM"
       >
         <option value="AM">AM</option>
@@ -159,4 +161,3 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
 };
 
 export default TimePicker;
-

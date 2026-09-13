@@ -1,244 +1,301 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import { useState } from "react";
-import {
-  usePathname,
-  useRouter,
-} from "next/navigation";
-import { GiHamburgerMenu } from "react-icons/gi";
-import { MdOutlineSpaceDashboard } from "react-icons/md";
-import {
-  CiLogout,
-  CiMonitor,
-  CiPill,
-  CiSettings,
-} from "react-icons/ci";
-import { GoHistory } from "react-icons/go";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  History,
+  LayoutDashboard,
+  LogOut,
+  Menu,
   MessageCircle,
+  Monitor,
+  Pill,
+  Settings,
+  X,
+  type LucideIcon,
 } from "lucide-react";
+
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useMonitoringRequestCount } from "@/hooks/useMonitoringRequestCount";
+import { Spinner } from "@/components/ui/Spinner";
+import { startRouteProgress } from "@/components/ui/RouteProgress";
+import { Logo } from "@/components/brand/Logo";
 
 interface NavbarProps {
   role: "patient" | "family";
 }
+
+interface NavItem {
+  href: string;
+  label: string;
+  /** Lucide component — rendered through one shared slot so every icon
+   *  shares the same 24px grid, stroke weight and optical size. */
+  icon: LucideIcon;
+  badge?: number;
+  exact?: boolean;
+}
+
+/** Single source of truth for sidebar icon geometry. */
+const ICON_SIZE = 22;
+const ICON_STROKE = 1.75;
 
 const Navbar = ({ role }: NavbarProps) => {
   const router = useRouter();
   const pathname = usePathname();
 
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const { unreadCount } =
-    useChatNotifications();
+  const { unreadCount } = useChatNotifications();
+  const { pendingCount } = useMonitoringRequestCount(role === "patient");
 
-  const { pendingCount } =
-    useMonitoringRequestCount(
-      role === "patient"
-    );
+  // Close the drawer whenever the route changes.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the mobile drawer is open.
+  useEffect(() => {
+    if (!open) return;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-    });
+    if (loggingOut) return;
 
-    router.push("/sign-in");
-    router.refresh();
+    setLoggingOut(true);
+
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      startRouteProgress();
+      router.push("/sign-in");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
-  const closeSidebar = () => {
-    setOpen(false);
-  };
+  const closeSidebar = () => setOpen(false);
+
+  const items: NavItem[] = [
+    ...(role === "patient"
+      ? [
+          {
+            href: "/",
+            label: "Dashboard",
+            icon: LayoutDashboard,
+            exact: true,
+          },
+        ]
+      : []),
+    ...(role === "family"
+      ? [
+          {
+            href: "/monitor",
+            label: "Patient Monitoring",
+            icon: Monitor,
+          },
+          {
+            href: "/alerts",
+            label: "Medication Alerts",
+            icon: Bell,
+          },
+        ]
+      : []),
+    {
+      href: "/chats",
+      label: "Chats",
+      icon: MessageCircle,
+      badge: unreadCount,
+    },
+    ...(role === "patient"
+      ? [
+          {
+            href: "/medicines",
+            label: "Medicines",
+            icon: Pill,
+          },
+          {
+            href: "/history",
+            label: "History",
+            icon: History,
+          },
+        ]
+      : []),
+    {
+      href: "/settings",
+      label: "Settings",
+      icon: Settings,
+      badge: pendingCount,
+    },
+  ];
+
+  const isActive = (item: NavItem) =>
+    item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
   return (
     <div>
-      <button
-        type="button"
-        className="absolute right-4 top-4 z-30 inline-flex items-center justify-center rounded-2xl border border-border/80 bg-card p-2 text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900 md:hidden"
-        onClick={() =>
-          setOpen((current) => !current)
-        }
-        aria-label="Toggle navigation menu"
-      >
-        <GiHamburgerMenu
-          className="h-6 w-6"
-          aria-hidden="true"
-        />
-      </button>
+      {/* Mobile top bar — fixed, so the menu is reachable at any scroll
+          position. Hidden from md up, leaving the desktop layout untouched. */}
+      <header className="rx-mobile-topbar rx-brand-bar rx-brand-bar--edge fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b md:hidden print:hidden">
+        <Link
+          href={role === "family" ? "/monitor" : "/"}
+          onClick={closeSidebar}
+          className="flex min-w-0 flex-1 items-center rounded-xl py-1 transition-opacity duration-[var(--rx-duration-fast)] active:opacity-70"
+        >
+          <Logo size="sm" tone="inherit" priority />
+        </Link>
 
-      {open && (
+        {/* Icon cross-fades between menu and close. */}
         <button
           type="button"
-          className="fixed inset-0 z-10 bg-slate-950/40 md:hidden"
-          aria-label="Close navigation menu"
-          onClick={closeSidebar}
-        />
-      )}
+          className="rx-press inline-flex shrink-0 items-center justify-center rounded-2xl border border-[var(--brand-surface-border)] bg-white/70 p-2 text-[var(--brand-surface-ink)] shadow-sm shadow-slate-900/5 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20"
+          onClick={() => setOpen((current) => !current)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={open}
+        >
+          <span className="relative block h-6 w-6">
+            <Menu
+              strokeWidth={ICON_STROKE}
+              className={`absolute inset-0 h-6 w-6 transition-all duration-[var(--rx-duration-base)] ease-[var(--rx-ease-out)] ${
+                open ? "rotate-90 scale-75 opacity-0" : "rotate-0 scale-100 opacity-100"
+              }`}
+              aria-hidden="true"
+            />
+            <X
+              strokeWidth={ICON_STROKE}
+              className={`absolute inset-0 h-6 w-6 transition-all duration-[var(--rx-duration-base)] ease-[var(--rx-ease-out)] ${
+                open ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-75 opacity-0"
+              }`}
+              aria-hidden="true"
+            />
+          </span>
+        </button>
+      </header>
+
+      {/* Backdrop — fades instead of popping, and stays mounted for the exit. */}
+      <button
+        type="button"
+        tabIndex={open ? 0 : -1}
+        aria-hidden={!open}
+        className={`fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] transition-opacity duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] md:hidden ${
+          open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-label="Close navigation menu"
+        onClick={closeSidebar}
+      />
 
       <aside
-        className={`fixed top-0 z-20 h-screen w-72 overflow-hidden border-r border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl transition-transform duration-200 ease-out ${
-          open
-            ? "translate-x-0"
-            : "-translate-x-full"
+        className={`rx-drawer fixed top-0 z-50 h-screen w-72 overflow-hidden border-r border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl ${
+          open ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
         <div className="flex h-full flex-col gap-6 p-6">
-          <div className="flex flex-col gap-3 rounded-[28px] border border-border/70 bg-background/90 p-5 shadow-sm shadow-slate-900/5">
-            <div className="flex h-12 w-12 items-center justify-center md:h-14 md:w-14">
-              <Image
-                src="/icon.png"
-                alt="Rx Box: Smart Pillbox logo"
-                width={56}
-                height={56}
-                sizes="56px"
-                className="h-full w-full object-contain"
-                priority
-              />
-            </div>
-
-            <div>
-              <p className="text-sm font-semibold leading-relaxed text-slate-900 dark:text-slate-100">
-                Rx Box: Smart Pillbox
-              </p>
-            </div>
+          {/* Desktop counterpart of the mobile brand bar — same surface. */}
+          <div className="rx-brand-bar rx-animate-in flex flex-col gap-3 rounded-[28px] border p-5 transition-shadow duration-[var(--rx-duration-base)] hover:shadow-lg">
+            <Logo
+              size="lg"
+              tone="inherit"
+              orientation="vertical"
+              priority
+              className="[&>span:first-child]:transition-transform [&>span:first-child]:duration-[var(--rx-duration-slow)] [&>span:first-child]:ease-[var(--rx-ease-spring)] hover:[&>span:first-child]:scale-105"
+            />
           </div>
 
-          <nav className="space-y-3">
-            {role === "patient" && (
-              <Link
-                href="/"
-                onClick={closeSidebar}
-                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-              >
-                <MdOutlineSpaceDashboard className="h-6 w-6" />
+          <nav className="rx-stagger space-y-2">
+            {items.map((item) => {
+              const active = isActive(item);
+              const Icon = item.icon;
 
-                <span className="font-semibold">
-                  Dashboard
-                </span>
-              </Link>
-            )}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={closeSidebar}
+                  aria-current={active ? "page" : undefined}
+                  className={`group relative flex items-center gap-3 overflow-hidden rounded-3xl border px-4 py-3 transition-[background-color,border-color,color,transform] duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] active:scale-[0.98] ${
+                    active
+                      ? "border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/15"
+                      : "border-transparent text-slate-700 hover:translate-x-0.5 hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  {/* Sliding active indicator */}
+                  <span
+                    className={`absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-[var(--rx-duration-slow)] ease-[var(--rx-ease-out)] ${
+                      active ? "opacity-100" : "-translate-x-2 opacity-0"
+                    }`}
+                    aria-hidden="true"
+                  />
 
-            {role === "family" && (
-              <Link
-                href="/monitor"
-                onClick={closeSidebar}
-                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-              >
-                <CiMonitor className="h-6 w-6" />
+                  {/* Fixed 24px slot — every icon is optically centred and
+                      identically sized regardless of its own glyph bounds. */}
+                  <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center transition-transform duration-[var(--rx-duration-base)] ease-[var(--rx-ease-spring)] group-hover:scale-110">
+                    <Icon
+                      width={ICON_SIZE}
+                      height={ICON_SIZE}
+                      strokeWidth={ICON_STROKE}
+                      className="shrink-0"
+                      aria-hidden="true"
+                    />
 
-                <span className="font-semibold">
-                  Patient Monitoring
-                </span>
-              </Link>
-            )}
-
-            {role === "family" && (
-              <Link
-                href="/alerts"
-                onClick={closeSidebar}
-                className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
-                  pathname === "/alerts"
-                    ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
-                    : ""
-                }`}
-              >
-                <Bell className="h-6 w-6" />
-
-                <span className="font-semibold">
-                  Medication Alerts
-                </span>
-              </Link>
-            )}
-
-            <Link
-              href="/chats"
-              onClick={closeSidebar}
-              className={`flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900 ${
-                pathname === "/chats"
-                  ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
-                  : ""
-              }`}
-            >
-              <span className="relative">
-                <MessageCircle className="h-6 w-6" />
-
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {unreadCount > 99
-                      ? "99+"
-                      : unreadCount}
+                    {item.badge && item.badge > 0 ? (
+                      <span
+                        key={item.badge}
+                        className="rx-pop-in absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40"
+                      >
+                        {item.badge > 99 ? "99+" : item.badge}
+                      </span>
+                    ) : null}
                   </span>
-                )}
-              </span>
 
-              <span className="font-semibold">
-                Chats
-              </span>
-            </Link>
-
-            {role === "patient" && (
-              <Link
-                href="/medicines"
-                onClick={closeSidebar}
-                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-              >
-                <CiPill className="h-6 w-6" />
-
-                <span className="font-semibold">
-                  Medicines
-                </span>
-              </Link>
-            )}
-
-            {role === "patient" && (
-              <Link
-                href="/history"
-                onClick={closeSidebar}
-                className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-              >
-                <GoHistory className="h-6 w-6" />
-
-                <span className="font-semibold">
-                  History
-                </span>
-              </Link>
-            )}
-
-            <Link
-              href="/settings"
-              onClick={closeSidebar}
-              className="flex items-center gap-3 rounded-3xl border border-transparent px-4 py-3 text-slate-700 transition hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-            >
-              <span className="relative">
-                <CiSettings className="h-6 w-6" />
-
-                {pendingCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {pendingCount > 99
-                      ? "99+"
-                      : pendingCount}
-                  </span>
-                )}
-              </span>
-
-              <span className="font-semibold">
-                Settings
-              </span>
-            </Link>
+                  <span className="font-semibold">{item.label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="mt-auto">
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-3xl border border-transparent bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+              disabled={loggingOut}
+              aria-busy={loggingOut}
+              className="rx-press flex w-full items-center justify-center gap-3 rounded-3xl border border-transparent bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-red-600/30 hover:bg-red-700 hover:shadow-md hover:shadow-red-600/40 disabled:cursor-progress disabled:opacity-70"
             >
-              <CiLogout className="h-5 w-5" />
-              Logout
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center">
+                {loggingOut ? (
+                  <Spinner size="sm" label="Signing out" />
+                ) : (
+                  <LogOut
+                    width={ICON_SIZE}
+                    height={ICON_SIZE}
+                    strokeWidth={ICON_STROKE}
+                    aria-hidden="true"
+                  />
+                )}
+              </span>
+
+              {loggingOut ? "Signing out…" : "Logout"}
             </button>
           </div>
         </div>

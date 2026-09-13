@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./animations.css";
 
 
 
@@ -78,6 +79,16 @@ body {
   --chart-4: hsl(214 68% 47%);
   --chart-5: hsl(196 75% 55%);
   --radius: 0.75rem;
+  /* Brand — sampled from the Rx Box mark (#62B8DA). */
+  --brand: hsl(197 62% 62%);
+  /* Soft brand surface: a pale sky tint drifting to the faintest warm ivory.
+     Sits one step above the page background, well below card white. */
+  --brand-surface-from: hsl(198 56% 96%);
+  --brand-surface-mid: hsl(190 42% 97%);
+  --brand-surface-to: hsl(36 50% 97%);
+  --brand-surface-border: hsl(200 26% 88%);
+  --brand-surface-ink: hsl(205 32% 24%);
+  --brand-surface-muted: hsl(205 16% 46%);
   --sidebar: hsl(206 28% 96%);
   --sidebar-foreground: hsl(218 20% 18%);
   --sidebar-primary: hsl(205 93% 43%);
@@ -120,6 +131,13 @@ body {
   --sidebar-accent-foreground: hsl(0 0% 100%);
   --sidebar-border: hsl(218 12% 28%);
   --sidebar-ring: hsl(205 90% 66%);
+  --brand: hsl(197 62% 62%);
+  --brand-surface-from: hsl(205 20% 16%);
+  --brand-surface-mid: hsl(198 15% 17%);
+  --brand-surface-to: hsl(32 10% 18%);
+  --brand-surface-border: hsl(210 12% 26%);
+  --brand-surface-ink: hsl(210 16% 93%);
+  --brand-surface-muted: hsl(210 12% 70%);
 }
 
 @layer base {
@@ -132,5 +150,58 @@ body {
   body {
     @apply min-h-screen bg-background text-foreground;
     background-image: radial-gradient(circle at top left, rgba(56,189,248,0.12), transparent 25%), radial-gradient(circle at 80% 0%, rgba(34,197,94,0.1), transparent 18%);
+    /* Theme flips are animated once, globally, instead of per-component. */
+    transition: background-color var(--rx-duration-slow) var(--rx-ease-standard),
+      color var(--rx-duration-slow) var(--rx-ease-standard);
   }
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+}
+
+/* Branded chrome. One surface definition, reused by the mobile top bar and
+   the desktop sidebar header so both read as the same piece of brand.
+
+   Deliberately quiet: a soft tint that separates the header from content
+   through a gentle value step and a hairline border, not through contrast.
+
+   MUST stay inside @layer components: unlayered rules outrank every Tailwind
+   utility, so `position: relative` below would silently defeat `fixed` on the
+   mobile top bar and drop it back into normal flow. */
+@layer components {
+
+.rx-brand-bar {
+  background-image: linear-gradient(
+    118deg,
+    color-mix(in oklab, var(--brand-surface-from) 94%, transparent) 0%,
+    color-mix(in oklab, var(--brand-surface-mid) 94%, transparent) 52%,
+    color-mix(in oklab, var(--brand-surface-to) 94%, transparent) 100%
+  );
+  color: var(--brand-surface-ink);
+  border-color: var(--brand-surface-border);
+  box-shadow: 0 6px 18px -16px rgb(15 42 64 / 0.45);
+  backdrop-filter: blur(12px);
+}
+
+/* Hairline of brand colour along the bottom edge — the only saturated note. */
+.rx-brand-bar--edge {
+  position: relative;
+}
+
+.rx-brand-bar--edge::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--brand) 55%, transparent) 22%,
+    color-mix(in oklab, var(--brand) 55%, transparent) 78%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
 }

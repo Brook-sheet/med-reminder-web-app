@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
+import { Logo } from "@/components/brand/Logo";
 
 export default function FormLayout({
   children,
@@ -14,23 +14,11 @@ export default function FormLayout({
 
       <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-10">
         <header className="mb-8 flex max-w-xl flex-col items-center gap-3 rounded-[28px] border border-slate-200/90 bg-white/90 px-5 py-4 shadow-sm backdrop-blur-md sm:flex-row">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center sm:h-14 sm:w-14">
-            <Image
-              src="/icon.png"
-              alt="Rx Box: Smart Pillbox logo"
-              width={56}
-              height={56}
-              sizes="56px"
-              className="h-full w-full object-contain"
-              priority
-            />
-          </div>
-
-          <div className="text-center sm:text-left">
-            <p className="text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
-              Rx Box: Smart Pillbox
-            </p>
-          </div>
+          <Logo
+            size="lg"
+            priority
+            className="flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-4 sm:text-left"
+          />
         </header>
 
         <main className="w-full max-w-md">

@@ -1,0 +1,595 @@
+/* ==========================================================================
+   Rx Box — Motion System
+   Single source of truth for every animation, transition and loading state.
+   Import once (see app/globals.css). Never hand-roll durations/easings.
+   ========================================================================== */
+
+:root {
+  /* ---- Duration scale ---------------------------------------------------
+     instant : state flips (checkbox, toggle)
+     fast    : hover / press feedback
+     base    : most UI transitions
+     slow    : entrances, panels, page transitions
+     slower  : large surfaces (drawers, modals, route changes)
+  ------------------------------------------------------------------------ */
+  --rx-duration-instant: 90ms;
+  --rx-duration-fast: 150ms;
+  --rx-duration-base: 220ms;
+  --rx-duration-slow: 320ms;
+  --rx-duration-slower: 460ms;
+
+  /* ---- Easing scale ---------------------------------------------------- */
+  --rx-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --rx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --rx-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --rx-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* ---- Interaction tokens ---------------------------------------------- */
+  --rx-lift: -2px;
+  --rx-press-scale: 0.97;
+  --rx-stagger-step: 45ms;
+
+  /* ---- Loading language ------------------------------------------------ */
+  --rx-spin-duration: 640ms;
+  --rx-shimmer-duration: 1600ms;
+  --rx-skeleton-radius: 12px;
+}
+
+/* ==========================================================================
+   1. Keyframes
+   ========================================================================== */
+
+@keyframes rx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rx-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rx-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes rx-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rx-fade-in-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rx-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes rx-scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes rx-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rx-slide-out-right {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
+}
+
+/* Opacity ONLY — no transform.
+   PageTransition wraps every route, and `animation-fill-mode: both` keeps the
+   final keyframe applied forever. A transformed ancestor becomes the
+   containing block for `position: fixed` descendants, which would break the
+   full-screen mobile chat and every `fixed inset-0` modal inside a page.
+   Opacity has no such effect, so the page fade is safe. */
+@keyframes rx-page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rx-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes rx-indeterminate {
+  0% {
+    transform: translateX(-100%) scaleX(0.35);
+  }
+  50% {
+    transform: translateX(0%) scaleX(0.6);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.35);
+  }
+}
+
+@keyframes rx-pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes rx-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes rx-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes rx-ping-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes rx-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* ==========================================================================
+   2. Global interaction defaults
+   Layered so Tailwind utility classes can always override them.
+   ========================================================================== */
+
+@layer base {
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Every focusable surface animates its focus ring at the same speed. */
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+summary {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: var(--rx-duration-fast);
+  transition-timing-function: var(--rx-ease-standard);
+}
+
+}
+
+/* ==========================================================================
+   3. Micro-interactions
+   ========================================================================== */
+
+@layer components {
+
+/* Press feedback — use on every clickable element. */
+.rx-press {
+  transition-property: transform, box-shadow, background-color, border-color, color, opacity;
+  transition-duration: var(--rx-duration-fast);
+  transition-timing-function: var(--rx-ease-standard);
+  will-change: transform;
+}
+
+.rx-press:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(var(--rx-press-scale));
+}
+
+/* Lift on hover — cards, tiles, list rows. */
+.rx-hover-lift {
+  transition-property: transform, box-shadow, border-color, background-color;
+  transition-duration: var(--rx-duration-base);
+  transition-timing-function: var(--rx-ease-standard);
+}
+
+@media (hover: hover) {
+  .rx-hover-lift:hover {
+    transform: translate3d(0, var(--rx-lift), 0);
+    box-shadow: 0 18px 40px -18px rgb(15 23 42 / 0.35);
+    border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+  }
+}
+
+.rx-hover-lift:active {
+  transform: translate3d(0, 0, 0) scale(0.995);
+}
+
+/* Icon nudge inside a hovered parent. */
+.rx-icon-nudge {
+  transition: transform var(--rx-duration-base) var(--rx-ease-out);
+}
+
+.group:hover .rx-icon-nudge,
+.rx-hover-lift:hover .rx-icon-nudge {
+  transform: translateX(2px);
+}
+
+/* Soft attention pulse for live/unread indicators. */
+.rx-pulse {
+  animation: rx-pulse-soft 2s var(--rx-ease-standard) infinite;
+}
+
+.rx-ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  animation: rx-ping-ring 1.8s var(--rx-ease-out) infinite;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   4. Entrances
+   ========================================================================== */
+
+.rx-animate-in {
+  animation: rx-fade-in-up var(--rx-duration-slow) var(--rx-ease-out) both;
+}
+
+.rx-fade-in {
+  animation: rx-fade-in var(--rx-duration-base) var(--rx-ease-standard) both;
+}
+
+.rx-scale-in {
+  animation: rx-scale-in var(--rx-duration-base) var(--rx-ease-out) both;
+}
+
+.rx-slide-in {
+  animation: rx-slide-in-right var(--rx-duration-base) var(--rx-ease-out) both;
+}
+
+.rx-pop-in {
+  animation: rx-pop var(--rx-duration-slow) var(--rx-ease-spring) both;
+}
+
+.rx-shake {
+  animation: rx-shake var(--rx-duration-slower) var(--rx-ease-standard) both;
+}
+
+/* Page / route transition wrapper. Must never apply a transform or filter
+   — see the rx-page-in keyframes above for why. */
+.rx-page-enter {
+  animation: rx-page-in var(--rx-duration-base) var(--rx-ease-standard) both;
+}
+
+/* Staggered children — apply to any list/grid container. */
+.rx-stagger > * {
+  animation: rx-fade-in-up var(--rx-duration-slow) var(--rx-ease-out) both;
+}
+
+.rx-stagger > *:nth-child(1) { animation-delay: calc(var(--rx-stagger-step) * 0); }
+.rx-stagger > *:nth-child(2) { animation-delay: calc(var(--rx-stagger-step) * 1); }
+.rx-stagger > *:nth-child(3) { animation-delay: calc(var(--rx-stagger-step) * 2); }
+.rx-stagger > *:nth-child(4) { animation-delay: calc(var(--rx-stagger-step) * 3); }
+.rx-stagger > *:nth-child(5) { animation-delay: calc(var(--rx-stagger-step) * 4); }
+.rx-stagger > *:nth-child(6) { animation-delay: calc(var(--rx-stagger-step) * 5); }
+.rx-stagger > *:nth-child(7) { animation-delay: calc(var(--rx-stagger-step) * 6); }
+.rx-stagger > *:nth-child(8) { animation-delay: calc(var(--rx-stagger-step) * 7); }
+.rx-stagger > *:nth-child(9) { animation-delay: calc(var(--rx-stagger-step) * 8); }
+.rx-stagger > *:nth-child(10) { animation-delay: calc(var(--rx-stagger-step) * 9); }
+.rx-stagger > *:nth-child(n + 11) { animation-delay: calc(var(--rx-stagger-step) * 10); }
+
+/* ==========================================================================
+   5. Overlays, dialogs, drawers
+   ========================================================================== */
+
+.rx-overlay-in {
+  animation: rx-fade-in var(--rx-duration-base) var(--rx-ease-standard) both;
+}
+
+.rx-overlay-out {
+  animation: rx-fade-out var(--rx-duration-fast) var(--rx-ease-in) both;
+}
+
+.rx-dialog-in {
+  animation: rx-scale-in var(--rx-duration-slow) var(--rx-ease-out) both;
+}
+
+.rx-dialog-out {
+  animation: rx-scale-out var(--rx-duration-fast) var(--rx-ease-in) both;
+}
+
+.rx-drawer {
+  transition: transform var(--rx-duration-slower) var(--rx-ease-out);
+  will-change: transform;
+}
+
+/* ==========================================================================
+   6. THE LOADING LANGUAGE
+   Three primitives only. Use them everywhere, never invent a fourth.
+     .rx-spinner   — action in progress (buttons, inline, page, section)
+     .rx-skeleton  — content whose shape is known (lists, cards, tables)
+     .rx-progress  — indeterminate top-of-surface bar (routes, refetch)
+   ========================================================================== */
+
+/* --- 6a. Spinner --------------------------------------------------------- */
+.rx-spinner {
+  display: inline-block;
+  flex: none;
+  border-radius: 9999px;
+  border-style: solid;
+  border-color: color-mix(in oklab, currentColor 20%, transparent);
+  border-top-color: currentColor;
+  animation: rx-spin var(--rx-spin-duration) linear infinite;
+}
+
+.rx-spinner[data-size="xs"] {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-width: 1.5px;
+}
+
+.rx-spinner[data-size="sm"] {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+.rx-spinner[data-size="md"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-width: 2px;
+}
+
+.rx-spinner[data-size="lg"] {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-width: 2.5px;
+}
+
+.rx-spinner[data-size="xl"] {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-width: 3px;
+}
+
+/* --- 6b. Skeleton -------------------------------------------------------- */
+.rx-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--rx-skeleton-radius);
+  background: color-mix(in oklab, var(--muted) 80%, transparent);
+  isolation: isolate;
+}
+
+.rx-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--card) 70%, transparent),
+    transparent
+  );
+  animation: rx-shimmer var(--rx-shimmer-duration) var(--rx-ease-standard) infinite;
+}
+
+/* --- 6c. Indeterminate progress bar -------------------------------------- */
+.rx-progress {
+  position: relative;
+  overflow: hidden;
+  height: 3px;
+  width: 100%;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+}
+
+.rx-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  animation: rx-indeterminate 1.15s var(--rx-ease-standard) infinite;
+}
+
+/* --- 6d. Route progress bar (top of viewport) ---------------------------- */
+.rx-route-progress {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 300;
+  height: 3px;
+  pointer-events: none;
+}
+
+.rx-route-progress__bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 70%, transparent);
+  transition: transform var(--rx-duration-base) var(--rx-ease-standard),
+    opacity var(--rx-duration-base) var(--rx-ease-standard);
+}
+
+/* --- 6e. Loading overlay (content is present but refreshing) ------------- */
+.rx-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--background) 62%, transparent);
+  backdrop-filter: blur(3px);
+  animation: rx-fade-in var(--rx-duration-fast) var(--rx-ease-standard) both;
+}
+
+/* Content that is being replaced fades rather than snapping. */
+.rx-content-swap {
+  transition: opacity var(--rx-duration-base) var(--rx-ease-standard),
+    filter var(--rx-duration-base) var(--rx-ease-standard);
+}
+
+.rx-content-swap[data-busy="true"] {
+  opacity: 0.55;
+  filter: saturate(0.85);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   7. Toast motion
+   ========================================================================== */
+
+.rx-toast-in {
+  animation: rx-slide-in-right var(--rx-duration-slow) var(--rx-ease-out) both;
+}
+
+.rx-toast-out {
+  animation: rx-slide-out-right var(--rx-duration-base) var(--rx-ease-in) both;
+}
+
+.rx-toast-countdown {
+  transform-origin: left center;
+  animation: rx-countdown linear both;
+  animation-duration: var(--rx-toast-duration, 4000ms);
+}
+
+.rx-toast-card:hover .rx-toast-countdown,
+.rx-toast-card:focus-within .rx-toast-countdown {
+  animation-play-state: paused;
+}
+
+}
+
+/* ==========================================================================
+   8. Accessibility — honour reduced-motion everywhere
+   Deliberately unlayered + !important so nothing can override it.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Loading indicators must keep moving — they communicate state. */
+  .rx-spinner {
+    animation: rx-spin 1.2s linear infinite !important;
+  }
+
+  .rx-progress::after,
+  .rx-route-progress__bar {
+    animation: rx-pulse-soft 1.4s ease-in-out infinite !important;
+    transform: none !important;
+  }
+
+  .rx-skeleton::after {
+    animation: none !important;
+    opacity: 0.35;
+  }
+
+  .rx-hover-lift:hover,
+  .rx-press:active {
+    transform: none !important;
+  }
+}

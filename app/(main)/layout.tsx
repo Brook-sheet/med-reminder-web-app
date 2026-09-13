@@ -3,6 +3,7 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import NotificationManager from "@/components/notifications/NotificationManager";
 import AlertBell from "@/components/alerts/AlertBell";
 import { getCurrentUser } from "@/lib/auth";
+import PageTransition from "@/components/ui/PageTransition";
 import { redirect } from "next/navigation";
 
 export default async function MainLayout({
@@ -22,7 +23,7 @@ export default async function MainLayout({
 
       <main className="rx-main flex-1 overflow-y-auto px-4 pb-8 md:ml-72">
         <div className="rx-page min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_24%),radial-gradient(circle_at_80%_0%,rgba(34,197,94,0.1),transparent_18%)] pt-6">
-          {children}
+          <PageTransition>{children}</PageTransition>
         </div>
       </main>
 

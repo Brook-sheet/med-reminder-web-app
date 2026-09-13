@@ -3,17 +3,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { Spinner, type SpinnerSize } from "@/components/ui/Spinner"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-[18px] border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all duration-200 outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "rx-press group/button relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap outline-none select-none transition-[transform,background-color,border-color,color,box-shadow,opacity] duration-[var(--rx-duration-fast)] ease-[var(--rx-ease-standard)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[loading=true]:cursor-progress dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-[var(--rx-duration-base)] [&_svg]:ease-[var(--rx-ease-out)] [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm shadow-primary/30 hover:bg-primary/90",
+        default:
+          "bg-primary text-primary-foreground shadow-sm shadow-primary/30 hover:bg-primary/90 hover:shadow-md hover:shadow-primary/35 hover:-translate-y-px",
         outline:
-          "border border-border bg-background text-foreground shadow-sm shadow-slate-900/5 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border border-border bg-background text-foreground shadow-sm shadow-slate-900/5 hover:-translate-y-px hover:bg-muted hover:text-foreground hover:shadow-md hover:shadow-slate-900/10 aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm shadow-secondary/30 hover:bg-secondary/90 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-secondary text-secondary-foreground shadow-sm shadow-secondary/30 hover:-translate-y-px hover:bg-secondary/90 hover:shadow-md hover:shadow-secondary/35 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "bg-transparent hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
@@ -41,26 +43,70 @@ const buttonVariants = cva(
   }
 )
 
+type ButtonSize = NonNullable<VariantProps<typeof buttonVariants>["size"]>
+
+const SPINNER_SIZE: Record<ButtonSize, SpinnerSize> = {
+  default: "sm",
+  xs: "xs",
+  sm: "xs",
+  lg: "sm",
+  icon: "sm",
+  "icon-xs": "xs",
+  "icon-sm": "xs",
+  "icon-lg": "md",
+}
+
 function Button({
   className,
   variant = "default",
   size = "default",
   asChild = false,
+  loading = false,
+  loadingText,
+  children,
+  disabled,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /** Shows the app-standard spinner and blocks interaction. */
+    loading?: boolean
+    /** Optional label swap while loading, e.g. "Saving…". */
+    loadingText?: React.ReactNode
   }) {
   const Comp = asChild ? Slot.Root : "button"
+
+  // Slot renders someone else's element, so we never inject a spinner there.
+  const isLoading = loading && !asChild
+
+  // Icon-only buttons swap their icon for the spinner instead of stacking both.
+  const isIconOnly = typeof size === "string" && size.startsWith("icon")
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      data-loading={isLoading ? "true" : undefined}
+      aria-busy={isLoading || undefined}
+      {...(asChild ? {} : { disabled: disabled || isLoading })}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {isLoading ? (
+        <>
+          <Spinner
+            size={SPINNER_SIZE[(size ?? "default") as ButtonSize]}
+            label="Working"
+          />
+          {isIconOnly ? null : (
+            <span className="rx-fade-in">{loadingText ?? children}</span>
+          )}
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   )
 }
 

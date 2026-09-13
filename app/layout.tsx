@@ -12,6 +12,7 @@ import "./chat-bubbles.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "@/components/ui/Toast";
+import RouteProgress from "@/components/ui/RouteProgress";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -39,12 +40,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/icon.png",
+        url: "/brand/icon.png",
         type: "image/png",
       },
     ],
-    shortcut: "/icon.png",
-    apple: "/icon.png",
+    shortcut: "/brand/icon.png",
+    apple: "/brand/icon.png",
   },
 };
 
@@ -71,6 +72,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <RouteProgress />
+
           <ToastProvider>
             {children}
           </ToastProvider>

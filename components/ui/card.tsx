@@ -5,14 +5,25 @@ import { cn } from "@/lib/utils"
 function Card({
   className,
   size = "default",
+  interactive = false,
+  animate = false,
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+}: React.ComponentProps<"div"> & {
+  size?: "default" | "sm"
+  /** Adds hover lift + press feedback for clickable cards. */
+  interactive?: boolean
+  /** Fades and lifts the card in on mount. */
+  animate?: boolean
+}) {
   return (
     <div
       data-slot="card"
       data-size={size}
+      data-interactive={interactive || undefined}
       className={cn(
-        "group/card flex flex-col gap-6 overflow-hidden rounded-[28px] bg-card py-6 text-sm text-card-foreground shadow-lg shadow-slate-900/5 border border-border/70 has-[>img:first-child]:pt-0 data-[size=sm]:gap-4 data-[size=sm]:py-4 *:[img:first-child]:rounded-t-[28px] *:[img:last-child]:rounded-b-[28px]",
+        "group/card relative flex flex-col gap-6 overflow-hidden rounded-[28px] bg-card py-6 text-sm text-card-foreground shadow-lg shadow-slate-900/5 border border-border/70 transition-[transform,box-shadow,border-color,background-color] duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] has-[>img:first-child]:pt-0 data-[size=sm]:gap-4 data-[size=sm]:py-4 *:[img:first-child]:rounded-t-[28px] *:[img:last-child]:rounded-b-[28px]",
+        interactive && "rx-hover-lift rx-press cursor-pointer",
+        animate && "rx-animate-in",
         className
       )}
       {...props}
