@@ -14,7 +14,7 @@
     padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
-  /* Fixed mobile top bar. 56px of chrome plus the notch inset. */
+  /* Fixed mobile top bar. */
   .rx-mobile-topbar {
     height: calc(56px + env(safe-area-inset-top));
     padding-top: env(safe-area-inset-top);
@@ -23,7 +23,7 @@
       max(var(--mobile-gutter), env(safe-area-inset-right));
   }
 
-  /* Content clears the fixed bar: 56px bar + 12px breathing room. */
+  /* Content clears the fixed bar. */
   .rx-page {
     min-height: 0;
     padding-top: calc(68px + env(safe-area-inset-top));
@@ -61,7 +61,7 @@
     flex-shrink: 0;
   }
 
-  /* Keep mobile form text readable and avoid automatic input zoom. */
+  /* Readable form text also avoids automatic input zoom. */
   .rx-app :is(
     input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
     select,
@@ -80,7 +80,7 @@
     flex-shrink: 0;
   }
 
-  /* Shared card surfaces, including cards built without Card components. */
+  /* Shared card surfaces. */
   .rx-app :is(div, section, article)[class*="rounded"]:is(.p-5, .p-6, .p-8) {
     padding: 16px;
   }
@@ -188,8 +188,7 @@
     padding: 12px 16px;
   }
 
-  /* Existing custom dialogs, including notes and onboarding. The medicine
-     modal opts out — it manages its own sizing. */
+  /* The medicine modal manages its own sizing. */
   .rx-app .fixed.inset-0.flex.items-center.justify-center:not(.rx-modal) {
     padding:
       max(12px, env(safe-area-inset-top))
@@ -200,7 +199,7 @@
   }
 
   .rx-app .fixed.inset-0 > :is(.max-w-sm, .max-w-md, .max-w-lg):not(.rx-modal-panel),
-  .rx-app [role="dialog"]:not(.rx-modal-panel) {
+  .rx-app [role="dialog"]:not(.rx-modal-panel):not(.rx-modal) {
     min-width: 0;
     max-width: 100%;
     max-height: calc(
@@ -213,7 +212,7 @@
     overscroll-behavior: contain;
   }
 
-  /* Allow navigation to scroll on short phones and in landscape. */
+  /* Navigation can scroll on short phones and in landscape. */
   .rx-shell > div:first-child > aside {
     width: min(18rem, calc(100vw - 48px));
     height: 100dvh;
@@ -227,31 +226,30 @@
     padding: 16px;
   }
 
-  /* Dialogs stay centred cards on phones. The overlay owns the gutter so the
-     card never touches a screen edge or a notch, and the height is pinned to
-     the SMALL viewport so browser chrome can never clip the card. */
+  /*
+   * Reserve safe-area gutters while allowing the medicine form
+   * to use the available viewport.
+   */
   .rx-modal {
+    --medicine-gutter-top: max(16px, env(safe-area-inset-top));
+    --medicine-gutter-bottom: max(16px, env(safe-area-inset-bottom));
+
     padding:
-      max(20px, env(safe-area-inset-top))
-      max(20px, env(safe-area-inset-right))
-      max(20px, env(safe-area-inset-bottom))
-      max(20px, env(safe-area-inset-left));
+      var(--medicine-gutter-top)
+      max(16px, env(safe-area-inset-right))
+      var(--medicine-gutter-bottom)
+      max(16px, env(safe-area-inset-left));
   }
 
-  /* Capped so the card never fills the screen edge to edge. */
   .rx-modal-panel {
-    max-height: min(
-      44rem,
-      calc(
-        100svh - 64px -
-        env(safe-area-inset-top) -
-        env(safe-area-inset-bottom)
-      )
+    max-height: calc(
+      100dvh -
+      var(--medicine-gutter-top) -
+      var(--medicine-gutter-bottom)
     );
   }
 
-  /* The dialog is portalled to <body>, so scope these to the document.
-     Nothing may sit on top of an open dialog. */
+  /* The medicine modal is portalled to body. */
   body:has(.rx-modal) .rx-notification-controls,
   body:has(.rx-modal) .rx-mobile-topbar {
     display: none;
@@ -271,7 +269,7 @@
     overflow-y: auto;
   }
 
-  /* Chat list: banners scroll without squeezing contacts out of view. */
+  /* Chat list. */
   .rx-chats {
     min-width: 0;
     height: calc(
@@ -321,7 +319,7 @@
       env(safe-area-inset-right);
   }
 
-  /* Hide these only while an individual conversation is active. */
+  /* Hide these while an individual conversation is active. */
   .rx-chats[data-conversation-open="true"] .rx-chat-list-tools,
   .rx-shell:has(
     .rx-chats[data-conversation-open="true"]
@@ -337,7 +335,7 @@
     overflow: hidden;
   }
 
-  /* Existing ChatWindow structure: header, messages and composer. */
+  /* ChatWindow: header, messages and composer. */
   .rx-conversation > .flex.h-full {
     min-height: 0;
   }

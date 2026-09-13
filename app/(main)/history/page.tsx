@@ -1,12 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-
 import {
   AlertTriangle,
   CalendarDays,
@@ -22,16 +22,9 @@ import {
 } from "lucide-react";
 
 import StatCard from "@/components/dashboard/StatCard";
+import { toast } from "@/components/ui/Toast";
 
-import {
-  toast,
-} from "@/components/ui/Toast";
-
-type Range =
-  | "today"
-  | "week"
-  | "month"
-  | "custom";
+type Range = "today" | "week" | "month" | "custom";
 
 type Status =
   | "upcoming"
@@ -45,12 +38,10 @@ type Status =
 
 interface MedicationAnnotation {
   _id: string;
-
   type:
     | "patient_note"
     | "missed_explanation"
     | "family_acknowledgment";
-
   text: string;
   authorRole: "patient" | "family";
   authorName: string;
@@ -67,12 +58,7 @@ interface LogEntry {
   actualTime?: string | null;
   status: Status;
   delayMinutes: number | null;
-
-  source:
-    | "manual"
-    | "sensor"
-    | "system";
-
+  source: "manual" | "sensor" | "system";
   verificationMethod: string;
   expectedChamberId: number | null;
   detectedChamberId: number | null;
@@ -104,7 +90,6 @@ interface HistoryData {
     incorrectChamber: number;
     adherenceRate: number | null;
   };
-
   byMedicine: MedicineStat[];
   logs: LogEntry[];
 }
@@ -113,111 +98,68 @@ const FILTERS: Array<{
   value: Range;
   label: string;
 }> = [
-  {
-    value: "today",
-    label: "Today",
-  },
-  {
-    value: "week",
-    label: "This Week",
-  },
-  {
-    value: "month",
-    label: "This Month",
-  },
-  {
-    value: "custom",
-    label: "Custom Range",
-  },
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "custom", label: "Custom Range" },
 ];
 
 const STATUS = {
   upcoming: {
     label: "Upcoming",
     Icon: Clock,
-
     badge:
       "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
-
-    border:
-      "border-l-blue-400",
+    border: "border-l-blue-400",
   },
-
   due: {
     label: "Due / Pending",
     Icon: Clock,
-
     badge:
       "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
-
-    border:
-      "border-l-amber-500",
+    border: "border-l-amber-500",
   },
-
   taken: {
     label: "Verified",
     Icon: Check,
-
     badge:
       "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
-
-    border:
-      "border-l-green-500",
+    border: "border-l-green-500",
   },
-
   late: {
     label: "Late",
     Icon: Clock,
-
     badge:
       "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
-
-    border:
-      "border-l-amber-500",
+    border: "border-l-amber-500",
   },
-
   missed: {
     label: "Missed",
     Icon: X,
-
     badge:
       "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
-
-    border:
-      "border-l-red-500",
+    border: "border-l-red-500",
   },
-
   incorrect_chamber: {
     label: "Incorrect Chamber",
     Icon: ShieldAlert,
-
     badge:
       "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
-
-    border:
-      "border-l-red-500",
+    border: "border-l-red-500",
   },
-
   unverified: {
     label: "Unverified",
     Icon: AlertTriangle,
-
     badge:
       "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
-
-    border:
-      "border-l-gray-400",
+    border: "border-l-gray-400",
   },
-
   pending: {
     label: "Pending",
     Icon: Clock,
-
     badge:
       "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
-
-    border:
-      "border-l-blue-400",
+    border: "border-l-blue-400",
   },
 } satisfies Record<
   Status,
@@ -239,105 +181,70 @@ const MISSED_REASONS = [
 ];
 
 function todayString(): string {
-  return new Date()
-    .toISOString()
-    .split("T")[0];
+  return new Date().toISOString().split("T")[0];
 }
 
 function monthStart(): string {
-  const now =
-    new Date();
+  const now = new Date();
 
   return new Date(
     now.getFullYear(),
     now.getMonth(),
-    1,
+    1
   )
     .toISOString()
     .split("T")[0];
 }
 
-function actualTime(
-  value?:
-    | string
-    | null,
-): string {
+function actualTime(value?: string | null): string {
   if (!value) {
     return "—";
   }
 
-  return new Date(
-    value,
-  ).toLocaleTimeString(
-    "en-US",
-    {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    },
-  );
+  return new Date(value).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-function dateHeading(
-  value:
-    string,
-): string {
-  if (
-    value ===
-    todayString()
-  ) {
+function dateHeading(value: string): string {
+  if (value === todayString()) {
     return "Today";
   }
 
-  return new Date(
-    `${value}T00:00:00`,
-  ).toLocaleDateString(
+  return new Date(`${value}T00:00:00`).toLocaleDateString(
     "en-US",
     {
       weekday: "long",
       month: "long",
       day: "numeric",
-    },
+    }
   );
 }
 
 function annotationLabel(
-  type:
-    MedicationAnnotation["type"],
+  type: MedicationAnnotation["type"]
 ): string {
-  if (
-    type ===
-    "family_acknowledgment"
-  ) {
+  if (type === "family_acknowledgment") {
     return "Family Acknowledgment";
   }
 
-  if (
-    type ===
-    "missed_explanation"
-  ) {
+  if (type === "missed_explanation") {
     return "Missed-dose explanation";
   }
 
   return "Patient note";
 }
 
-function annotationTime(
-  value:
-    string,
-): string {
-  return new Date(
-    value,
-  ).toLocaleString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    },
-  );
+function annotationTime(value: string): string {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 interface AnnotationDialogProps {
@@ -353,53 +260,33 @@ function AnnotationDialog({
   onCancel,
   onSave,
 }: AnnotationDialogProps) {
-  const missed =
-    log.status ===
-    "missed";
+  const missed = log.status === "missed";
 
-  const [
-    reason,
-    setReason,
-  ] = useState(
-    missed
-      ? MISSED_REASONS[0]
-      : "",
+  const [reason, setReason] = useState(
+    missed ? MISSED_REASONS[0] : ""
   );
 
-  const [
-    details,
-    setDetails,
-  ] = useState("");
+  const [details, setDetails] = useState("");
 
-  const finalText =
-    missed
-      ? reason ===
-        "Other"
-        ? details.trim()
-        : details.trim()
-          ? `${reason}: ${details.trim()}`
-          : reason
-      : details.trim();
+  const finalText = missed
+    ? reason === "Other"
+      ? details.trim()
+      : details.trim()
+        ? `${reason}: ${details.trim()}`
+        : reason
+    : details.trim();
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
-      onClick={
-        saving
-          ? undefined
-          : onCancel
-      }
+      onClick={saving ? undefined : onCancel}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="annotation-title"
         className="w-full max-w-md rounded-[28px] border border-border/80 bg-card p-6 shadow-2xl"
-        onClick={(
-          event,
-        ) =>
-          event.stopPropagation()
-        }
+        onClick={(event) => event.stopPropagation()}
       >
         <h2
           id="annotation-title"
@@ -411,9 +298,7 @@ function AnnotationDialog({
         </h2>
 
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {log.medicineName}
-          {" "}
-          {log.dosage}
+          {log.medicineName} {log.dosage}
           {" · "}
           {log.scheduledDate}
           {" at "}
@@ -426,34 +311,21 @@ function AnnotationDialog({
 
             <select
               value={reason}
-              onChange={(
-                event,
-              ) =>
-                setReason(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setReason(event.target.value)}
               disabled={saving}
               className="mt-2 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
             >
-              {MISSED_REASONS.map(
-                (item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
-                    {item}
-                  </option>
-                ),
-              )}
+              {MISSED_REASONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </label>
         )}
 
         <label className="mt-4 block text-sm font-medium text-gray-700 dark:text-gray-300">
-          {missed &&
-          reason !==
-            "Other"
+          {missed && reason !== "Other"
             ? "Additional details (optional)"
             : missed
               ? "Custom explanation"
@@ -461,13 +333,7 @@ function AnnotationDialog({
 
           <textarea
             value={details}
-            onChange={(
-              event,
-            ) =>
-              setDetails(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setDetails(event.target.value)}
             maxLength={500}
             disabled={saving}
             rows={4}
@@ -487,12 +353,8 @@ function AnnotationDialog({
         <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row">
           <button
             type="button"
-            onClick={
-              onCancel
-            }
-            disabled={
-              saving
-            }
+            onClick={onCancel}
+            disabled={saving}
             className="flex-1 rounded-2xl border border-border px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             Cancel
@@ -500,16 +362,9 @@ function AnnotationDialog({
 
           <button
             type="button"
-            onClick={() =>
-              onSave(
-                finalText,
-              )
-            }
+            onClick={() => onSave(finalText)}
             disabled={
-              saving ||
-              !finalText ||
-              finalText.length >
-                500
+              saving || !finalText || finalText.length > 500
             }
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -517,9 +372,7 @@ function AnnotationDialog({
               <Loader2 className="h-4 w-4 animate-spin" />
             )}
 
-            {saving
-              ? "Saving..."
-              : "Save"}
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -532,22 +385,18 @@ function LogCard({
   onAddAnnotation,
 }: {
   log: LogEntry;
-  onAddAnnotation: (
-    log: LogEntry,
-  ) => void;
+  onAddAnnotation: (log: LogEntry) => void;
 }) {
-  const config =
-    STATUS[
-      log.status
-    ];
-
-  const Icon =
-    config.Icon;
+  const config = STATUS[log.status];
+  const Icon = config.Icon;
 
   const chamberText =
-    log.status ===
-    "incorrect_chamber"
-      ? `Detected ${log.detectedChamberId ?? "—"} · Expected ${log.expectedChamberIds.join(", ") || log.expectedChamberId || "—"}`
+    log.status === "incorrect_chamber"
+      ? `Detected ${log.detectedChamberId ?? "—"} · Expected ${
+          log.expectedChamberIds.join(", ") ||
+          log.expectedChamberId ||
+          "—"
+        }`
       : log.expectedChamberId
         ? `Chamber ${log.expectedChamberId}`
         : "No chamber assigned";
@@ -565,22 +414,16 @@ function LogCard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">
-                {log.medicineName}
-                {" "}
-
+                {log.medicineName}{" "}
                 <span className="font-normal text-gray-400">
                   {log.dosage}
                 </span>
               </p>
 
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                Scheduled
-                {" "}
-                {log.scheduledTime}
+                Scheduled {log.scheduledTime}
                 {" · Actual "}
-                {actualTime(
-                  log.actualTime,
-                )}
+                {actualTime(log.actualTime)}
               </p>
             </div>
 
@@ -607,80 +450,53 @@ function LogCard({
             <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
               <span className="font-semibold">
                 System verification:
-              </span>
-              {" "}
+              </span>{" "}
               {log.verificationNote}
             </p>
           )}
 
-          {(
-            log.annotations ??
-            []
-          ).length >
-            0 && (
+          {(log.annotations ?? []).length > 0 && (
             <div className="mt-3 space-y-2">
-              {log.annotations.map(
-                (
-                  annotation,
-                ) => (
-                  <div
-                    key={
-                      annotation._id
-                    }
-                    className="rounded-xl border border-border/60 bg-background/60 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                      <span className="font-semibold text-gray-700 dark:text-gray-200">
-                        {annotationLabel(
-                          annotation.type,
-                        )}
-                      </span>
+              {log.annotations.map((annotation) => (
+                <div
+                  key={annotation._id}
+                  className="rounded-xl border border-border/60 bg-background/60 px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span className="font-semibold text-gray-700 dark:text-gray-200">
+                      {annotationLabel(annotation.type)}
+                    </span>
 
-                      <span className="text-gray-400">
-                        {annotation.authorName}
-                        {" · "}
-                        {annotationTime(
-                          annotation.createdAt,
-                        )}
-                      </span>
-                    </div>
-
-                    {annotation.text && (
-                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">
-                        {annotation.text}
-                      </p>
-                    )}
+                    <span className="text-gray-400">
+                      {annotation.authorName}
+                      {" · "}
+                      {annotationTime(annotation.createdAt)}
+                    </span>
                   </div>
-                ),
-              )}
+
+                  {annotation.text && (
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">
+                      {annotation.text}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
-          {[
-            "taken",
-            "late",
-            "missed",
-          ].includes(
-            log.status,
-          ) && (
+          {["taken", "late", "missed"].includes(log.status) && (
             <button
               type="button"
-              onClick={() =>
-                onAddAnnotation(
-                  log,
-                )
-              }
+              onClick={() => onAddAnnotation(log)}
               className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
             >
-              {log.status ===
-              "missed" ? (
+              {log.status === "missed" ? (
                 <FileText className="h-3.5 w-3.5" />
               ) : (
                 <MessageSquare className="h-3.5 w-3.5" />
               )}
 
-              {log.status ===
-              "missed"
+              {log.status === "missed"
                 ? "Add explanation"
                 : "Add patient note"}
             </button>
@@ -692,337 +508,178 @@ function LogCard({
 }
 
 export default function HistoryPage() {
-  const [
-    range,
-    setRange,
-  ] =
-    useState<Range>(
-      "month",
-    );
+  const [range, setRange] = useState<Range>("month");
+  const [from, setFrom] = useState(monthStart());
+  const [to, setTo] = useState(todayString());
+  const [data, setData] = useState<HistoryData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [
-    from,
-    setFrom,
-  ] =
-    useState(
-      monthStart(),
-    );
+  const [annotationLog, setAnnotationLog] =
+    useState<LogEntry | null>(null);
 
-  const [
-    to,
-    setTo,
-  ] =
-    useState(
-      todayString(),
-    );
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
 
-  const [
-    data,
-    setData,
-  ] =
-    useState<HistoryData | null>(
-      null,
-    );
+  const fetchHistory = useCallback(async () => {
+    if (
+      range === "custom" &&
+      (!from || !to || from > to)
+    ) {
+      return;
+    }
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(
-      true,
-    );
+    setLoading(true);
+    setError("");
 
-  const [
-    error,
-    setError,
-  ] =
-    useState("");
+    try {
+      const query = new URLSearchParams({ range });
 
-  const [
-    annotationLog,
-    setAnnotationLog,
-  ] =
-    useState<LogEntry | null>(
-      null,
-    );
+      if (range === "custom") {
+        query.set("from", from);
+        query.set("to", to);
+      }
 
-  const [
-    savingAnnotation,
-    setSavingAnnotation,
-  ] =
-    useState(
-      false,
-    );
-
-  const fetchHistory =
-    useCallback(
-      async () => {
-        if (
-          range ===
-            "custom" &&
-          (
-            !from ||
-            !to ||
-            from >
-              to
-          )
-        ) {
-          return;
+      const response = await fetch(
+        `/api/history?${query.toString()}`,
+        {
+          cache: "no-store",
         }
+      );
 
-        setLoading(
-          true,
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(
+          json.error || "Failed to load history."
         );
+      }
 
-        setError(
-          "",
-        );
-
-        try {
-          const query =
-            new URLSearchParams({
-              range,
-            });
-
-          if (
-            range ===
-            "custom"
-          ) {
-            query.set(
-              "from",
-              from,
-            );
-
-            query.set(
-              "to",
-              to,
-            );
-          }
-
-          const response =
-            await fetch(
-              `/api/history?${query.toString()}`,
-              {
-                cache:
-                  "no-store",
-              },
-            );
-
-          const json =
-            await response.json();
-
-          if (
-            !response.ok ||
-            !json.success
-          ) {
-            throw new Error(
-              json.error ||
-                "Failed to load history.",
-            );
-          }
-
-          setData(
-            json.data,
-          );
-        } catch (
-          fetchError
-        ) {
-          setError(
-            fetchError instanceof
-            Error
-              ? fetchError.message
-              : "Failed to load history.",
-          );
-        } finally {
-          setLoading(
-            false,
-          );
-        }
-      },
-      [
-        from,
-        range,
-        to,
-      ],
-    );
+      setData(json.data);
+    } catch (fetchError) {
+      setError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Failed to load history."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [from, range, to]);
 
   useEffect(() => {
     void fetchHistory();
-  }, [
-    fetchHistory,
-  ]);
+  }, [fetchHistory]);
 
-  const saveAnnotation =
-    async (
-      text:
-        string,
-    ) => {
-      if (
-        !annotationLog ||
-        savingAnnotation
-      ) {
-        return;
-      }
+  const saveAnnotation = async (text: string) => {
+    if (!annotationLog || savingAnnotation) {
+      return;
+    }
 
-      setSavingAnnotation(
-        true,
-      );
+    setSavingAnnotation(true);
 
-      try {
-        const type =
-          annotationLog.status ===
-          "missed"
-            ? "missed_explanation"
-            : "patient_note";
+    try {
+      const type =
+        annotationLog.status === "missed"
+          ? "missed_explanation"
+          : "patient_note";
 
-        const response =
-          await fetch(
-            `/api/medication-logs/${annotationLog._id}/annotations`,
-            {
-              method:
-                "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  type,
-                  text,
-                }),
-            },
-          );
-
-        const json =
-          await response.json();
-
-        if (
-          !response.ok ||
-          !json.success
-        ) {
-          throw new Error(
-            json.error ||
-              "Unable to save the annotation.",
-          );
+      const response = await fetch(
+        `/api/medication-logs/${annotationLog._id}/annotations`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type,
+            text,
+          }),
         }
-
-        setAnnotationLog(
-          null,
-        );
-
-        toast.success(
-          json.message ||
-            "Annotation saved.",
-        );
-
-        await fetchHistory();
-      } catch (
-        saveError
-      ) {
-        toast.error(
-          saveError instanceof
-          Error
-            ? saveError.message
-            : "Unable to save the annotation.",
-        );
-      } finally {
-        setSavingAnnotation(
-          false,
-        );
-      }
-    };
-
-  const groupedLogs =
-    useMemo(() => {
-      const groups =
-        new Map<
-          string,
-          LogEntry[]
-        >();
-
-      for (
-        const log
-        of data?.logs ??
-        []
-      ) {
-        groups.set(
-          log.scheduledDate,
-          [
-            ...(
-              groups.get(
-                log.scheduledDate,
-              ) ??
-              []
-            ),
-            log,
-          ],
-        );
-      }
-
-      return Array.from(
-        groups.entries(),
-      ).sort(
-        (
-          first,
-          second,
-        ) =>
-          second[0].localeCompare(
-            first[0],
-          ),
       );
-    }, [
-      data,
-    ]);
 
-  const summary =
-    data?.summary;
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(
+          json.error || "Unable to save the annotation."
+        );
+      }
+
+      setAnnotationLog(null);
+      toast.success(json.message || "Annotation saved.");
+
+      await fetchHistory();
+    } catch (saveError) {
+      toast.error(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save the annotation."
+      );
+    } finally {
+      setSavingAnnotation(false);
+    }
+  };
+
+  const groupedLogs = useMemo(() => {
+    const groups = new Map<string, LogEntry[]>();
+
+    for (const log of data?.logs ?? []) {
+      groups.set(log.scheduledDate, [
+        ...(groups.get(log.scheduledDate) ?? []),
+        log,
+      ]);
+    }
+
+    return Array.from(groups.entries()).sort(
+      (first, second) =>
+        second[0].localeCompare(first[0])
+    );
+  }, [data]);
+
+  const summary = data?.summary;
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-7">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            History
-          </h1>
+        <header>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <h1 className="min-w-0 text-3xl font-bold text-gray-900 dark:text-white">
+              History
+            </h1>
+
+            <Link
+              href="/reports/medication"
+              className="rx-press inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-white shadow-sm shadow-blue-600/25 hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/30 sm:gap-2 sm:px-4 sm:text-sm print:hidden"
+            >
+              <FileText className="h-4 w-4 shrink-0" />
+              Generate Report
+            </Link>
+          </div>
 
           <p className="mt-2 text-gray-600 dark:text-gray-300">
             Medication verification records and adherence reporting
           </p>
-        </div>
+        </header>
 
         <div className="rounded-[20px] border border-border/70 bg-card p-4 shadow-sm">
           <div className="flex flex-wrap gap-2">
-            {FILTERS.map(
-              (
-                filter,
-              ) => (
-                <button
-                  key={
-                    filter.value
-                  }
-                  type="button"
-                  onClick={() =>
-                    setRange(
-                      filter.value,
-                    )
-                  }
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    range ===
-                    filter.value
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ),
-            )}
+            {FILTERS.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setRange(filter.value)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  range === filter.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
-          {range ===
-            "custom" && (
+          {range === "custom" && (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="text-sm text-gray-600 dark:text-gray-300">
                 From
@@ -1031,12 +688,8 @@ export default function HistoryPage() {
                   type="date"
                   value={from}
                   max={to}
-                  onChange={(
-                    event,
-                  ) =>
-                    setFrom(
-                      event.target.value,
-                    )
+                  onChange={(event) =>
+                    setFrom(event.target.value)
                   }
                   className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
                 />
@@ -1049,15 +702,9 @@ export default function HistoryPage() {
                   type="date"
                   value={to}
                   min={from}
-                  max={
-                    todayString()
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setTo(
-                      event.target.value,
-                    )
+                  max={todayString()}
+                  onChange={(event) =>
+                    setTo(event.target.value)
                   }
                   className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
                 />
@@ -1076,17 +723,12 @@ export default function HistoryPage() {
           <StatCard
             title="Adherence"
             value={
-              loading ||
-              summary
-                ?.adherenceRate ==
-                null
+              loading || summary?.adherenceRate == null
                 ? "—"
                 : `${summary.adherenceRate}%`
             }
             subtitle={
-              summary
-                ?.adherenceRate ==
-              null
+              summary?.adherenceRate == null
                 ? "No completed medication events yet"
                 : "Late doses receive half credit"
             }
@@ -1097,12 +739,11 @@ export default function HistoryPage() {
             value={
               loading
                 ? "—"
-                : String(
-                    summary?.verified ??
-                      0,
-                  )
+                : String(summary?.verified ?? 0)
             }
-            subtitle={`${summary?.onTime ?? 0} on time · ${summary?.late ?? 0} late`}
+            subtitle={`${summary?.onTime ?? 0} on time · ${
+              summary?.late ?? 0
+            } late`}
           />
 
           <StatCard
@@ -1110,12 +751,11 @@ export default function HistoryPage() {
             value={
               loading
                 ? "—"
-                : String(
-                    summary?.missed ??
-                      0,
-                  )
+                : String(summary?.missed ?? 0)
             }
-            subtitle={`${summary?.totalScheduled ?? 0} scheduled doses evaluated`}
+            subtitle={`${
+              summary?.totalScheduled ?? 0
+            } scheduled doses evaluated`}
           />
 
           <StatCard
@@ -1124,19 +764,15 @@ export default function HistoryPage() {
               loading
                 ? "—"
                 : String(
-                    (
-                      summary
-                        ?.incorrectChamber ??
-                      0
-                    ) +
-                      (
-                        summary
-                          ?.unverified ??
-                        0
-                      ),
+                    (summary?.incorrectChamber ?? 0) +
+                      (summary?.unverified ?? 0)
                   )
             }
-            subtitle={`${summary?.incorrectChamber ?? 0} incorrect chamber · ${summary?.unverified ?? 0} unverified`}
+            subtitle={`${
+              summary?.incorrectChamber ?? 0
+            } incorrect chamber · ${
+              summary?.unverified ?? 0
+            } unverified`}
           />
         </div>
 
@@ -1146,73 +782,60 @@ export default function HistoryPage() {
           </h2>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {(
-              data?.byMedicine ??
-              []
-            ).map(
-              (
-                medicine,
-              ) => (
-                <div
-                  key={
-                    medicine.medicineId ||
-                    medicine.medicineName
-                  }
-                  className="rounded-2xl border border-border/60 bg-background/60 p-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {medicine.medicineName}
-                    </p>
+            {(data?.byMedicine ?? []).map((medicine) => (
+              <div
+                key={
+                  medicine.medicineId ||
+                  medicine.medicineName
+                }
+                className="rounded-2xl border border-border/60 bg-background/60 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {medicine.medicineName}
+                  </p>
 
-                    <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                      {medicine.adherenceRate ==
-                      null
-                        ? "—"
-                        : `${medicine.adherenceRate}%`}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs text-gray-500 dark:text-gray-400">
-                    <span>
-                      <b className="block text-base text-gray-900 dark:text-white">
-                        {medicine.scheduled}
-                      </b>
-                      Due
-                    </span>
-
-                    <span>
-                      <b className="block text-base text-green-600">
-                        {medicine.verified}
-                      </b>
-                      Verified
-                    </span>
-
-                    <span>
-                      <b className="block text-base text-amber-600">
-                        {medicine.late}
-                      </b>
-                      Late
-                    </span>
-
-                    <span>
-                      <b className="block text-base text-red-600">
-                        {medicine.missed}
-                      </b>
-                      Missed
-                    </span>
-                  </div>
+                  <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                    {medicine.adherenceRate == null
+                      ? "—"
+                      : `${medicine.adherenceRate}%`}
+                  </span>
                 </div>
-              ),
-            )}
+
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs text-gray-500 dark:text-gray-400">
+                  <span>
+                    <b className="block text-base text-gray-900 dark:text-white">
+                      {medicine.scheduled}
+                    </b>
+                    Due
+                  </span>
+
+                  <span>
+                    <b className="block text-base text-green-600">
+                      {medicine.verified}
+                    </b>
+                    Verified
+                  </span>
+
+                  <span>
+                    <b className="block text-base text-amber-600">
+                      {medicine.late}
+                    </b>
+                    Late
+                  </span>
+
+                  <span>
+                    <b className="block text-base text-red-600">
+                      {medicine.missed}
+                    </b>
+                    Missed
+                  </span>
+                </div>
+              </div>
+            ))}
 
             {!loading &&
-              (
-                data
-                  ?.byMedicine.length ??
-                0
-              ) ===
-                0 && (
+              (data?.byMedicine.length ?? 0) === 0 && (
                 <p className="text-sm text-gray-500">
                   No medication performance data for this range.
                 </p>
@@ -1230,49 +853,27 @@ export default function HistoryPage() {
           </div>
 
           <div className="mt-5 space-y-6">
-            {groupedLogs.map(
-              ([
-                date,
-                logs,
-              ]) => (
-                <div
-                  key={date}
-                  className="space-y-2"
-                >
-                  <p className="px-1 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                    {dateHeading(
-                      date,
-                    )}
-                  </p>
+            {groupedLogs.map(([date, logs]) => (
+              <div key={date} className="space-y-2">
+                <p className="px-1 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  {dateHeading(date)}
+                </p>
 
-                  {logs.map(
-                    (
-                      log,
-                    ) => (
-                      <LogCard
-                        key={
-                          log._id
-                        }
-                        log={
-                          log
-                        }
-                        onAddAnnotation={
-                          setAnnotationLog
-                        }
-                      />
-                    ),
-                  )}
-                </div>
-              ),
+                {logs.map((log) => (
+                  <LogCard
+                    key={log._id}
+                    log={log}
+                    onAddAnnotation={setAnnotationLog}
+                  />
+                ))}
+              </div>
+            ))}
+
+            {!loading && groupedLogs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-gray-500">
+                No medication activity for this range.
+              </div>
             )}
-
-            {!loading &&
-              groupedLogs.length ===
-                0 && (
-                <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-gray-500">
-                  No medication activity for this range.
-                </div>
-              )}
 
             {loading && (
               <p className="text-sm text-gray-500">
@@ -1285,28 +886,14 @@ export default function HistoryPage() {
 
       {annotationLog && (
         <AnnotationDialog
-          log={
-            annotationLog
-          }
-          saving={
-            savingAnnotation
-          }
+          log={annotationLog}
+          saving={savingAnnotation}
           onCancel={() => {
-            if (
-              !savingAnnotation
-            ) {
-              setAnnotationLog(
-                null,
-              );
+            if (!savingAnnotation) {
+              setAnnotationLog(null);
             }
           }}
-          onSave={(
-            text,
-          ) =>
-            void saveAnnotation(
-              text,
-            )
-          }
+          onSave={(text) => void saveAnnotation(text)}
         />
       )}
     </div>

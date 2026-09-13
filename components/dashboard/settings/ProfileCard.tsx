@@ -5,17 +5,20 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import Toast from "@/components/ui/Toast";
-import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Check,
   Copy,
   User,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import Toast from "@/components/ui/Toast";
+import UpdatePasswordModal from "@/components/dashboard/settings/UpdatePasswordModal";
+import { accountIdSuffix } from "@/lib/accountIdentifier";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   collectErrors,
   validateAge,
@@ -25,31 +28,15 @@ import {
 } from "@/lib/validations";
 
 const CONDITIONS = [
-  {
-    value: "",
-    label: "Not specified",
-  },
-  {
-    value: "Diabetes",
-    label: "Diabetes",
-  },
-  {
-    value: "Hypertension",
-    label: "Hypertension",
-  },
+  { value: "", label: "Not specified" },
+  { value: "Diabetes", label: "Diabetes" },
+  { value: "Hypertension", label: "Hypertension" },
   {
     value: "Both",
-    label:
-      "Both (Diabetes & Hypertension)",
+    label: "Both (Diabetes & Hypertension)",
   },
-  {
-    value: "Other",
-    label: "Other",
-  },
-  {
-    value: "None",
-    label: "None",
-  },
+  { value: "Other", label: "Other" },
+  { value: "None", label: "None" },
 ];
 
 interface ConfirmModalProps {
@@ -57,17 +44,13 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel: string;
-  confirmColor:
-    | "red"
-    | "orange";
+  confirmColor: "red" | "orange";
   onConfirm: () => void;
   onCancel: () => void;
   loading?: boolean;
 }
 
-const ConfirmModal: React.FC<
-  ConfirmModalProps
-> = ({
+const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
   title,
   message,
@@ -125,9 +108,7 @@ const ConfirmModal: React.FC<
                 : "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700"
             }`}
           >
-            {loading
-              ? "Processing..."
-              : `Yes, ${confirmLabel}`}
+            {loading ? "Processing..." : `Yes, ${confirmLabel}`}
           </button>
         </div>
       </div>
@@ -138,181 +119,101 @@ const ConfirmModal: React.FC<
 const ProfileCard = () => {
   const router = useRouter();
 
-  const [
-    firstName,
-    setFirstName,
-  ] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [patientId, setPatientId] = useState("");
+  const [email, setEmail] = useState("");
+  const [condition, setCondition] = useState("");
+  const [age, setAge] = useState("");
+  const [role, setRole] = useState<"patient" | "family">(
+    "patient"
+  );
 
-  const [
-    middleName,
-    setMiddleName,
-  ] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [
-    lastName,
-    setLastName,
-  ] = useState("");
-
-  const [
-    patientId,
-    setPatientId,
-  ] = useState("");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [
-    condition,
-    setCondition,
-  ] = useState("");
-
-  const [age, setAge] =
-    useState("");
-
-  const [role, setRole] = useState<
-    "patient" | "family"
-  >("patient");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [
-    message,
-    setMessage,
-  ] = useState<{
+  const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
 
-  const [
-    previousCondition,
-    setPreviousCondition,
-  ] = useState("");
+  const [previousCondition, setPreviousCondition] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [patientIdCopied, setPatientIdCopied] = useState(false);
 
-  const [
-    showDeleteConfirm,
-    setShowDeleteConfirm,
-  ] = useState(false);
+  const copyPatientId = async () => {
+    if (!patientId) {
+      return;
+    }
 
-  const [deleting, setDeleting] =
-    useState(false);
+    const successful = await copyTextToClipboard(
+      accountIdSuffix(patientId)
+    );
 
-  const [
-    showPasswordModal,
-    setShowPasswordModal,
-  ] = useState(false);
+    if (!successful) {
+      setMessage({
+        type: "error",
+        text: "Unable to copy your Patient ID. Please try again.",
+      });
+      return;
+    }
 
-  const [
-    patientIdCopied,
-    setPatientIdCopied,
-  ] = useState(false);
+    setPatientIdCopied(true);
 
-  const copyPatientId =
-    async () => {
-      if (!patientId) {
+    window.setTimeout(() => setPatientIdCopied(false), 2000);
+  };
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const response = await fetch("/api/profile", {
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        setMessage({
+          type: "error",
+          text: data.error || "Failed to load profile.",
+        });
         return;
       }
 
-      await navigator.clipboard.writeText(
-        patientId
-      );
+      const profileRole =
+        data.data.role === "family" ? "family" : "patient";
 
-      setPatientIdCopied(true);
+      setFirstName(data.data.firstName || "");
+      setMiddleName(data.data.middleName || "");
+      setLastName(data.data.lastName || "");
+      setEmail(data.data.email || "");
+      setRole(profileRole);
 
-      window.setTimeout(
-        () =>
-          setPatientIdCopied(false),
-        2000
-      );
-    };
+      if (profileRole === "patient") {
+        setPatientId(data.data.patientId || "");
+        setCondition(data.data.condition || "");
+        setPreviousCondition(data.data.condition || "");
 
-  const fetchProfile =
-    useCallback(async () => {
-      try {
-        const response =
-          await fetch(
-            "/api/profile",
-            {
-              cache: "no-store",
-            }
-          );
-
-        const data =
-          await response.json();
-
-        if (!data.success) {
-          setMessage({
-            type: "error",
-            text:
-              data.error ||
-              "Failed to load profile.",
-          });
-
-          return;
-        }
-
-        const profileRole =
-          data.data.role === "family"
-            ? "family"
-            : "patient";
-
-        setFirstName(
-          data.data.firstName || ""
+        setAge(
+          data.data.age == null ? "" : String(data.data.age)
         );
-
-        setMiddleName(
-          data.data.middleName || ""
-        );
-
-        setLastName(
-          data.data.lastName || ""
-        );
-
-        setEmail(
-          data.data.email || ""
-        );
-
-        setRole(profileRole);
-
-        if (
-          profileRole === "patient"
-        ) {
-          setPatientId(
-            data.data.patientId || ""
-          );
-
-          setCondition(
-            data.data.condition || ""
-          );
-
-          setPreviousCondition(
-            data.data.condition || ""
-          );
-
-          setAge(
-            data.data.age == null
-              ? ""
-              : String(data.data.age)
-          );
-        } else {
-          setPatientId("");
-          setCondition("");
-          setPreviousCondition("");
-          setAge("");
-        }
-      } catch {
-        setMessage({
-          type: "error",
-          text:
-            "Network error. Unable to load profile.",
-        });
-      } finally {
-        setLoading(false);
+      } else {
+        setPatientId("");
+        setCondition("");
+        setPreviousCondition("");
+        setAge("");
       }
-    }, []);
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Network error. Unable to load profile.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void fetchProfile();
@@ -321,198 +222,138 @@ const ProfileCard = () => {
   const handleSave = async () => {
     setMessage(null);
 
-    const validationError =
-      collectErrors({
-        firstName: validateName(
-          firstName,
-          "First Name"
-        ),
-
-        middleName:
-          validateOptionalName(
-            middleName,
-            "Middle Name"
-          ),
-
-        lastName: validateName(
-          lastName,
-          "Last Name"
-        ),
-
-        email: validateEmail(email),
-
-        ...(role === "patient"
-          ? {
-              age: validateAge(age),
-            }
-          : {}),
-      });
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(
+        middleName,
+        "Middle Name"
+      ),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      ...(role === "patient"
+        ? { age: validateAge(age) }
+        : {}),
+    });
 
     if (validationError) {
       setMessage({
         type: "error",
         text: validationError,
       });
-
       return;
     }
 
     setSaving(true);
 
     try {
-      const response =
-        await fetch(
-          "/api/profile",
-          {
-            method: "PUT",
+      const response = await fetch("/api/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName,
+          middleName,
+          lastName,
+          email,
+          ...(role === "patient"
+            ? {
+                condition,
+                age: age === "" ? null : Number(age),
+              }
+            : {}),
+        }),
+      });
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              firstName,
-              middleName,
-              lastName,
-              email,
-
-              ...(role === "patient"
-                ? {
-                    condition,
-                    age:
-                      age === ""
-                        ? null
-                        : Number(
-                            age
-                          ),
-                  }
-                : {}),
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!data.success) {
         setMessage({
           type: "error",
-          text:
-            data.error ||
-            "Failed to update profile.",
+          text: data.error || "Failed to update profile.",
         });
-
         return;
       }
 
       if (
         role === "family" ||
-        condition ===
-          previousCondition
+        condition === previousCondition
       ) {
         setMessage({
           type: "success",
-          text:
-            "Profile updated successfully!",
+          text: "Profile updated successfully!",
         });
-
         return;
       }
 
       const conditionLabel =
-        CONDITIONS.find(
-          (item) =>
-            item.value === condition
-        )?.label || condition;
+        CONDITIONS.find((item) => item.value === condition)
+          ?.label || condition;
 
       setMessage({
         type: "success",
         text: `Profile updated successfully! Condition set to: ${conditionLabel}`,
       });
 
-      setPreviousCondition(
-        condition
-      );
+      setPreviousCondition(condition);
     } catch {
       setMessage({
         type: "error",
-        text:
-          "Network error. Please try again.",
+        text: "Network error. Please try again.",
       });
     } finally {
       setSaving(false);
 
-      window.setTimeout(
-        () => setMessage(null),
-        4000
-      );
+      window.setTimeout(() => setMessage(null), 4000);
     }
   };
 
-  const handleDeleteAccount =
-    async () => {
-      setDeleting(true);
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
 
-      try {
-        const response =
-          await fetch(
-            "/api/profile/delete-account",
-            {
-              method: "DELETE",
-            }
-          );
-
-        const data =
-          await response.json();
-
-        if (data.success) {
-          setShowDeleteConfirm(
-            false
-          );
-
-          router.push("/sign-in");
-          router.refresh();
-
-          return;
+    try {
+      const response = await fetch(
+        "/api/profile/delete-account",
+        {
+          method: "DELETE",
         }
+      );
 
+      const data = await response.json();
+
+      if (data.success) {
         setShowDeleteConfirm(false);
 
-        setMessage({
-          type: "error",
-          text:
-            data.error ||
-            "Deletion failed. Please try again.",
-        });
-      } catch {
-        setShowDeleteConfirm(false);
-
-        setMessage({
-          type: "error",
-          text:
-            "Network error. Please try again.",
-        });
-      } finally {
-        setDeleting(false);
+        router.push("/sign-in");
+        router.refresh();
+        return;
       }
-    };
+
+      setShowDeleteConfirm(false);
+
+      setMessage({
+        type: "error",
+        text:
+          data.error || "Deletion failed. Please try again.",
+      });
+    } catch {
+      setShowDeleteConfirm(false);
+
+      setMessage({
+        type: "error",
+        text: "Network error. Please try again.",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="animate-pulse rounded-xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="space-y-4">
-          {[
-            1,
-            2,
-            3,
-            4,
-            5,
-          ].map((item) => (
-            <div
-              key={item}
-              className="space-y-1"
-            >
+          {[1, 2, 3, 4, 5].map((item) => (
+            <div key={item} className="space-y-1">
               <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700" />
               <div className="h-9 rounded bg-gray-100 dark:bg-gray-600" />
             </div>
@@ -531,28 +372,18 @@ const ProfileCard = () => {
           type={message.type}
           message={message.text}
           duration={5000}
-          onClose={() =>
-            setMessage(null)
-          }
+          onClose={() => setMessage(null)}
         />
       )}
 
       <ConfirmModal
-        isOpen={
-          showDeleteConfirm
-        }
+        isOpen={showDeleteConfirm}
         title="Delete Account and Data?"
         message="Are you sure you want to delete your account? This action will permanently remove your account and all associated data. You will be logged out immediately, and your data cannot be recovered."
         confirmLabel="Delete Account"
         confirmColor="red"
-        onConfirm={
-          handleDeleteAccount
-        }
-        onCancel={() =>
-          setShowDeleteConfirm(
-            false
-          )
-        }
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setShowDeleteConfirm(false)}
         loading={deleting}
       />
 
@@ -579,9 +410,7 @@ const ProfileCard = () => {
               type="text"
               value={firstName}
               onChange={(event) =>
-                setFirstName(
-                  event.target.value
-                )
+                setFirstName(event.target.value)
               }
               placeholder="Enter your first name"
               disabled={saving}
@@ -605,9 +434,7 @@ const ProfileCard = () => {
               type="text"
               value={middleName}
               onChange={(event) =>
-                setMiddleName(
-                  event.target.value
-                )
+                setMiddleName(event.target.value)
               }
               placeholder="Enter your middle name"
               disabled={saving}
@@ -628,9 +455,7 @@ const ProfileCard = () => {
               type="text"
               value={lastName}
               onChange={(event) =>
-                setLastName(
-                  event.target.value
-                )
+                setLastName(event.target.value)
               }
               placeholder="Enter your last name"
               disabled={saving}
@@ -650,11 +475,7 @@ const ProfileCard = () => {
               id="email"
               type="email"
               value={email}
-              onChange={(event) =>
-                setEmail(
-                  event.target.value
-                )
-              }
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="Enter your email"
               disabled={saving}
               className="rounded-lg border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
@@ -682,12 +503,8 @@ const ProfileCard = () => {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    void copyPatientId()
-                  }
-                  disabled={
-                    !patientId
-                  }
+                  onClick={() => void copyPatientId()}
+                  disabled={!patientId}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                   aria-label="Copy Patient ID"
                 >
@@ -697,17 +514,13 @@ const ProfileCard = () => {
                     <Copy className="h-4 w-4" />
                   )}
 
-                  {patientIdCopied
-                    ? "Copied!"
-                    : "Copy"}
+                  {patientIdCopied ? "Copied!" : "Copy"}
                 </button>
               </div>
 
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Share this only when a
-                trusted Family member
-                needs to identify your
-                Patient account.
+                Share this only when a trusted Family member needs
+                to identify your Patient account.
               </p>
             </div>
           )}
@@ -728,11 +541,7 @@ const ProfileCard = () => {
                 id="age"
                 type="number"
                 value={age}
-                onChange={(event) =>
-                  setAge(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setAge(event.target.value)}
                 placeholder="Enter your age"
                 min="1"
                 max="120"
@@ -755,29 +564,16 @@ const ProfileCard = () => {
                 id="condition"
                 value={condition}
                 onChange={(event) =>
-                  setCondition(
-                    event.target.value
-                  )
+                  setCondition(event.target.value)
                 }
                 disabled={saving}
                 className="h-9 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-blue-800"
               >
-                {CONDITIONS.map(
-                  (item) => (
-                    <option
-                      key={
-                        item.value
-                      }
-                      value={
-                        item.value
-                      }
-                    >
-                      {
-                        item.label
-                      }
-                    </option>
-                  )
-                )}
+                {CONDITIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -788,18 +584,12 @@ const ProfileCard = () => {
             disabled={saving}
             className="mt-2 w-full rounded-lg"
           >
-            {saving
-              ? "Saving..."
-              : "Save Changes"}
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
 
           <Button
             type="button"
-            onClick={() =>
-              setShowPasswordModal(
-                true
-              )
-            }
+            onClick={() => setShowPasswordModal(true)}
             disabled={saving}
             className="mt-2 w-full rounded-lg bg-slate-700 text-white hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-700"
           >
@@ -808,11 +598,7 @@ const ProfileCard = () => {
 
           <button
             type="button"
-            onClick={() =>
-              setShowDeleteConfirm(
-                true
-              )
-            }
+            onClick={() => setShowDeleteConfirm(true)}
             disabled={saving}
             className="w-full rounded-lg border-2 border-red-200 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
           >
@@ -823,11 +609,7 @@ const ProfileCard = () => {
 
       <UpdatePasswordModal
         isOpen={showPasswordModal}
-        onClose={() =>
-          setShowPasswordModal(
-            false
-          )
-        }
+        onClose={() => setShowPasswordModal(false)}
       />
     </>
   );

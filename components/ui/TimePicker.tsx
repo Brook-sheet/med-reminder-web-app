@@ -1,9 +1,6 @@
 "use client";
-// components/ui/TimePicker.tsx
 
 import React, { useReducer, useEffect } from "react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type AmPm = "AM" | "PM";
 
@@ -19,11 +16,11 @@ interface TimePickerProps {
   disabled?: boolean;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function parseTime(timeStr: string): TimeState {
-  // Match "8:00 AM" or "08:30 PM"
-  const ampmMatch = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  const ampmMatch = timeStr.match(
+    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i
+  );
+
   if (ampmMatch) {
     return {
       hour12: parseInt(ampmMatch[1], 10),
@@ -32,26 +29,38 @@ function parseTime(timeStr: string): TimeState {
     };
   }
 
-  // Match "08:00" 24-hour
   const plainMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+
   if (plainMatch) {
     let h = parseInt(plainMatch[1], 10);
     const m = parseInt(plainMatch[2], 10);
     const period: AmPm = h >= 12 ? "PM" : "AM";
-    if (h === 0) h = 12;
-    else if (h > 12) h -= 12;
-    return { hour12: h, minute: m, ampm: period };
+
+    if (h === 0) {
+      h = 12;
+    } else if (h > 12) {
+      h -= 12;
+    }
+
+    return {
+      hour12: h,
+      minute: m,
+      ampm: period,
+    };
   }
 
-  // Default fallback
-  return { hour12: 8, minute: 0, ampm: "AM" };
+  return {
+    hour12: 8,
+    minute: 0,
+    ampm: "AM",
+  };
 }
 
 function buildTimeString(state: TimeState): string {
-  return `${state.hour12}:${state.minute.toString().padStart(2, "0")} ${state.ampm}`;
+  return `${state.hour12}:${state.minute
+    .toString()
+    .padStart(2, "0")} ${state.ampm}`;
 }
-
-// ─── Reducer ─────────────────────────────────────────────────────────────────
 
 type Action =
   | { type: "SET_HOUR"; payload: number }
@@ -63,57 +72,86 @@ function reducer(state: TimeState, action: Action): TimeState {
   switch (action.type) {
     case "SET_HOUR":
       return { ...state, hour12: action.payload };
+
     case "SET_MINUTE":
       return { ...state, minute: action.payload };
+
     case "SET_AMPM":
       return { ...state, ampm: action.payload };
+
     case "SYNC":
       return action.payload;
+
     default:
       return state;
   }
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const TimePicker: React.FC<TimePickerProps> = ({
+  value,
+  onChange,
+  disabled = false,
+}) => {
+  const [state, dispatch] = useReducer(
+    reducer,
+    parseTime(value || "8:00 AM")
+  );
 
-const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = false }) => {
-  const [state, dispatch] = useReducer(reducer, parseTime(value || "8:00 AM"));
-
-  // Sync internal state when the parent changes the value prop
   useEffect(() => {
-    dispatch({ type: "SYNC", payload: parseTime(value || "8:00 AM") });
+    dispatch({
+      type: "SYNC",
+      payload: parseTime(value || "8:00 AM"),
+    });
   }, [value]);
 
-  const handleHour = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const h = parseInt(e.target.value, 10);
-    dispatch({ type: "SET_HOUR", payload: h });
+  const handleHour = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const h = parseInt(event.target.value, 10);
+
+    dispatch({
+      type: "SET_HOUR",
+      payload: h,
+    });
+
     onChange(buildTimeString({ ...state, hour12: h }));
   };
 
-  const handleMinute = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const m = parseInt(e.target.value, 10);
-    dispatch({ type: "SET_MINUTE", payload: m });
+  const handleMinute = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const m = parseInt(event.target.value, 10);
+
+    dispatch({
+      type: "SET_MINUTE",
+      payload: m,
+    });
+
     onChange(buildTimeString({ ...state, minute: m }));
   };
 
-  const handleAmpm = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const a = e.target.value as AmPm;
-    dispatch({ type: "SET_AMPM", payload: a });
+  const handleAmpm = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const a = event.target.value as AmPm;
+
+    dispatch({
+      type: "SET_AMPM",
+      payload: a,
+    });
+
     onChange(buildTimeString({ ...state, ampm: a }));
   };
 
-  // `min-w-0` lets each select shrink below its intrinsic width, which is what
-  // keeps the row intact at 320px. Widths are proportional, never fixed.
   const cls =
-    "h-10 min-w-0 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm outline-none " +
+    "h-11 sm:h-10 min-w-0 rounded-md border border-gray-300 bg-white px-2 py-1 text-base sm:text-sm outline-none " +
     "focus:border-blue-400 focus:ring-2 focus:ring-blue-200 " +
     "disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer " +
     "dark:bg-gray-700 dark:border-gray-600 dark:text-white " +
     "dark:focus:border-blue-400 dark:focus:ring-blue-200";
 
   return (
-    <div className="flex w-full min-w-0 flex-1 items-center gap-1.5">
-      {/* Hour 1–12 */}
+    <div className="flex w-full min-w-0 basis-full sm:basis-auto flex-1 items-center gap-1.5">
       <select
         value={state.hour12}
         onChange={handleHour}
@@ -121,16 +159,19 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
         className={`${cls} flex-1`}
         aria-label="Hour"
       >
-        {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-          <option key={h} value={h}>
-            {h}
-          </option>
-        ))}
+        {Array.from({ length: 12 }, (_, i) => i + 1).map(
+          (hour) => (
+            <option key={hour} value={hour}>
+              {hour}
+            </option>
+          )
+        )}
       </select>
 
-      <span className="shrink-0 font-bold text-gray-500 select-none">:</span>
+      <span className="shrink-0 font-bold text-gray-500 select-none">
+        :
+      </span>
 
-      {/* Minutes 00–55 in 5-minute steps */}
       <select
         value={state.minute}
         onChange={handleMinute}
@@ -138,14 +179,20 @@ const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, disabled = fal
         className={`${cls} flex-1`}
         aria-label="Minute"
       >
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59].map((m) => (
-          <option key={m} value={m}>
-            {m.toString().padStart(2, "0")}
+        {[
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+          20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+          30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+          40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+          50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+        ].map((minute) => (
+          <option key={minute} value={minute}>
+            {minute.toString().padStart(2, "0")}
           </option>
         ))}
       </select>
 
-      {/* AM / PM */}
       <select
         value={state.ampm}
         onChange={handleAmpm}

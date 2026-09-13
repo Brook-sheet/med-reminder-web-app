@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { Loader2, Search, UserPlus, X } from "lucide-react";
 
+import AccountIdInput from "@/components/ui/AccountIdInput";
+import { buildAccountIdentifier } from "@/lib/accountIdentifier";
+
 type Role = "patient" | "family";
 
 interface SearchResult {
@@ -40,10 +43,11 @@ export default function AddContactDialog({
   const [error, setError] = useState<string | null>(null);
 
   const targetLabel = role === "patient" ? "Family" : "Patient";
-  const placeholder = role === "patient" ? "FM-ABC123" : "PT-ABC123";
+  const prefix = role === "patient" ? "FM-" : "PT-";
 
   const searchAccount = async () => {
-    const normalized = identifier.trim().toUpperCase();
+    const normalized = buildAccountIdentifier(identifier, prefix);
+
     if (!normalized) {
       setError(`Enter the ${targetLabel} ID.`);
       return;
@@ -52,16 +56,22 @@ export default function AddContactDialog({
     setSearching(true);
     setError(null);
     setResult(null);
+
     try {
       const response = await fetch(
         `/api/chats/search?identifier=${encodeURIComponent(normalized)}`,
         { cache: "no-store" }
       );
+
       const data = await response.json();
+
       if (!response.ok || !data.success) {
-        setError(data.error || `Could not find this ${targetLabel} account.`);
+        setError(
+          data.error || `Could not find this ${targetLabel} account.`
+        );
         return;
       }
+
       setResult(data.data);
     } catch {
       setError("Network error. Please try again.");
@@ -72,22 +82,31 @@ export default function AddContactDialog({
 
   const sendRequest = async () => {
     if (!result) return;
+
     setSubmitting(true);
     setError(null);
+
     try {
       const response = await fetch("/api/chats", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           identifier: result.user.identifier,
           contactName: contactName.trim() || undefined,
         }),
       });
+
       const data = await response.json();
+
       if (!response.ok || !data.success) {
-        setError(data.error || "Could not send the Message Request.");
+        setError(
+          data.error || "Could not send the Message Request."
+        );
         return;
       }
+
       onRequestSent();
       onClose();
     } catch {
@@ -111,10 +130,12 @@ export default function AddContactDialog({
             <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">
               <UserPlus className="h-5 w-5" />
             </div>
+
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Add {targetLabel} to Chat
             </h2>
           </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -126,8 +147,8 @@ export default function AddContactDialog({
         </div>
 
         <p className="mb-4 text-sm leading-6 text-slate-500">
-          Search using the {targetLabel} ID. A Message Request will be sent and
-          Chat stays locked until the recipient accepts.
+          Search using the {targetLabel} ID. A Message Request will be
+          sent and Chat stays locked until the recipient accepts.
         </p>
 
         <div className="space-y-4">
@@ -138,12 +159,14 @@ export default function AddContactDialog({
             >
               {targetLabel} ID
             </label>
+
             <div className="flex gap-2">
-              <input
+              <AccountIdInput
+                prefix={prefix}
                 id="chatAccountId"
                 value={identifier}
-                onChange={(event) => {
-                  setIdentifier(event.target.value.toUpperCase());
+                onValueChange={(value) => {
+                  setIdentifier(value);
                   setResult(null);
                   setError(null);
                 }}
@@ -153,16 +176,18 @@ export default function AddContactDialog({
                     void searchAccount();
                   }
                 }}
-                placeholder={placeholder}
+                placeholder="ABC123"
                 maxLength={20}
                 disabled={searching || submitting}
                 autoFocus
-                className="min-w-0 flex-1 rounded-2xl border border-border/80 bg-background px-4 py-2.5 font-mono text-sm uppercase tracking-wider outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
+
               <button
                 type="button"
                 onClick={() => void searchAccount()}
-                disabled={searching || submitting || !identifier.trim()}
+                disabled={
+                  searching || submitting || !identifier.trim()
+                }
                 className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-3 text-white hover:bg-blue-700 disabled:opacity-50"
                 aria-label={`Search ${targetLabel} ID`}
               >
@@ -180,9 +205,12 @@ export default function AddContactDialog({
               <p className="font-semibold text-slate-900 dark:text-white">
                 {result.user.name}
               </p>
+
               <p className="text-xs text-slate-500">
-                {result.user.role === "family" ? "Family Member" : "Patient"} ·{" "}
-                {result.user.identifier}
+                {result.user.role === "family"
+                  ? "Family Member"
+                  : "Patient"}{" "}
+                · {result.user.identifier}
               </p>
 
               {result.relationship.status !== "accepted" &&
@@ -192,13 +220,23 @@ export default function AddContactDialog({
                       htmlFor="contactName"
                       className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300"
                     >
-                      Contact Name <span className="font-normal text-slate-400">(optional)</span>
+                      Contact Name{" "}
+                      <span className="font-normal text-slate-400">
+                        (optional)
+                      </span>
                     </label>
+
                     <input
                       id="contactName"
                       value={contactName}
-                      onChange={(event) => setContactName(event.target.value)}
-                      placeholder={role === "patient" ? "Example: Mom" : "Example: John"}
+                      onChange={(event) =>
+                        setContactName(event.target.value)
+                      }
+                      placeholder={
+                        role === "patient"
+                          ? "Example: Mom"
+                          : "Example: John"
+                      }
                       maxLength={80}
                       disabled={submitting}
                       className="w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm outline-none focus:border-blue-500"
@@ -212,7 +250,9 @@ export default function AddContactDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      onOpenConversation(result.relationship.conversationId!);
+                      onOpenConversation(
+                        result.relationship.conversationId!
+                      );
                       onClose();
                     }}
                     className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
@@ -234,7 +274,9 @@ export default function AddContactDialog({
                     disabled={submitting}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {submitting && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
                     Add Chat
                   </button>
                 )}
