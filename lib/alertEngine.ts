@@ -5,6 +5,13 @@ import {
 } from "@/lib/mongodb";
 
 import {
+  formatMedicationDateLabel,
+  formatMedicationTime,
+  medicationScheduledAt,
+  resolveMedicationTimeZone,
+} from "@/lib/medicationTime";
+
+import {
   sendWebPushToUser,
   type ChannelDeliveryResult,
 } from "@/lib/notificationChannels";
@@ -293,46 +300,73 @@ function safePatientFirstName(
   );
 }
 
-function formatSmsTime(
-  date: Date
+function scheduledDateFromEvent(
+  event: MedicationAlertEvent
 ): string {
-  const options:
-    Intl.DateTimeFormatOptions = {
-    hour:
-      "numeric",
+  return typeof event.metadata
+    ?.scheduledDate === "string"
+    ? event.metadata.scheduledDate.trim()
+    : "";
+}
 
-    minute:
-      "2-digit",
+function formatSmsSchedule(
+  event: MedicationAlertEvent
+): {
+  medicine: string;
+  date: string;
+  time: string;
+} {
+  const medicine =
+    event.medicineName?.trim() ||
+    "scheduled medication";
 
-    hour12:
-      true,
+  const scheduledDate =
+    scheduledDateFromEvent(event);
 
-    timeZone:
-      process.env
-        .MEDICATION_TIME_ZONE ||
-      "Asia/Manila",
+  const scheduledTime =
+    event.scheduledTime?.trim() ||
+    "";
+
+  const timeZone =
+    resolveMedicationTimeZone();
+
+  const date = scheduledDate
+    ? formatMedicationDateLabel(
+        scheduledDate,
+        {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }
+      )
+    : "the scheduled date";
+
+  const scheduledAt =
+    scheduledDate &&
+    scheduledTime
+      ? medicationScheduledAt(
+          scheduledDate,
+          scheduledTime,
+          timeZone
+        )
+      : new Date(Number.NaN);
+
+  const time =
+    !Number.isNaN(
+      scheduledAt.getTime()
+    )
+      ? formatMedicationTime(
+          scheduledAt,
+          timeZone
+        )
+      : scheduledTime ||
+        "the scheduled time";
+
+  return {
+    medicine,
+    date,
+    time,
   };
-
-  try {
-    return new Intl.DateTimeFormat(
-      "en-PH",
-      options
-    ).format(
-      date
-    );
-  } catch {
-    return new Intl.DateTimeFormat(
-      "en-PH",
-      {
-        ...options,
-
-        timeZone:
-          "Asia/Manila",
-      }
-    ).format(
-      date
-    );
-  }
 }
 
 function smsMessage(
@@ -347,73 +381,29 @@ function smsMessage(
       patientFirstName
     );
 
-  const occurredAt =
-    event.occurredAt ||
-    new Date();
+  const schedule =
+    formatSmsSchedule(
+      event
+    );
 
   switch (
     event.eventType
   ) {
     case "MEDICATION_VERIFIED":
-      return `Rx Box Alert: ${name}'s scheduled medication was marked as taken at ${formatSmsTime(
-        occurredAt
-      )}. Open Rx Box for details.`;
+      return `Rx Box Alert: ${name} took ${schedule.medicine}, scheduled on ${schedule.date} at ${schedule.time}.`;
 
     case "MEDICATION_LATE":
-      return `Rx Box Alert: ${name}'s scheduled medication was marked as taken late at ${formatSmsTime(
-        occurredAt
-      )}. Open Rx Box for details.`;
+      return `Rx Box Alert: ${name} took ${schedule.medicine} late. It was scheduled on ${schedule.date} at ${schedule.time}.`;
 
     case "MEDICATION_MISSED":
-      return `Rx Box Alert: ${name} missed a scheduled medication at ${
-        event.scheduledTime ||
-        "the scheduled time"
-      }. Please check on the patient.`;
+      return `Rx Box Alert: ${name} missed ${schedule.medicine}, scheduled on ${schedule.date} at ${schedule.time}. Please check on the patient.`;
 
     case "CRITICAL_MEDICATION_EVENT":
-      return `Rx Box Alert: ${name} has a medication event requiring immediate attention. Open Rx Box for details.`;
+      return `Rx Box Alert: ${name}'s ${schedule.medicine}, scheduled on ${schedule.date} at ${schedule.time}, requires immediate attention.`;
 
     default:
       return `Rx Box Alert: ${name} has a medication update. Open Rx Box for details.`;
   }
-}
-
-function smsDedupeEventKey(
-  event:
-    MedicationAlertEvent,
-
-  fallbackEventKey:
-    string
-): string {
-  const scheduledDate =
-    typeof event.metadata
-      ?.scheduledDate ===
-    "string"
-      ? event.metadata
-          .scheduledDate
-          .trim()
-      : "";
-
-  if (
-    [
-      "MEDICATION_VERIFIED",
-      "MEDICATION_LATE",
-      "MEDICATION_MISSED",
-    ].includes(
-      event.eventType
-    ) &&
-    scheduledDate &&
-    event.scheduledTime
-  ) {
-    /*
-     * All medicines with the same
-     * patient/date/time use one
-     * concise group SMS.
-     */
-    return `medication-final-group:${event.patientId}:${scheduledDate}:${event.scheduledTime}`;
-  }
-
-  return fallbackEventKey;
 }
 
 function smsAlertType(
@@ -639,12 +629,10 @@ async function processMedicationAlertEventInternal(
     );
 
   /*
-   * This projection fixes the
-   * MongoDB path-collision error.
+   * This projection fixes the MongoDB path-collision error.
    *
-   * It does not select both the
-   * notificationPreferences parent
-   * and smsPhoneNumber child.
+   * It does not select both the notificationPreferences
+   * parent and smsPhoneNumber child.
    */
   const monitors =
     monitorIds.length >
@@ -887,11 +875,14 @@ async function processMedicationAlertEventInternal(
       continue;
     }
 
+    /*
+     * Use the final medication log event key, not a
+     * patient/date/time group key. This allows different
+     * medicines at the same time to each include their
+     * medicine name while still preventing duplicates.
+     */
     const smsKey =
-      `${smsDedupeEventKey(
-        event,
-        eventKey
-      )}:${recipient.id.toString()}:sms`;
+      `${eventKey}:${recipient.id.toString()}:sms`;
 
     const [
       pushResult,
@@ -1024,9 +1015,8 @@ export async function processMedicationAlertEvent(
     );
   } catch (error) {
     /*
-     * SMS, push, or alert failures must
-     * never roll back taken, late, or
-     * missed medication status.
+     * SMS, push, or alert failures must never roll back
+     * taken, late, or missed medication status.
      */
     console.error(
       "[Alert Engine] Processing failed:",
