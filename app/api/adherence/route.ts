@@ -5,6 +5,7 @@ import User from '@/models/User';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import type { ApiResponse } from '@/lib/interfaces/data/Api';
 import { analyzeAdherence, type RawLog } from '@/lib/adherenceEngine';
+import { buildAdherenceHistory } from '@/lib/adherenceHistory';
 import {
   analyzeAdaptiveIntervention,
   generateEscalationMessage,
@@ -301,8 +302,14 @@ export async function GET(request: NextRequest) {
         recommendation:
           analysis.recommendation,
 
-        behavioral:
-          analysis.behavioral,
+        behavioral: {
+          ...analysis.behavioral,
+          dailyTrend: buildAdherenceHistory(
+            rawLogs,
+            now,
+            timeZone,
+          ),
+        },
 
         adaptiveIntervention: {
           behavioralPattern:
