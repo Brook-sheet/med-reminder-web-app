@@ -1,4 +1,3 @@
-// components/chats/ChatWindow.tsx
 'use client';
 
 import {
@@ -6,6 +5,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
+  type KeyboardEvent,
 } from 'react';
 import {
   ArrowLeft,
@@ -17,48 +18,30 @@ import {
   Reply,
   X,
 } from 'lucide-react';
+
 import { useChat } from '@/hooks/useChat';
 import MessageBubble from './MessageBubble';
 import EditContactDialog from './EditContactDialog';
 import PendingAttachmentBar from './PendingAttachmentBar';
+import ContactPhoto from './ContactPhoto';
 import { validateAttachment } from '@/lib/chatMedia';
 import type {
   ChatMessage,
   ConversationSummary,
 } from '@/lib/interfaces/data/Chat';
 
-function initials(name: string) {
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) =>
-        part[0]?.toUpperCase()
-      )
-      .join('') || '?'
-  );
-}
-
 function dayLabel(iso: string) {
   const date = new Date(iso);
   const now = new Date();
 
-  const sameDay =
-    date.toDateString() ===
-    now.toDateString();
-
-  if (sameDay) {
+  if (date.toDateString() === now.toDateString()) {
     return 'Today';
   }
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 
-  if (
-    date.toDateString() ===
-    yesterday.toDateString()
-  ) {
+  if (date.toDateString() === yesterday.toDateString()) {
     return 'Yesterday';
   }
 
@@ -69,20 +52,13 @@ function dayLabel(iso: string) {
   });
 }
 
-function replySnippet(
-  message: ChatMessage
-): string {
+function replySnippet(message: ChatMessage): string {
   if (message.unsent) {
     return 'Original message was unsent';
   }
 
-  if (
-    message.type === 'attachment' &&
-    message.attachment
-  ) {
-    return message.attachment.mimeType.startsWith(
-      'image/'
-    )
+  if (message.type === 'attachment' && message.attachment) {
+    return message.attachment.mimeType.startsWith('image/')
       ? '📷 Photo'
       : `📎 ${message.attachment.fileName}`;
   }
@@ -126,59 +102,28 @@ export default function ChatWindow({
   );
 
   const [draft, setDraft] = useState('');
-  const [showEditDialog, setShowEditDialog] =
-    useState(false);
-
-  const [pendingFile, setPendingFile] =
-    useState<File | null>(null);
-
-  const [
-    pendingPreviewUrl,
-    setPendingPreviewUrl,
-  ] = useState<string | null>(null);
-
-  const [attachError, setAttachError] =
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingPreviewUrl, setPendingPreviewUrl] =
+    useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] =
     useState<string | null>(null);
 
-  const [replyTarget, setReplyTarget] =
-    useState<ChatMessage | null>(null);
-
-  const [
-    highlightedMessageId,
-    setHighlightedMessageId,
-  ] = useState<string | null>(null);
-
-  const scrollRef =
-    useRef<HTMLDivElement>(null);
-
-  const bottomRef =
-    useRef<HTMLDivElement>(null);
-
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const wasNearBottomRef = useRef(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const composerRef =
-    useRef<HTMLTextAreaElement>(null);
-
-  const highlightTimerRef =
-    useRef<NodeJS.Timeout | null>(null);
-
-  const [
-    prevConversationId,
-    setPrevConversationId,
-  ] = useState(
+  const [prevConversationId, setPrevConversationId] = useState(
     conversation.conversationId
   );
 
-  if (
-    conversation.conversationId !==
-    prevConversationId
-  ) {
-    setPrevConversationId(
-      conversation.conversationId
-    );
+  if (conversation.conversationId !== prevConversationId) {
+    setPrevConversationId(conversation.conversationId);
     setReplyTarget(null);
     setHighlightedMessageId(null);
   }
@@ -186,16 +131,13 @@ export default function ChatWindow({
   useEffect(() => {
     return () => {
       if (highlightTimerRef.current) {
-        clearTimeout(
-          highlightTimerRef.current
-        );
+        clearTimeout(highlightTimerRef.current);
       }
     };
   }, []);
 
   useEffect(() => {
     const container = scrollRef.current;
-
     if (!container) return;
 
     const nearBottom =
@@ -204,10 +146,7 @@ export default function ChatWindow({
         container.clientHeight <
       160;
 
-    if (
-      wasNearBottomRef.current ||
-      nearBottom
-    ) {
+    if (wasNearBottomRef.current || nearBottom) {
       bottomRef.current?.scrollIntoView({
         behavior: 'smooth',
         block: 'end',
@@ -218,16 +157,13 @@ export default function ChatWindow({
   useEffect(() => {
     return () => {
       if (pendingPreviewUrl) {
-        URL.revokeObjectURL(
-          pendingPreviewUrl
-        );
+        URL.revokeObjectURL(pendingPreviewUrl);
       }
     };
   }, [pendingPreviewUrl]);
 
   const handleScroll = () => {
     const container = scrollRef.current;
-
     if (!container) return;
 
     wasNearBottomRef.current =
@@ -247,9 +183,7 @@ export default function ChatWindow({
       setPendingFile(null);
 
       if (pendingPreviewUrl) {
-        URL.revokeObjectURL(
-          pendingPreviewUrl
-        );
+        URL.revokeObjectURL(pendingPreviewUrl);
       }
 
       setPendingPreviewUrl(null);
@@ -257,17 +191,11 @@ export default function ChatWindow({
       setReplyTarget(null);
       notifyTyping(false);
 
-      void sendAttachment(
-        file,
-        caption,
-        activeReply
-      );
-
+      void sendAttachment(file, caption, activeReply);
       return;
     }
 
     const text = draft.trim();
-
     if (!text) return;
 
     setDraft('');
@@ -278,31 +206,27 @@ export default function ChatWindow({
   };
 
   const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>
+    event: KeyboardEvent<HTMLTextAreaElement>
   ) => {
-    if (
-      event.key === 'Enter' &&
-      !event.shiftKey
-    ) {
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSend();
     }
   };
 
-  const handlePickAttachment = () =>
+  const handlePickAttachment = () => {
     fileInputRef.current?.click();
+  };
 
   const handleAttachmentChange = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-
     event.target.value = '';
 
     if (!file) return;
 
-    const validationError =
-      validateAttachment(file);
+    const validationError = validateAttachment(file);
 
     if (validationError) {
       setAttachError(validationError);
@@ -312,9 +236,7 @@ export default function ChatWindow({
     setAttachError(null);
 
     if (pendingPreviewUrl) {
-      URL.revokeObjectURL(
-        pendingPreviewUrl
-      );
+      URL.revokeObjectURL(pendingPreviewUrl);
     }
 
     setPendingFile(file);
@@ -328,29 +250,20 @@ export default function ChatWindow({
 
   const handleCancelAttachment = () => {
     if (pendingPreviewUrl) {
-      URL.revokeObjectURL(
-        pendingPreviewUrl
-      );
+      URL.revokeObjectURL(pendingPreviewUrl);
     }
 
     setPendingFile(null);
     setPendingPreviewUrl(null);
   };
 
-  const handleReply = (
-    message: ChatMessage
-  ) => {
+  const handleReply = (message: ChatMessage) => {
     setReplyTarget(message);
     composerRef.current?.focus();
   };
 
-  const handleJumpToMessage = (
-    messageId: string
-  ) => {
-    const element = document.getElementById(
-      `msg-${messageId}`
-    );
-
+  const handleJumpToMessage = (messageId: string) => {
+    const element = document.getElementById(`msg-${messageId}`);
     if (!element) return;
 
     element.scrollIntoView({
@@ -361,42 +274,30 @@ export default function ChatWindow({
     setHighlightedMessageId(messageId);
 
     if (highlightTimerRef.current) {
-      clearTimeout(
-        highlightTimerRef.current
-      );
+      clearTimeout(highlightTimerRef.current);
     }
 
-    highlightTimerRef.current =
-      setTimeout(
-        () =>
-          setHighlightedMessageId(null),
-        1200
-      );
+    highlightTimerRef.current = setTimeout(
+      () => setHighlightedMessageId(null),
+      1200
+    );
   };
 
   const rows = useMemo(() => {
-    return messages.map(
-      (message, index) => {
-        const label = dayLabel(
-          message.createdAt
-        );
+    return messages.map((message, index) => {
+      const label = dayLabel(message.createdAt);
 
-        const previousLabel =
-          index > 0
-            ? dayLabel(
-                messages[index - 1]
-                  .createdAt
-              )
-            : null;
+      const previousLabel =
+        index > 0
+          ? dayLabel(messages[index - 1].createdAt)
+          : null;
 
-        return {
-          message,
-          label,
-          showDivider:
-            label !== previousLabel,
-        };
-      }
-    );
+      return {
+        message,
+        label,
+        showDivider: label !== previousLabel,
+      };
+    });
   }, [messages]);
 
   return (
@@ -411,25 +312,12 @@ export default function ChatWindow({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-semibold text-white">
-          {conversation.contact.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={
-                conversation.contact
-                  .avatarUrl
-              }
-              alt={
-                conversation.contact.name
-              }
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            initials(
-              conversation.contact.name
-            )
-          )}
-        </div>
+        <ContactPhoto
+          key={conversation.conversationId}
+          src={conversation.contact.avatarUrl}
+          name={conversation.contact.name}
+          className="h-10 w-10 text-sm"
+        />
 
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-slate-900 dark:text-white">
@@ -439,32 +327,21 @@ export default function ChatWindow({
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
             {otherIsTyping ? (
               <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                {
-                  conversation.contact.name.split(
-                    ' '
-                  )[0]
-                }{' '}
-                is typing…
+                {conversation.contact.name.split(' ')[0]} is typing…
               </span>
             ) : (
               `${
-                conversation.contact.role ===
-                'family'
+                conversation.contact.role === 'family'
                   ? 'Family'
                   : 'Patient'
-              } ID: ${
-                conversation.contact
-                  .identifier
-              }`
+              } ID: ${conversation.contact.identifier}`
             )}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() =>
-            setShowEditDialog(true)
-          }
+          onClick={() => setShowEditDialog(true)}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="Edit contact"
           title="Edit contact"
@@ -478,99 +355,65 @@ export default function ChatWindow({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 py-4"
       >
-        {loading &&
-          messages.length === 0 && (
-            <div className="flex h-full items-center justify-center text-sm text-slate-400">
-              Loading conversation…
-            </div>
-          )}
+        {loading && messages.length === 0 && (
+          <div className="flex h-full items-center justify-center text-sm text-slate-400">
+            Loading conversation…
+          </div>
+        )}
 
-        {!loading &&
-          error &&
-          messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-red-500">
-              <AlertTriangle className="h-6 w-6" />
-              {error}
-            </div>
-          )}
+        {!loading && error && messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-red-500">
+            <AlertTriangle className="h-6 w-6" />
+            {error}
+          </div>
+        )}
 
-        {!loading &&
-          !error &&
-          messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-slate-400">
-              <MessageCircle className="h-8 w-8 opacity-40" />
-              No messages yet. Say hello to{' '}
-              {
-                conversation.contact.name.split(
-                  ' '
-                )[0]
-              }
-              !
-            </div>
-          )}
+        {!loading && !error && messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-slate-400">
+            <MessageCircle className="h-8 w-8 opacity-40" />
+            No messages yet. Say hello to{' '}
+            {conversation.contact.name.split(' ')[0]}!
+          </div>
+        )}
 
         <div className="space-y-3">
-          {rows.map(
-            ({
-              message,
-              label,
-              showDivider,
-            }) => (
-              <div key={message._id}>
-                {showDivider && (
-                  <div className="my-3 flex items-center justify-center">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                      {label}
-                    </span>
-                  </div>
-                )}
-
-                <div
-                  className={`-mx-2 rounded-2xl px-2 transition-colors duration-500 ${
-                    highlightedMessageId ===
-                    message._id
-                      ? 'bg-blue-100/70 dark:bg-blue-900/30'
-                      : ''
-                  }`}
-                >
-                  <MessageBubble
-                    message={message}
-                    isOwn={
-                      message.senderId ===
-                      currentUserId
-                    }
-                    currentUserId={
-                      currentUserId
-                    }
-                    contactName={
-                      conversation.contact
-                        .name
-                    }
-                    onRetry={
-                      message.clientId
-                        ? () =>
-                            retryMessage(
-                              message.clientId!
-                            )
-                        : undefined
-                    }
-                    onReply={handleReply}
-                    onJumpToMessage={
-                      handleJumpToMessage
-                    }
-                    onUnsendForMe={() =>
-                      unsendForMe(message._id)
-                    }
-                    onUnsendForEveryone={() =>
-                      unsendForEveryone(
-                        message._id
-                      )
-                    }
-                  />
+          {rows.map(({ message, label, showDivider }) => (
+            <div key={message._id}>
+              {showDivider && (
+                <div className="my-3 flex items-center justify-center">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    {label}
+                  </span>
                 </div>
+              )}
+
+              <div
+                className={`-mx-2 rounded-2xl px-2 transition-colors duration-500 ${
+                  highlightedMessageId === message._id
+                    ? 'bg-blue-100/70 dark:bg-blue-900/30'
+                    : ''
+                }`}
+              >
+                <MessageBubble
+                  message={message}
+                  isOwn={message.senderId === currentUserId}
+                  currentUserId={currentUserId}
+                  contactName={conversation.contact.name}
+                  onRetry={
+                    message.clientId
+                      ? () => retryMessage(message.clientId!)
+                      : undefined
+                  }
+                  onReply={handleReply}
+                  onJumpToMessage={handleJumpToMessage}
+                  onUnsendForMe={() => unsendForMe(message._id)}
+                  onUnsendForEveryone={() =>
+                    unsendForEveryone(message._id)
+                  }
+                />
               </div>
-            )
-          )}
+            </div>
+          ))}
         </div>
 
         {otherIsTyping && (
@@ -598,11 +441,9 @@ export default function ChatWindow({
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
                 Replying to{' '}
-                {replyTarget.senderId ===
-                currentUserId
+                {replyTarget.senderId === currentUserId
                   ? 'yourself'
-                  : conversation.contact
-                      .name}
+                  : conversation.contact.name}
               </p>
 
               <p className="truncate text-xs text-slate-500 dark:text-slate-400">
@@ -612,9 +453,7 @@ export default function ChatWindow({
 
             <button
               type="button"
-              onClick={() =>
-                setReplyTarget(null)
-              }
+              onClick={() => setReplyTarget(null)}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
               aria-label="Cancel reply"
             >
@@ -626,12 +465,8 @@ export default function ChatWindow({
         {pendingFile && (
           <PendingAttachmentBar
             file={pendingFile}
-            previewUrl={
-              pendingPreviewUrl
-            }
-            onCancel={
-              handleCancelAttachment
-            }
+            previewUrl={pendingPreviewUrl}
+            onCancel={handleCancelAttachment}
           />
         )}
 
@@ -639,9 +474,7 @@ export default function ChatWindow({
           <input
             ref={fileInputRef}
             type="file"
-            onChange={
-              handleAttachmentChange
-            }
+            onChange={handleAttachmentChange}
             className="hidden"
           />
 
@@ -659,18 +492,10 @@ export default function ChatWindow({
             ref={composerRef}
             value={draft}
             onChange={(event) => {
-              setDraft(
-                event.target.value
-              );
-
-              notifyTyping(
-                event.target.value.length >
-                  0
-              );
+              setDraft(event.target.value);
+              notifyTyping(event.target.value.length > 0);
             }}
-            onBlur={() =>
-              notifyTyping(false)
-            }
+            onBlur={() => notifyTyping(false)}
             onKeyDown={handleKeyDown}
             placeholder={
               pendingFile
@@ -686,10 +511,7 @@ export default function ChatWindow({
           <button
             type="button"
             onClick={handleSend}
-            disabled={
-              !draft.trim() &&
-              !pendingFile
-            }
+            disabled={!draft.trim() && !pendingFile}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
@@ -700,16 +522,9 @@ export default function ChatWindow({
 
       {showEditDialog && (
         <EditContactDialog
-          currentName={
-            conversation.contact.name
-          }
-          currentAvatarUrl={
-            conversation.contact
-              .avatarUrl
-          }
-          onClose={() =>
-            setShowEditDialog(false)
-          }
+          currentName={conversation.contact.name}
+          currentAvatarUrl={conversation.contact.avatarUrl}
+          onClose={() => setShowEditDialog(false)}
           onSave={onUpdateContact}
         />
       )}

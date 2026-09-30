@@ -1,6 +1,5 @@
 "use client";
 
-import ProfileCard from "@/components/dashboard/settings/ProfileCard";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import ResetDataCard from "@/components/dashboard/settings/ResetDataCard";
 import FamilyMonitoringCard from "@/components/dashboard/settings/FamilyMonitoringCard";
@@ -22,8 +21,6 @@ const Settings = () => {
         </div>
 
         <div className="space-y-4">
-          <ProfileCard />
-
           <FamilyMonitoringCard />
 
           <div className="rounded-[28px] border border-border/80 bg-card p-6 shadow-sm">
@@ -48,9 +45,9 @@ const Settings = () => {
             </div>
           </div>
 
-          <PushNotificationCard />
-
           <SmsNotificationCard />
+
+          <PushNotificationCard />
 
           <ResetDataCard />
         </div>
