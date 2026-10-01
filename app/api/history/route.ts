@@ -1,905 +1,524 @@
-import {
-  NextRequest,
-  NextResponse,
-} from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import { connectDB } from "@/lib/mongodb";
+import mongoose, { type AnyBulkWriteOperation } from "mongoose";
+
+import MedicationLog, {
+  type IMedicationLogDocument,
+} from "@/models/MedicationLog";
+import Medicine from "@/models/Medicine";
+import User from "@/models/User";
+
+import { getTokenFromRequest, verifyToken } from "@/lib/auth";
+import type { ApiResponse } from "@/lib/interfaces/data/Api";
 
 import {
-  connectDB,
-} from '@/lib/mongodb';
-
-import MedicationLog from '@/models/MedicationLog';
-import User from '@/models/User';
-
-import {
-  getTokenFromRequest,
-  verifyToken,
-} from '@/lib/auth';
-
-import type {
-  ApiResponse,
-} from '@/lib/interfaces/data/Api';
-
-import {
-  ensureMedicationLogsForRange,
   finalizeExpiredMedicationLogs,
   processMedicationEvent,
-} from '@/lib/medicationVerification';
+} from "@/lib/medicationVerification";
 
-import {
-  evaluateMedicationLog,
-} from '@/lib/adherenceEngine';
+import { evaluateMedicationLog } from "@/lib/adherenceEngine";
 
 import {
   addDaysToMedicationDateKey,
   getMedicationDateKey,
   medicationScheduledAt,
   resolveMedicationTimeZone,
-} from '@/lib/medicationTime';
+} from "@/lib/medicationTime";
 
 import {
   appendPatientAnnotation,
   normalizeAnnotationText,
   serializeAnnotations,
-} from '@/lib/medicationAnnotations';
+} from "@/lib/medicationAnnotations";
 
-export const dynamic =
-  'force-dynamic';
+export const dynamic = "force-dynamic";
 
-type ReportRange =
-  | 'today'
-  | 'week'
-  | 'month'
-  | 'custom';
+type ReportRange = "today" | "week" | "month" | "custom";
 
 type ReportStatus =
-  | 'upcoming'
-  | 'due'
-  | 'pending'
-  | 'taken'
-  | 'late'
-  | 'missed'
-  | 'unverified'
-  | 'incorrect_chamber';
+  | "upcoming"
+  | "due"
+  | "pending"
+  | "taken"
+  | "late"
+  | "missed"
+  | "unverified"
+  | "incorrect_chamber";
 
-async function getAuthUser(
-  request: NextRequest
-) {
-  const token =
-    getTokenFromRequest(
-      request
-    );
+async function getAuthUser(request: NextRequest) {
+  const token = getTokenFromRequest(request);
 
   if (!token) {
     return null;
   }
 
-  return verifyToken(
-    token
-  );
+  return verifyToken(token);
 }
 
 function resolveRange(
-  request:
-    NextRequest,
-
-  now:
-    Date,
-
-  timeZone:
-    string
+  request: NextRequest,
+  now: Date,
+  timeZone: string,
 ): {
-  range:
-    ReportRange;
-
-  from:
-    string;
-
-  to:
-    string;
+  range: ReportRange;
+  from: string;
+  to: string;
 } {
-  const range =
-    (
-      request.nextUrl.searchParams.get(
-        'range'
-      ) ||
-      'month'
-    ) as
-      ReportRange;
+  const range = (request.nextUrl.searchParams.get("range") ||
+    "month") as ReportRange;
 
-  if (
-    ![
-      'today',
-      'week',
-      'month',
-      'custom',
-    ].includes(
-      range
-    )
-  ) {
-    throw new Error(
-      'range must be today, week, month, or custom.'
-    );
+  if (!["today", "week", "month", "custom"].includes(range)) {
+    throw new Error("range must be today, week, month, or custom.");
   }
 
-  const to =
-    getMedicationDateKey(
-      now,
-      timeZone
-    );
+  const to = getMedicationDateKey(now, timeZone);
 
-  if (
-    range ===
-    'today'
-  ) {
+  if (range === "today") {
     return {
       range,
-      from:
-        to,
+      from: to,
       to,
     };
   }
 
-  if (
-    range ===
-    'week'
-  ) {
+  if (range === "week") {
     return {
       range,
-
-      from:
-        addDaysToMedicationDateKey(
-          to,
-          -6
-        ),
-
+      from: addDaysToMedicationDateKey(to, -6),
       to,
     };
   }
 
-  if (
-    range ===
-    'month'
-  ) {
+  if (range === "month") {
     return {
       range,
-
-      from:
-        `${to.slice(
-          0,
-          7
-        )}-01`,
-
+      from: `${to.slice(0, 7)}-01`,
       to,
     };
   }
 
-  const from =
-    request.nextUrl.searchParams.get(
-      'from'
-    ) ||
-    '';
-
-  const customTo =
-    request.nextUrl.searchParams.get(
-      'to'
-    ) ||
-    '';
-
-  const datePattern =
-    /^\d{4}-\d{2}-\d{2}$/;
+  const from = request.nextUrl.searchParams.get("from") || "";
+  const customTo = request.nextUrl.searchParams.get("to") || "";
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
   if (
-    !datePattern.test(
-      from
-    ) ||
-    !datePattern.test(
-      customTo
-    ) ||
-    from >
-      customTo
+    !datePattern.test(from) ||
+    !datePattern.test(customTo) ||
+    from > customTo
   ) {
     throw new Error(
-      'Custom range requires valid from and to dates in YYYY-MM-DD format.'
+      "Custom range requires valid from and to dates in YYYY-MM-DD format.",
     );
   }
 
-  const days =
-    Math.ceil(
-      (
-        new Date(
-          `${customTo}T00:00:00Z`
-        ).getTime() -
-        new Date(
-          `${from}T00:00:00Z`
-        ).getTime()
-      ) /
-        86_400_000
-    );
+  const days = Math.ceil(
+    (new Date(`${customTo}T00:00:00Z`).getTime() -
+      new Date(`${from}T00:00:00Z`).getTime()) /
+      86_400_000,
+  );
 
-  if (
-    days >
-    366
-  ) {
-    throw new Error(
-      'Custom range cannot exceed 366 days.'
-    );
+  if (days > 366) {
+    throw new Error("Custom range cannot exceed 366 days.");
   }
 
   return {
     range,
     from,
-    to:
-      customTo,
+    to: customTo,
   };
 }
 
 function normalizeStatus(
   log: {
-    status:
-      string;
-
-    scheduledDate:
-      string;
-
-    scheduledTime:
-      string;
-
-    takenAt?:
-      | Date
-      | null;
-
-    lateAfterMinutes?:
-      number;
-
-    windowAfterMinutes?:
-      number;
-
-    countsTowardAdherence?:
-      boolean;
+    status: string;
+    scheduledDate: string;
+    scheduledTime: string;
+    takenAt?: Date | null;
+    lateAfterMinutes?: number;
+    windowAfterMinutes?: number;
+    countsTowardAdherence?: boolean;
   },
-
-  now:
-    Date,
-
-  timeZone:
-    string
+  now: Date,
+  timeZone: string,
 ): {
-  status:
-    ReportStatus;
-
-  delayMinutes:
-    number | null;
+  status: ReportStatus;
+  delayMinutes: number | null;
 } {
-  const evaluated =
-    evaluateMedicationLog(
-      {
-        status:
-          log.status,
+  const evaluated = evaluateMedicationLog(
+    {
+      status: log.status,
+      scheduledDate: log.scheduledDate,
+      scheduledTime: log.scheduledTime,
+      takenAt: log.takenAt,
+      lateAfterMinutes: log.lateAfterMinutes,
+      windowAfterMinutes: log.windowAfterMinutes,
+      countsTowardAdherence: log.countsTowardAdherence,
+    },
+    now,
+    timeZone,
+  );
 
-        scheduledDate:
-          log.scheduledDate,
-
-        scheduledTime:
-          log.scheduledTime,
-
-        takenAt:
-          log.takenAt,
-
-        lateAfterMinutes:
-          log.lateAfterMinutes,
-
-        windowAfterMinutes:
-          log.windowAfterMinutes,
-
-        countsTowardAdherence:
-          log.countsTowardAdherence,
-      },
-      now,
-      timeZone
-    );
-
-  if (
-    evaluated.lifecycle ===
-    'incorrect_chamber'
-  ) {
+  if (evaluated.lifecycle === "incorrect_chamber") {
     return {
-      status:
-        'incorrect_chamber',
-
-      delayMinutes:
-        evaluated
-          .calculatedDelayMinutes,
+      status: "incorrect_chamber",
+      delayMinutes: evaluated.calculatedDelayMinutes,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-      'unverified' ||
-    evaluated.lifecycle ===
-      'audit'
-  ) {
+  if (evaluated.lifecycle === "unverified" || evaluated.lifecycle === "audit") {
     return {
-      status:
-        'unverified',
-
-      delayMinutes:
-        evaluated
-          .calculatedDelayMinutes,
+      status: "unverified",
+      delayMinutes: evaluated.calculatedDelayMinutes,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-    'taken'
-  ) {
+  if (evaluated.lifecycle === "taken") {
     return {
-      status:
-        'taken',
-
-      delayMinutes:
-        evaluated
-          .calculatedDelayMinutes,
+      status: "taken",
+      delayMinutes: evaluated.calculatedDelayMinutes,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-    'late'
-  ) {
+  if (evaluated.lifecycle === "late") {
     return {
-      status:
-        'late',
-
-      delayMinutes:
-        evaluated
-          .calculatedDelayMinutes,
+      status: "late",
+      delayMinutes: evaluated.calculatedDelayMinutes,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-    'upcoming'
-  ) {
+  if (evaluated.lifecycle === "upcoming") {
     return {
-      status:
-        'upcoming',
-
-      delayMinutes:
-        null,
+      status: "upcoming",
+      delayMinutes: null,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-    'due'
-  ) {
+  if (evaluated.lifecycle === "due") {
     return {
-      status:
-        'due',
-
-      delayMinutes:
-        null,
+      status: "due",
+      delayMinutes: null,
     };
   }
 
-  if (
-    evaluated.lifecycle ===
-    'missed'
-  ) {
+  if (evaluated.lifecycle === "missed") {
     return {
-      status:
-        'missed',
-
-      delayMinutes:
-        null,
+      status: "missed",
+      delayMinutes: null,
     };
   }
 
   return {
-    status:
-      'pending',
-
-    delayMinutes:
-      null,
+    status: "pending",
+    delayMinutes: null,
   };
 }
 
-export async function GET(
-  request:
-    NextRequest
+/** Prepare all dates with one medicine query and bounded batches of upserts. */
+async function ensureHistoryLogsForRange(
+  userId: string,
+  from: string,
+  to: string,
 ) {
+  const medicines = await Medicine.find({
+    userId,
+    isActive: true,
+    startDate: { $lte: to },
+    $or: [{ endDate: null }, { endDate: "" }, { endDate: { $gte: from } }],
+  }).lean();
+
+  let operations: AnyBulkWriteOperation<IMedicationLogDocument>[] = [];
+
+  async function flush() {
+    if (!operations.length) return;
+
+    const batch = operations;
+    operations = [];
+
+    try {
+      await MedicationLog.bulkWrite(batch, { ordered: false });
+    } catch (error) {
+      // Another request may have inserted the same dose slot. Ignore only
+      // duplicate-key races, never validation, connectivity or write-concern errors.
+      if (
+        error instanceof mongoose.mongo.MongoBulkWriteError &&
+        error.code === 11000 &&
+        Array.isArray(error.writeErrors) &&
+        error.writeErrors.length > 0 &&
+        error.writeErrors.every((entry) => entry.code === 11000) &&
+        !error.result.getWriteConcernError()
+      ) {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  for (
+    let date = from;
+    date <= to;
+    date = addDaysToMedicationDateKey(date, 1)
+  ) {
+    for (const medicine of medicines) {
+      if (
+        medicine.startDate > date ||
+        (medicine.endDate && medicine.endDate < date)
+      ) {
+        continue;
+      }
+
+      for (const scheduledTime of medicine.scheduledTimes) {
+        operations.push({
+          updateOne: {
+            filter: {
+              userId: new mongoose.Types.ObjectId(userId),
+              medicineId: medicine._id,
+              scheduledDate: date,
+              scheduledTime,
+              countsTowardAdherence: { $ne: false },
+            },
+            update: {
+              $setOnInsert: {
+                userId: new mongoose.Types.ObjectId(userId),
+                medicineId: medicine._id,
+                medicineName: medicine.name,
+                dosage: medicine.dosage,
+                scheduledDate: date,
+                scheduledTime,
+                status: "pending",
+                source: "auto",
+                eventType: "SCHEDULED",
+                expectedChamberId: null,
+                expectedChamberIds: [],
+                windowBeforeMinutes: medicine.windowBeforeMinutes ?? 30,
+                windowAfterMinutes: medicine.windowAfterMinutes ?? 90,
+                lateAfterMinutes: medicine.lateAfterMinutes ?? 30,
+                countsTowardAdherence: true,
+              },
+            },
+            upsert: true,
+          },
+        });
+
+        if (operations.length >= 500) {
+          await flush();
+        }
+      }
+    }
+  }
+
+  await flush();
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const auth =
-      await getAuthUser(
-        request
-      );
+    const auth = await getAuthUser(request);
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
-          error:
-            'Unauthorized',
+          success: false,
+          error: "Unauthorized",
         },
         {
-          status:
-            401,
-        }
+          status: 401,
+        },
       );
     }
 
-    const now =
-      new Date();
-
-    const timeZone =
-      resolveMedicationTimeZone();
-
-    const selectedRange =
-      resolveRange(
-        request,
-        now,
-        timeZone
-      );
+    const now = new Date();
+    const timeZone = resolveMedicationTimeZone();
+    const selectedRange = resolveRange(request, now, timeZone);
 
     await connectDB();
 
-    await ensureMedicationLogsForRange(
+    await ensureHistoryLogsForRange(
       auth.userId,
       selectedRange.from,
-      selectedRange.to
+      selectedRange.to,
     );
 
-    await finalizeExpiredMedicationLogs(
-      auth.userId,
-      now
-    );
+    await finalizeExpiredMedicationLogs(auth.userId, now);
 
-    const user =
-      await User.findById(
-        auth.userId
-      ).select(
-        'dataResetAt'
-      );
+    const user = await User.findById(auth.userId).select("dataResetAt");
 
-    const query:
-      Record<
-        string,
-        unknown
-      > = {
-        userId:
-          auth.userId,
+    const query: Record<string, unknown> = {
+      userId: auth.userId,
+      scheduledDate: {
+        $gte: selectedRange.from,
+        $lte: selectedRange.to,
+      },
+    };
 
-        scheduledDate: {
-          $gte:
-            selectedRange.from,
-
-          $lte:
-            selectedRange.to,
-        },
-      };
-
-    if (
-      user?.dataResetAt
-    ) {
+    if (user?.dataResetAt) {
       query.createdAt = {
-        $gt:
-          user.dataResetAt,
+        $gt: user.dataResetAt,
       };
     }
 
-    const rawLogs =
-      await MedicationLog.find(
-        query
-      )
-        .sort({
-          scheduledDate:
-            -1,
-
-          scheduledTime:
-            -1,
-
-          createdAt:
-            -1,
-        })
-        .lean();
+    const rawLogs = await MedicationLog.find(query)
+      .sort({
+        scheduledDate: -1,
+        scheduledTime: -1,
+        createdAt: -1,
+      })
+      .lean();
 
     rawLogs.sort(
-      (
-        first,
-        second
-      ) =>
+      (first, second) =>
         medicationScheduledAt(
-          String(
-            second.scheduledDate
-          ),
-          String(
-            second.scheduledTime
-          ),
-          timeZone
+          String(second.scheduledDate),
+          String(second.scheduledTime),
+          timeZone,
         ).getTime() -
         medicationScheduledAt(
-          String(
-            first.scheduledDate
-          ),
-          String(
-            first.scheduledTime
-          ),
-          timeZone
-        ).getTime()
+          String(first.scheduledDate),
+          String(first.scheduledTime),
+          timeZone,
+        ).getTime(),
     );
 
-    const logs =
-      rawLogs.map(
-        (log) => {
-          const normalized =
-            normalizeStatus(
-              {
-                status:
-                  String(
-                    log.status
-                  ),
-
-                scheduledDate:
-                  String(
-                    log.scheduledDate
-                  ),
-
-                scheduledTime:
-                  String(
-                    log.scheduledTime
-                  ),
-
-                takenAt:
-                  log.takenAt ??
-                  null,
-
-                lateAfterMinutes:
-                  log.lateAfterMinutes,
-
-                windowAfterMinutes:
-                  log.windowAfterMinutes,
-
-                countsTowardAdherence:
-                  log.countsTowardAdherence !==
-                  false,
-              },
-              now,
-              timeZone
-            );
-
-          return {
-            _id:
-              log._id.toString(),
-
-            medicineId:
-              log.medicineId
-                ?.toString() ??
-              null,
-
-            medicineName:
-              log.medicineName,
-
-            dosage:
-              log.dosage,
-
-            scheduledDate:
-              log.scheduledDate,
-
-            scheduledTime:
-              log.scheduledTime,
-
-            actualTime:
-              log.takenAt ??
-              null,
-
-            status:
-              normalized.status,
-
-            delayMinutes:
-              normalized.delayMinutes,
-
-            source:
-              log.source ===
-              'auto'
-                ? 'system'
-                : log.source,
-
-            verificationMethod:
-              log.source ===
-              'sensor'
-                ? 'Sensor verification'
-                : log.source ===
-                    'manual'
-                  ? 'Manual verification'
-                  : 'System',
-
-            expectedChamberId:
-              log.expectedChamberId ??
-              null,
-
-            detectedChamberId:
-              log.detectedChamberId ??
-              null,
-
-            expectedChamberIds:
-              log.expectedChamberIds ??
-              [],
-
-            countsTowardAdherence:
-              log.countsTowardAdherence !==
-              false,
-
-            verificationNote:
-              log.verificationNote ??
-              '',
-
-            annotations:
-              serializeAnnotations(
-                log.annotations
-              ),
-          };
-        }
-      );
-
-    const scheduledLogs =
-      logs.filter(
-        (log) =>
-          log.countsTowardAdherence
-      );
-
-    const dueLogs =
-      scheduledLogs.filter(
-        (log) =>
-          [
-            'taken',
-            'late',
-            'missed',
-          ].includes(
-            log.status
-          )
-      );
-
-    const onTime =
-      dueLogs.filter(
-        (log) =>
-          log.status ===
-          'taken'
-      ).length;
-
-    const late =
-      dueLogs.filter(
-        (log) =>
-          log.status ===
-          'late'
-      ).length;
-
-    const missed =
-      dueLogs.filter(
-        (log) =>
-          log.status ===
-          'missed'
-      ).length;
-
-    const unverified =
-      logs.filter(
-        (log) =>
-          log.status ===
-          'unverified'
-      ).length;
-
-    const incorrectChamber =
-      logs.filter(
-        (log) =>
-          log.status ===
-          'incorrect_chamber'
-      ).length;
-
-    const adherenceRate:
-      number | null =
-        dueLogs.length >
-        0
-          ? Math.round(
-              (
-                (
-                  onTime +
-                  late *
-                    0.5
-                ) /
-                dueLogs.length
-              ) *
-                100
-            )
-          : null;
-
-    const medicineMap =
-      new Map<
-        string,
+    const logs = rawLogs.map((log) => {
+      const normalized = normalizeStatus(
         {
-          medicineId:
-            string | null;
+          status: String(log.status),
+          scheduledDate: String(log.scheduledDate),
+          scheduledTime: String(log.scheduledTime),
+          takenAt: log.takenAt ?? null,
+          lateAfterMinutes: log.lateAfterMinutes,
+          windowAfterMinutes: log.windowAfterMinutes,
+          countsTowardAdherence: log.countsTowardAdherence !== false,
+        },
+        now,
+        timeZone,
+      );
 
-          medicineName:
-            string;
+      return {
+        _id: log._id.toString(),
+        medicineId: log.medicineId?.toString() ?? null,
+        medicineName: log.medicineName,
+        dosage: log.dosage,
+        scheduledDate: log.scheduledDate,
+        scheduledTime: log.scheduledTime,
+        actualTime: log.takenAt ?? null,
+        status: normalized.status,
+        delayMinutes: normalized.delayMinutes,
+        source: log.source === "auto" ? "system" : log.source,
+        verificationMethod:
+          log.source === "sensor"
+            ? "Sensor verification"
+            : log.source === "manual"
+              ? "Manual verification"
+              : "System",
+        expectedChamberId: log.expectedChamberId ?? null,
+        detectedChamberId: log.detectedChamberId ?? null,
+        expectedChamberIds: log.expectedChamberIds ?? [],
+        countsTowardAdherence: log.countsTowardAdherence !== false,
+        verificationNote: log.verificationNote ?? "",
+        annotations: serializeAnnotations(log.annotations),
+      };
+    });
 
-          scheduled:
-            number;
+    const scheduledLogs = logs.filter((log) => log.countsTowardAdherence);
 
-          verified:
-            number;
+    const dueLogs = scheduledLogs.filter((log) =>
+      ["taken", "late", "missed"].includes(log.status),
+    );
 
-          onTime:
-            number;
+    const onTime = dueLogs.filter((log) => log.status === "taken").length;
+    const late = dueLogs.filter((log) => log.status === "late").length;
+    const missed = dueLogs.filter((log) => log.status === "missed").length;
+    const unverified = logs.filter((log) => log.status === "unverified").length;
 
-          late:
-            number;
+    const incorrectChamber = logs.filter(
+      (log) => log.status === "incorrect_chamber",
+    ).length;
 
-          missed:
-            number;
+    const adherenceRate: number | null =
+      dueLogs.length > 0
+        ? Math.round(((onTime + late * 0.5) / dueLogs.length) * 100)
+        : null;
 
-          incorrectChamber:
-            number;
-        }
-      >();
+    const medicineMap = new Map<
+      string,
+      {
+        medicineId: string | null;
+        medicineName: string;
+        scheduled: number;
+        verified: number;
+        onTime: number;
+        late: number;
+        missed: number;
+        incorrectChamber: number;
+      }
+    >();
 
-    for (
-      const log
-      of logs
-    ) {
-      const key =
-        log.medicineId ||
-        log.medicineName;
+    for (const log of logs) {
+      const key = log.medicineId || log.medicineName;
 
-      const item =
-        medicineMap.get(
-          key
-        ) || {
-          medicineId:
-            log.medicineId,
-
-          medicineName:
-            log.medicineName,
-
-          scheduled:
-            0,
-
-          verified:
-            0,
-
-          onTime:
-            0,
-
-          late:
-            0,
-
-          missed:
-            0,
-
-          incorrectChamber:
-            0,
-        };
+      const item = medicineMap.get(key) || {
+        medicineId: log.medicineId,
+        medicineName: log.medicineName,
+        scheduled: 0,
+        verified: 0,
+        onTime: 0,
+        late: 0,
+        missed: 0,
+        incorrectChamber: 0,
+      };
 
       if (
         log.countsTowardAdherence &&
-        [
-          'taken',
-          'late',
-          'missed',
-        ].includes(
-          log.status
-        )
+        ["taken", "late", "missed"].includes(log.status)
       ) {
-        item.scheduled +=
-          1;
+        item.scheduled += 1;
 
-        if (
-          log.status ===
-          'taken'
-        ) {
-          item.onTime +=
-            1;
+        if (log.status === "taken") {
+          item.onTime += 1;
         }
 
-        if (
-          log.status ===
-          'late'
-        ) {
-          item.late +=
-            1;
+        if (log.status === "late") {
+          item.late += 1;
         }
 
-        if (
-          log.status ===
-            'taken' ||
-          log.status ===
-            'late'
-        ) {
-          item.verified +=
-            1;
+        if (log.status === "taken" || log.status === "late") {
+          item.verified += 1;
         }
 
-        if (
-          log.status ===
-          'missed'
-        ) {
-          item.missed +=
-            1;
+        if (log.status === "missed") {
+          item.missed += 1;
         }
       }
 
-      if (
-        log.status ===
-        'incorrect_chamber'
-      ) {
-        item.incorrectChamber +=
-          1;
+      if (log.status === "incorrect_chamber") {
+        item.incorrectChamber += 1;
       }
 
-      medicineMap.set(
-        key,
-        item
-      );
+      medicineMap.set(key, item);
     }
 
-    const byMedicine =
-      Array.from(
-        medicineMap.values()
-      )
-        .filter(
-          (item) =>
-            item.scheduled >
-              0 ||
-            item.incorrectChamber >
-              0
-        )
-        .map(
-          (item) => ({
-            ...item,
-
-            adherenceRate:
-              item.scheduled >
-              0
-                ? Math.round(
-                    (
-                      (
-                        item.onTime +
-                        item.late *
-                          0.5
-                      ) /
-                      item.scheduled
-                    ) *
-                      100
-                  )
-                : null,
-          })
-        )
-        .sort(
-          (
-            first,
-            second
-          ) =>
-            first.medicineName.localeCompare(
-              second.medicineName
-            )
-        );
+    const byMedicine = Array.from(medicineMap.values())
+      .filter((item) => item.scheduled > 0 || item.incorrectChamber > 0)
+      .map((item) => ({
+        ...item,
+        adherenceRate:
+          item.scheduled > 0
+            ? Math.round(
+                ((item.onTime + item.late * 0.5) / item.scheduled) * 100,
+              )
+            : null,
+      }))
+      .sort((first, second) =>
+        first.medicineName.localeCompare(second.medicineName),
+      );
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
+      success: true,
       data: {
-        range:
-          selectedRange,
-
+        range: selectedRange,
         summary: {
-          totalScheduled:
-            dueLogs.length,
-
-          verified:
-            onTime +
-            late,
-
+          totalScheduled: dueLogs.length,
+          verified: onTime + late,
           onTime,
           late,
           missed,
@@ -907,228 +526,134 @@ export async function GET(
           incorrectChamber,
           adherenceRate,
         },
-
         byMedicine,
         logs,
       },
     });
   } catch (error) {
     const message =
-      error instanceof
-      Error
-        ? error.message
-        : 'Internal server error';
+      error instanceof Error ? error.message : "Internal server error";
 
-    const clientError =
-      /range|Custom/i.test(
-        message
-      );
+    const clientError = /range|Custom/i.test(message);
 
-    console.error(
-      '[GET /api/history]',
-      error
-    );
+    console.error("[GET /api/history]", error);
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          false,
-
-        error:
-          message,
+        success: false,
+        error: message,
       },
       {
-        status:
-          clientError
-            ? 400
-            : 500,
-      }
+        status: clientError ? 400 : 500,
+      },
     );
   }
 }
 
-export async function PATCH(
-  request:
-    NextRequest
-) {
+export async function PATCH(request: NextRequest) {
   try {
-    const auth =
-      await getAuthUser(
-        request
-      );
+    const auth = await getAuthUser(request);
 
     if (!auth) {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
-          error:
-            'Unauthorized',
+          success: false,
+          error: "Unauthorized",
         },
         {
-          status:
-            401,
-        }
+          status: 401,
+        },
       );
     }
 
     await connectDB();
 
-    const body =
-      (
-        await request.json()
-      ) as {
-        logId?:
-          string;
+    const body = (await request.json()) as {
+      logId?: string;
+      status?: string;
+      note?: unknown;
+    };
 
-        status?:
-          string;
-
-        note?:
-          unknown;
-      };
-
-    if (
-      !body.logId ||
-      body.status !==
-        'taken'
-    ) {
+    if (!body.logId || body.status !== "taken") {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
+          success: false,
           error:
-            'logId and a status of taken are required. Missed doses are finalized automatically after the medication window expires.',
+            "logId and a status of taken are required. Missed doses are finalized automatically after the medication window expires.",
         },
         {
-          status:
-            400,
-        }
+          status: 400,
+        },
       );
     }
 
-    if (
-      auth.role !==
-      'patient'
-    ) {
+    if (auth.role !== "patient") {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
-          error:
-            'Only Patient accounts can mark medication as taken.',
+          success: false,
+          error: "Only Patient accounts can mark medication as taken.",
         },
         {
-          status:
-            403,
-        }
+          status: 403,
+        },
       );
     }
 
-    const note =
-      normalizeAnnotationText(
-        body.note
-      );
+    const note = normalizeAnnotationText(body.note);
 
-    const result =
-      await processMedicationEvent(
-        {
-          userId:
-            auth.userId,
+    const result = await processMedicationEvent({
+      userId: auth.userId,
+      source: "manual",
+      eventType: "MEDICATION_CONFIRMED",
+      logId: body.logId,
+    });
 
-          source:
-            'manual',
-
-          eventType:
-            'MEDICATION_CONFIRMED',
-
-          logId:
-            body.logId,
-        }
-      );
-
-    if (
-      !result.verified
-    ) {
+    if (!result.verified) {
       return NextResponse.json<ApiResponse>(
         {
-          success:
-            false,
-
-          error:
-            result.message,
-
-          data:
-            result,
+          success: false,
+          error: result.message,
+          data: result,
         },
         {
-          status:
-            409,
-        }
+          status: 409,
+        },
       );
     }
 
-    let annotation =
-      null;
+    let annotation = null;
 
     if (note) {
-      annotation =
-        await appendPatientAnnotation(
-          {
-            patientId:
-              auth.userId,
-
-            logId:
-              result.logId,
-
-            type:
-              'patient_note',
-
-            text:
-              note,
-          }
-        );
+      annotation = await appendPatientAnnotation({
+        patientId: auth.userId,
+        logId: result.logId,
+        type: "patient_note",
+        text: note,
+      });
     }
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
+      success: true,
       data: {
         ...result,
         annotation,
       },
-
-      message:
-        result.message,
+      message: result.message,
     });
   } catch (error) {
     const message =
-      error instanceof
-      Error
-        ? error.message
-        : 'Internal server error';
+      error instanceof Error ? error.message : "Internal server error";
 
-    console.error(
-      '[PATCH /api/history]',
-      error
-    );
+    console.error("[PATCH /api/history]", error);
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          false,
-
-        error:
-          message,
+        success: false,
+        error: message,
       },
       {
-        status:
-          400,
-      }
+        status: 400,
+      },
     );
   }
 }

@@ -1,12 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -20,6 +15,9 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
+
+import { InlineLoader, SectionLoader } from "@/components/ui/Loading";
+import { useHistoryData } from "@/hooks/useHistoryData";
 
 import StatCard from "@/components/dashboard/StatCard";
 import { toast } from "@/components/ui/Toast";
@@ -38,10 +36,7 @@ type Status =
 
 interface MedicationAnnotation {
   _id: string;
-  type:
-    | "patient_note"
-    | "missed_explanation"
-    | "family_acknowledgment";
+  type: "patient_note" | "missed_explanation" | "family_acknowledgment";
   text: string;
   authorRole: "patient" | "family";
   authorName: string;
@@ -187,11 +182,7 @@ function todayString(): string {
 function monthStart(): string {
   const now = new Date();
 
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1
-  )
+  return new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
     .split("T")[0];
 }
@@ -213,19 +204,14 @@ function dateHeading(value: string): string {
     return "Today";
   }
 
-  return new Date(`${value}T00:00:00`).toLocaleDateString(
-    "en-US",
-    {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    }
-  );
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 }
 
-function annotationLabel(
-  type: MedicationAnnotation["type"]
-): string {
+function annotationLabel(type: MedicationAnnotation["type"]): string {
   if (type === "family_acknowledgment") {
     return "Family Acknowledgment";
   }
@@ -261,11 +247,7 @@ function AnnotationDialog({
   onSave,
 }: AnnotationDialogProps) {
   const missed = log.status === "missed";
-
-  const [reason, setReason] = useState(
-    missed ? MISSED_REASONS[0] : ""
-  );
-
+  const [reason, setReason] = useState(missed ? MISSED_REASONS[0] : "");
   const [details, setDetails] = useState("");
 
   const finalText = missed
@@ -292,9 +274,7 @@ function AnnotationDialog({
           id="annotation-title"
           className="text-lg font-semibold text-gray-900 dark:text-white"
         >
-          {missed
-            ? "Add missed-dose explanation"
-            : "Add patient note"}
+          {missed ? "Add missed-dose explanation" : "Add patient note"}
         </h2>
 
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -308,7 +288,6 @@ function AnnotationDialog({
         {missed && (
           <label className="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-300">
             Reason
-
             <select
               value={reason}
               onChange={(event) => setReason(event.target.value)}
@@ -363,14 +342,10 @@ function AnnotationDialog({
           <button
             type="button"
             onClick={() => onSave(finalText)}
-            disabled={
-              saving || !finalText || finalText.length > 500
-            }
+            disabled={saving || !finalText || finalText.length > 500}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
 
             {saving ? "Saving..." : "Save"}
           </button>
@@ -393,9 +368,7 @@ function LogCard({
   const chamberText =
     log.status === "incorrect_chamber"
       ? `Detected ${log.detectedChamberId ?? "—"} · Expected ${
-          log.expectedChamberIds.join(", ") ||
-          log.expectedChamberId ||
-          "—"
+          log.expectedChamberIds.join(", ") || log.expectedChamberId || "—"
         }`
       : log.expectedChamberId
         ? `Chamber ${log.expectedChamberId}`
@@ -415,9 +388,7 @@ function LogCard({
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">
                 {log.medicineName}{" "}
-                <span className="font-normal text-gray-400">
-                  {log.dosage}
-                </span>
+                <span className="font-normal text-gray-400">{log.dosage}</span>
               </p>
 
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -448,9 +419,7 @@ function LogCard({
 
           {log.verificationNote && (
             <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
-              <span className="font-semibold">
-                System verification:
-              </span>{" "}
+              <span className="font-semibold">System verification:</span>{" "}
               {log.verificationNote}
             </p>
           )}
@@ -496,9 +465,7 @@ function LogCard({
                 <MessageSquare className="h-3.5 w-3.5" />
               )}
 
-              {log.status === "missed"
-                ? "Add explanation"
-                : "Add patient note"}
+              {log.status === "missed" ? "Add explanation" : "Add patient note"}
             </button>
           )}
         </div>
@@ -511,64 +478,28 @@ export default function HistoryPage() {
   const [range, setRange] = useState<Range>("month");
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayString());
-  const [data, setData] = useState<HistoryData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const [annotationLog, setAnnotationLog] =
-    useState<LogEntry | null>(null);
+  const validRange = range !== "custom" || Boolean(from && to && from <= to);
+  const query = new URLSearchParams({ range });
 
+  if (range === "custom") {
+    query.set("from", from);
+    query.set("to", to);
+  }
+
+  const {
+    data,
+    loading,
+    error: fetchError,
+    refresh,
+  } = useHistoryData<HistoryData>(
+    validRange ? `/api/history?${query.toString()}` : null,
+  );
+
+  const error = validRange ? fetchError : "Choose a valid start and end date.";
+
+  const [annotationLog, setAnnotationLog] = useState<LogEntry | null>(null);
   const [savingAnnotation, setSavingAnnotation] = useState(false);
-
-  const fetchHistory = useCallback(async () => {
-    if (
-      range === "custom" &&
-      (!from || !to || from > to)
-    ) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const query = new URLSearchParams({ range });
-
-      if (range === "custom") {
-        query.set("from", from);
-        query.set("to", to);
-      }
-
-      const response = await fetch(
-        `/api/history?${query.toString()}`,
-        {
-          cache: "no-store",
-        }
-      );
-
-      const json = await response.json();
-
-      if (!response.ok || !json.success) {
-        throw new Error(
-          json.error || "Failed to load history."
-        );
-      }
-
-      setData(json.data);
-    } catch (fetchError) {
-      setError(
-        fetchError instanceof Error
-          ? fetchError.message
-          : "Failed to load history."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [from, range, to]);
-
-  useEffect(() => {
-    void fetchHistory();
-  }, [fetchHistory]);
 
   const saveAnnotation = async (text: string) => {
     if (!annotationLog || savingAnnotation) {
@@ -594,26 +525,23 @@ export default function HistoryPage() {
             type,
             text,
           }),
-        }
+        },
       );
 
       const json = await response.json();
 
       if (!response.ok || !json.success) {
-        throw new Error(
-          json.error || "Unable to save the annotation."
-        );
+        throw new Error(json.error || "Unable to save the annotation.");
       }
 
       setAnnotationLog(null);
       toast.success(json.message || "Annotation saved.");
-
-      await fetchHistory();
+      refresh();
     } catch (saveError) {
       toast.error(
         saveError instanceof Error
           ? saveError.message
-          : "Unable to save the annotation."
+          : "Unable to save the annotation.",
       );
     } finally {
       setSavingAnnotation(false);
@@ -624,15 +552,17 @@ export default function HistoryPage() {
     const groups = new Map<string, LogEntry[]>();
 
     for (const log of data?.logs ?? []) {
-      groups.set(log.scheduledDate, [
-        ...(groups.get(log.scheduledDate) ?? []),
-        log,
-      ]);
+      const group = groups.get(log.scheduledDate);
+
+      if (group) {
+        group.push(log);
+      } else {
+        groups.set(log.scheduledDate, [log]);
+      }
     }
 
-    return Array.from(groups.entries()).sort(
-      (first, second) =>
-        second[0].localeCompare(first[0])
+    return Array.from(groups.entries()).sort((first, second) =>
+      second[0].localeCompare(first[0]),
     );
   }, [data]);
 
@@ -683,35 +613,31 @@ export default function HistoryPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="text-sm text-gray-600 dark:text-gray-300">
                 From
-
                 <input
                   type="date"
                   value={from}
                   max={to}
-                  onChange={(event) =>
-                    setFrom(event.target.value)
-                  }
+                  onChange={(event) => setFrom(event.target.value)}
                   className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
                 />
               </label>
 
               <label className="text-sm text-gray-600 dark:text-gray-300">
                 To
-
                 <input
                   type="date"
                   value={to}
                   min={from}
                   max={todayString()}
-                  onChange={(event) =>
-                    setTo(event.target.value)
-                  }
+                  onChange={(event) => setTo(event.target.value)}
                   className="mt-1 block h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm"
                 />
               </label>
             </div>
           )}
         </div>
+
+        {loading && <InlineLoader label="Loading medication records…" />}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
@@ -736,11 +662,7 @@ export default function HistoryPage() {
 
           <StatCard
             title="Verified"
-            value={
-              loading
-                ? "—"
-                : String(summary?.verified ?? 0)
-            }
+            value={loading ? "—" : String(summary?.verified ?? 0)}
             subtitle={`${summary?.onTime ?? 0} on time · ${
               summary?.late ?? 0
             } late`}
@@ -748,11 +670,7 @@ export default function HistoryPage() {
 
           <StatCard
             title="Missed"
-            value={
-              loading
-                ? "—"
-                : String(summary?.missed ?? 0)
-            }
+            value={loading ? "—" : String(summary?.missed ?? 0)}
             subtitle={`${
               summary?.totalScheduled ?? 0
             } scheduled doses evaluated`}
@@ -765,12 +683,10 @@ export default function HistoryPage() {
                 ? "—"
                 : String(
                     (summary?.incorrectChamber ?? 0) +
-                      (summary?.unverified ?? 0)
+                      (summary?.unverified ?? 0),
                   )
             }
-            subtitle={`${
-              summary?.incorrectChamber ?? 0
-            } incorrect chamber · ${
+            subtitle={`${summary?.incorrectChamber ?? 0} incorrect chamber · ${
               summary?.unverified ?? 0
             } unverified`}
           />
@@ -784,10 +700,7 @@ export default function HistoryPage() {
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(data?.byMedicine ?? []).map((medicine) => (
               <div
-                key={
-                  medicine.medicineId ||
-                  medicine.medicineName
-                }
+                key={medicine.medicineId || medicine.medicineName}
                 className="rounded-2xl border border-border/60 bg-background/60 p-4"
               >
                 <div className="flex items-center justify-between gap-3">
@@ -834,12 +747,11 @@ export default function HistoryPage() {
               </div>
             ))}
 
-            {!loading &&
-              (data?.byMedicine.length ?? 0) === 0 && (
-                <p className="text-sm text-gray-500">
-                  No medication performance data for this range.
-                </p>
-              )}
+            {!loading && (data?.byMedicine.length ?? 0) === 0 && (
+              <p className="text-sm text-gray-500">
+                No medication performance data for this range.
+              </p>
+            )}
           </div>
         </section>
 
@@ -875,11 +787,7 @@ export default function HistoryPage() {
               </div>
             )}
 
-            {loading && (
-              <p className="text-sm text-gray-500">
-                Loading medication records…
-              </p>
-            )}
+            {loading && <SectionLoader label="Loading medication records…" />}
           </div>
         </section>
       </div>
