@@ -1,9 +1,8 @@
 "use client";
 
-import React, {
-  useState,
-} from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/brand/Logo";
 import {
   Card,
   CardHeader,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/validations";
 
 const getPasswordStrength = (
-  password: string
+  password: string,
 ): {
   label: string;
   color: string;
@@ -36,22 +35,12 @@ const getPasswordStrength = (
     return null;
   }
 
-  const hasLetter =
-    /[a-zA-Z]/.test(password);
-
-  const hasNumber =
-    /\d/.test(password);
-
-  const hasSymbol =
-    /[^a-zA-Z0-9]/.test(password);
-
+  const hasLetter = /[a-zA-Z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSymbol = /[^a-zA-Z0-9]/.test(password);
   const len = password.length;
 
-  if (
-    len < 6 ||
-    !hasLetter ||
-    !hasNumber
-  ) {
+  if (len < 6 || !hasLetter || !hasNumber) {
     return {
       label: "Weak",
       color: "bg-red-400",
@@ -59,12 +48,7 @@ const getPasswordStrength = (
     };
   }
 
-  if (
-    len >= 12 &&
-    hasLetter &&
-    hasNumber &&
-    hasSymbol
-  ) {
+  if (len >= 12 && hasLetter && hasNumber && hasSymbol) {
     return {
       label: "Strong",
       color: "bg-green-500",
@@ -72,11 +56,7 @@ const getPasswordStrength = (
     };
   }
 
-  if (
-    len >= 10 &&
-    hasLetter &&
-    hasNumber
-  ) {
+  if (len >= 10 && hasLetter && hasNumber) {
     return {
       label: "Good",
       color: "bg-blue-500",
@@ -94,85 +74,33 @@ const getPasswordStrength = (
 const Signup = () => {
   const router = useRouter();
 
-  const [
-    firstName,
-    setFirstName,
-  ] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"patient" | "family">("patient");
+  const [showPasswordReq, setShowPasswordReq] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [
-    middleName,
-    setMiddleName,
-  ] = useState("");
-
-  const [
-    lastName,
-    setLastName,
-  ] = useState("");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [
-    confirmPassword,
-    setConfirmPassword,
-  ] = useState("");
-
-  const [role, setRole] = useState<
-    "patient" | "family"
-  >("patient");
-
-  const [
-    showPasswordReq,
-    setShowPasswordReq,
-  ] = useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const strength =
-    getPasswordStrength(password);
+  const strength = getPasswordStrength(password);
 
   const handleSubmit = async (
-    event: React.SyntheticEvent<HTMLFormElement>
+    event: React.SyntheticEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
     setError("");
 
-    const validationError =
-      collectErrors({
-        firstName: validateName(
-          firstName,
-          "First Name"
-        ),
-
-        middleName:
-          validateOptionalName(
-            middleName,
-            "Middle Name"
-          ),
-
-        lastName: validateName(
-          lastName,
-          "Last Name"
-        ),
-
-        email: validateEmail(email),
-
-        password:
-          validatePassword(password),
-
-        confirmPassword:
-          validateConfirmPassword(
-            password,
-            confirmPassword
-          ),
-      });
+    const validationError = collectErrors({
+      firstName: validateName(firstName, "First Name"),
+      middleName: validateOptionalName(middleName, "Middle Name"),
+      lastName: validateName(lastName, "Last Name"),
+      email: validateEmail(email),
+      password: validatePassword(password),
+      confirmPassword: validateConfirmPassword(password, confirmPassword),
+    });
 
     if (validationError) {
       setError(validationError);
@@ -183,53 +111,39 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "/api/auth/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            confirmPassword,
-            firstName,
-            middleName,
-            lastName,
-            role,
-          }),
-        }
-      );
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          confirmPassword,
+          firstName,
+          middleName,
+          lastName,
+          role,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        if (
-          data.code ===
-          "EMAIL_NOT_VERIFIED"
-        ) {
-          toast.info(
-            "This account still needs email verification."
-          );
+      if (!response.ok || !data.success) {
+        if (data.code === "EMAIL_NOT_VERIFIED") {
+          toast.info("This account still needs email verification.");
 
           router.push(
             `/verify-email?status=pending&email=${encodeURIComponent(
-              email.trim()
-            )}`
+              email.trim(),
+            )}`,
           );
 
           return;
         }
 
         const message =
-          data.error ||
-          "Registration failed. Please try again.";
+          data.error || "Registration failed. Please try again.";
 
         setError(message);
         toast.error(message);
@@ -237,17 +151,14 @@ const Signup = () => {
       }
 
       toast.success(
-        "Verification email sent. Check your inbox to activate your account."
+        "Verification email sent. Check your inbox to activate your account.",
       );
 
       router.push(
-        `/verify-email?status=sent&email=${encodeURIComponent(
-          email.trim()
-        )}`
+        `/verify-email?status=sent&email=${encodeURIComponent(email.trim())}`,
       );
     } catch {
-      const message =
-        "Network error. Please check your connection.";
+      const message = "Network error. Please check your connection.";
 
       setError(message);
       toast.error(message);
@@ -260,14 +171,23 @@ const Signup = () => {
     <div className="relative w-full">
       <Card className="w-full overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/95 shadow-[0_28px_56px_rgba(15,23,42,0.08)]">
         <CardHeader className="px-6 pt-8">
+          <div className="mb-6 flex w-full justify-center text-slate-900">
+            <Logo
+              size="lg"
+              tone="inherit"
+              orientation="horizontal"
+              priority
+              className="max-w-full gap-3 [&>span:last-child]:whitespace-normal [&>span:last-child]:text-sm sm:[&>span:last-child]:text-base"
+            />
+          </div>
+
           <CardTitle className="text-center text-2xl font-semibold text-slate-900">
             Create your account
           </CardTitle>
 
           <CardDescription className="mx-auto mt-2 max-w-xs text-center text-sm leading-6 text-slate-500">
-            Start using Med App Reminder
-            to keep your medication
-            routine on track.
+            Start using Med App Reminder to keep your medication routine on
+            track.
           </CardDescription>
         </CardHeader>
 
@@ -278,18 +198,11 @@ const Signup = () => {
             </p>
 
             <div className="grid grid-cols-2 gap-2 rounded-3xl bg-slate-100 p-1">
-              {(
-                [
-                  "patient",
-                  "family",
-                ] as const
-              ).map((option) => (
+              {(["patient", "family"] as const).map((option) => (
                 <button
                   key={option}
                   type="button"
-                  onClick={() =>
-                    setRole(option)
-                  }
+                  onClick={() => setRole(option)}
                   disabled={loading}
                   className={`rounded-[20px] px-4 py-2.5 text-sm font-semibold capitalize transition ${
                     role === option
@@ -321,10 +234,7 @@ const Signup = () => {
             <Separator className="flex-1" />
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-4"
-          >
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
@@ -335,11 +245,7 @@ const Signup = () => {
               <Input
                 type="text"
                 value={firstName}
-                onChange={(event) =>
-                  setFirstName(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setFirstName(event.target.value)}
                 required
                 placeholder="First Name"
                 autoComplete="given-name"
@@ -350,11 +256,7 @@ const Signup = () => {
               <Input
                 type="text"
                 value={middleName}
-                onChange={(event) =>
-                  setMiddleName(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setMiddleName(event.target.value)}
                 placeholder="Middle Name (optional)"
                 autoComplete="additional-name"
                 disabled={loading}
@@ -364,11 +266,7 @@ const Signup = () => {
               <Input
                 type="text"
                 value={lastName}
-                onChange={(event) =>
-                  setLastName(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setLastName(event.target.value)}
                 required
                 placeholder="Last Name"
                 autoComplete="family-name"
@@ -380,11 +278,7 @@ const Signup = () => {
             <Input
               type="email"
               value={email}
-              onChange={(event) =>
-                setEmail(
-                  event.target.value
-                )
-              }
+              onChange={(event) => setEmail(event.target.value)}
               required
               placeholder="Email"
               autoComplete="email"
@@ -395,19 +289,11 @@ const Signup = () => {
             <Input
               type="password"
               value={password}
-              onChange={(event) =>
-                setPassword(
-                  event.target.value
-                )
-              }
-              onFocus={() =>
-                setShowPasswordReq(true)
-              }
+              onChange={(event) => setPassword(event.target.value)}
+              onFocus={() => setShowPasswordReq(true)}
               onBlur={() => {
                 if (!password) {
-                  setShowPasswordReq(
-                    false
-                  );
+                  setShowPasswordReq(false);
                 }
               }}
               required
@@ -434,8 +320,7 @@ const Signup = () => {
               </div>
             )}
 
-            {(showPasswordReq ||
-              password) && (
+            {(showPasswordReq || password) && (
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-600">
                 <p className="mb-3 font-medium text-slate-900">
                   Password requirements
@@ -444,69 +329,44 @@ const Signup = () => {
                 <ul className="space-y-2">
                   {[
                     {
-                      label:
-                        "At least 6 characters",
-                      met:
-                        password.length >= 6,
+                      label: "At least 6 characters",
+                      met: password.length >= 6,
                     },
                     {
-                      label:
-                        "Contains a letter",
-                      met:
-                        /[a-zA-Z]/.test(
-                          password
-                        ),
+                      label: "Contains a letter",
+                      met: /[a-zA-Z]/.test(password),
                     },
                     {
-                      label:
-                        "Contains a number",
-                      met: /\d/.test(
-                        password
-                      ),
+                      label: "Contains a number",
+                      met: /\d/.test(password),
                     },
-                  ].map(
-                    ({
-                      label,
-                      met,
-                    }) => {
-                      let textClass =
-                        "text-slate-500";
+                  ].map(({ label, met }) => {
+                    let textClass = "text-slate-500";
+                    let dotClass = "bg-slate-300";
 
-                      let dotClass =
-                        "bg-slate-300";
-
-                      if (password) {
-                        if (met) {
-                          textClass =
-                            "text-emerald-700";
-
-                          dotClass =
-                            "bg-emerald-600";
-                        } else {
-                          textClass =
-                            "text-rose-600";
-
-                          dotClass =
-                            "bg-rose-600";
-                        }
+                    if (password) {
+                      if (met) {
+                        textClass = "text-emerald-700";
+                        dotClass = "bg-emerald-600";
+                      } else {
+                        textClass = "text-rose-600";
+                        dotClass = "bg-rose-600";
                       }
-
-                      return (
-                        <li
-                          key={label}
-                          className={`flex items-center gap-3 ${textClass}`}
-                        >
-                          <span
-                            className={`inline-flex h-3.5 w-3.5 rounded-full ${dotClass}`}
-                          />
-
-                          <span>
-                            {label}
-                          </span>
-                        </li>
-                      );
                     }
-                  )}
+
+                    return (
+                      <li
+                        key={label}
+                        className={`flex items-center gap-3 ${textClass}`}
+                      >
+                        <span
+                          className={`inline-flex h-3.5 w-3.5 rounded-full ${dotClass}`}
+                        />
+
+                        <span>{label}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -514,11 +374,7 @@ const Signup = () => {
             <Input
               type="password"
               value={confirmPassword}
-              onChange={(event) =>
-                setConfirmPassword(
-                  event.target.value
-                )
-              }
+              onChange={(event) => setConfirmPassword(event.target.value)}
               required
               placeholder="Confirm Password"
               autoComplete="new-password"
@@ -526,31 +382,26 @@ const Signup = () => {
               className="rounded-3xl border-slate-200 bg-slate-50/80"
             />
 
-            {confirmPassword &&
-              password && (
-                <p
-                  className={`text-xs ${
-                    confirmPassword ===
-                    password
-                      ? "text-emerald-700"
-                      : "text-rose-600"
-                  }`}
-                >
-                  {confirmPassword ===
-                  password
-                    ? "Passwords match."
-                    : "Passwords do not match."}
-                </p>
-              )}
+            {confirmPassword && password && (
+              <p
+                className={`text-xs ${
+                  confirmPassword === password
+                    ? "text-emerald-700"
+                    : "text-rose-600"
+                }`}
+              >
+                {confirmPassword === password
+                  ? "Passwords match."
+                  : "Passwords do not match."}
+              </p>
+            )}
 
             <Button
               className="w-full rounded-3xl py-3 font-semibold shadow-sm shadow-slate-200"
               type="submit"
               disabled={loading}
             >
-              {loading
-                ? "Creating account..."
-                : "Sign Up with Email"}
+              {loading ? "Creating account..." : "Sign Up with Email"}
             </Button>
           </form>
 

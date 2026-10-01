@@ -47,9 +47,7 @@ const Navbar = ({ role }: NavbarProps) => {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const { unreadCount } = useChatNotifications();
-  const { pendingCount } = useMonitoringRequestCount(
-    role === "patient"
-  );
+  const { pendingCount } = useMonitoringRequestCount(role === "patient");
 
   // Close the mobile drawer when the route changes.
   useEffect(() => {
@@ -171,8 +169,7 @@ const Navbar = ({ role }: NavbarProps) => {
   const isActive = (item: NavItem) =>
     item.exact
       ? pathname === item.href
-      : pathname === item.href ||
-        pathname.startsWith(`${item.href}/`);
+      : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
   return (
     <div>
@@ -220,7 +217,7 @@ const Navbar = ({ role }: NavbarProps) => {
         type="button"
         tabIndex={open ? 0 : -1}
         aria-hidden={!open}
-        className={`fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] transition-opacity duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] md:hidden ${
+        className={`fixed inset-0 z-40 bg-slate-950/20 transition-opacity duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] md:hidden ${
           open
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -230,72 +227,108 @@ const Navbar = ({ role }: NavbarProps) => {
       />
 
       <aside
-        className={`rx-drawer fixed top-0 z-50 h-screen w-72 overflow-hidden border-r border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl ${
+        className={`rx-drawer fixed top-0 z-50 h-screen w-72 max-w-[calc(100vw-1rem)] overflow-hidden border-r border-sky-200/60 bg-gradient-to-b from-sky-50/90 via-white/80 to-blue-50/90 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700/70 dark:from-slate-900/95 dark:via-slate-950/85 dark:to-slate-900/95 md:max-w-none ${
           open ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
         <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
-          <div className="rx-brand-bar rx-animate-in flex shrink-0 flex-col gap-3 rounded-[28px] border p-5 transition-shadow duration-[var(--rx-duration-base)] hover:shadow-lg">
+          <div className="rx-brand-bar rx-animate-in flex shrink-0 items-center rounded-[28px] border px-3 py-4 transition-shadow duration-[var(--rx-duration-base)] hover:shadow-lg">
             <Logo
-              size="lg"
+              size="md"
               tone="inherit"
-              orientation="vertical"
+              orientation="horizontal"
               priority
-              className="[&>span:first-child]:transition-transform [&>span:first-child]:duration-[var(--rx-duration-slow)] [&>span:first-child]:ease-[var(--rx-ease-spring)] hover:[&>span:first-child]:scale-105"
+              className="w-full [&>span:last-child]:whitespace-normal [&>span:last-child]:text-[13px] [&>span:first-child]:transition-transform [&>span:first-child]:duration-[var(--rx-duration-slow)] [&>span:first-child]:ease-[var(--rx-ease-spring)] hover:[&>span:first-child]:scale-105"
             />
           </div>
 
-          <nav className="rx-stagger shrink-0 space-y-2">
-            {items.map((item) => {
-              const active = isActive(item);
-              const Icon = item.icon;
+          <nav
+            aria-label="Main navigation"
+            className="shrink-0 space-y-6"
+          >
+            {[
+              {
+                title: "Main Menu",
+                items: items.filter(
+                  (item) =>
+                    !["/profile", "/settings"].includes(item.href),
+                ),
+              },
+              {
+                title: "Account",
+                items: items.filter((item) =>
+                  ["/profile", "/settings"].includes(item.href),
+                ),
+              },
+            ].map((section) => (
+              <div
+                key={section.title}
+                role="group"
+                aria-label={section.title}
+              >
+                <p className="mb-3 flex items-center gap-3 px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                  {section.title}
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={closeSidebar}
-                  aria-current={active ? "page" : undefined}
-                  className={`group relative flex items-center gap-3 overflow-hidden rounded-3xl border px-4 py-3 transition-[background-color,border-color,color,transform] duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] active:scale-[0.98] ${
-                    active
-                      ? "border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/15"
-                      : "border-transparent text-slate-700 hover:translate-x-0.5 hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-                  }`}
-                >
                   <span
-                    className={`absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-[var(--rx-duration-slow)] ease-[var(--rx-ease-out)] ${
-                      active
-                        ? "opacity-100"
-                        : "-translate-x-2 opacity-0"
-                    }`}
                     aria-hidden="true"
+                    className="h-px flex-1 bg-sky-200/60 dark:bg-slate-700/70"
                   />
+                </p>
 
-                  <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center transition-transform duration-[var(--rx-duration-base)] ease-[var(--rx-ease-spring)] group-hover:scale-110">
-                    <Icon
-                      width={ICON_SIZE}
-                      height={ICON_SIZE}
-                      strokeWidth={ICON_STROKE}
-                      className="shrink-0"
-                      aria-hidden="true"
-                    />
+                <div className="rx-stagger space-y-2">
+                  {section.items.map((item) => {
+                    const active = isActive(item);
+                    const Icon = item.icon;
 
-                    {item.badge && item.badge > 0 ? (
-                      <span
-                        key={item.badge}
-                        className="rx-pop-in absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40"
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeSidebar}
+                        aria-current={active ? "page" : undefined}
+                        className={`group relative flex items-center gap-3 overflow-hidden rounded-3xl border px-4 py-3 transition-[background-color,border-color,color,transform] duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] active:scale-[0.98] ${
+                          active
+                            ? "border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/15"
+                            : "border-transparent text-slate-700 hover:translate-x-0.5 hover:border-slate-200 hover:bg-slate-100 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+                        }`}
                       >
-                        {item.badge > 99 ? "99+" : item.badge}
-                      </span>
-                    ) : null}
-                  </span>
+                        <span
+                          className={`absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-[var(--rx-duration-slow)] ease-[var(--rx-ease-out)] ${
+                            active
+                              ? "opacity-100"
+                              : "-translate-x-2 opacity-0"
+                          }`}
+                          aria-hidden="true"
+                        />
 
-                  <span className="font-semibold">
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            })}
+                        <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center transition-transform duration-[var(--rx-duration-base)] ease-[var(--rx-ease-spring)] group-hover:scale-110">
+                          <Icon
+                            width={ICON_SIZE}
+                            height={ICON_SIZE}
+                            strokeWidth={ICON_STROKE}
+                            className="shrink-0"
+                            aria-hidden="true"
+                          />
+
+                          {item.badge && item.badge > 0 ? (
+                            <span
+                              key={item.badge}
+                              className="rx-pop-in absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40"
+                            >
+                              {item.badge > 99 ? "99+" : item.badge}
+                            </span>
+                          ) : null}
+                        </span>
+
+                        <span className="font-semibold">
+                          {item.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
 
           <div className="mt-auto shrink-0">
@@ -304,7 +337,7 @@ const Navbar = ({ role }: NavbarProps) => {
               onClick={handleLogout}
               disabled={loggingOut}
               aria-busy={loggingOut}
-              className="rx-press flex w-full items-center justify-center gap-3 rounded-3xl border border-transparent bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-red-600/30 hover:bg-red-700 hover:shadow-md hover:shadow-red-600/40 disabled:cursor-progress disabled:opacity-70"
+              className="rx-press flex w-full items-center justify-center gap-3 rounded-3xl border border-rose-200/80 bg-rose-50/80 px-4 py-3 text-sm font-semibold text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-progress disabled:opacity-70 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/60"
             >
               <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center">
                 {loggingOut ? (

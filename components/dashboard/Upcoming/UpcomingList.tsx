@@ -411,7 +411,7 @@ function ScheduleDialog({
                 className="mt-1 text-sm text-gray-500 dark:text-gray-400"
               >
                 Browse doses from tomorrow onward.
-                Today&apos;s doses remain in Today&apos;s Schedule.
+              
               </p>
             </div>
 
@@ -555,7 +555,7 @@ function ScheduleDialog({
 
         <div className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6">
           <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Showing the selected date range. Future doses
+            Future doses
             follow your current medicine schedules and may
             change when you edit a medicine.
           </p>

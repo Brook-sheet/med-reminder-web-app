@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/brand/Logo";
 import OnboardingDialog from "@/components/OnboardingDialog";
 import {
   validateEmail,
@@ -22,6 +23,7 @@ import { FcGoogle } from "react-icons/fc";
 
 const Signin = () => {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -67,7 +69,7 @@ const Signin = () => {
       }
 
       router.push(
-        data.data?.user?.role === "family" ? "/monitor" : "/"
+        data.data?.user?.role === "family" ? "/monitor" : "/",
       );
       router.refresh();
     } catch {
@@ -92,6 +94,16 @@ const Signin = () => {
 
       <Card className="w-full overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/95 shadow-[0_28px_56px_rgba(15,23,42,0.08)]">
         <CardHeader className="px-6 pt-8">
+          <div className="mb-6 flex w-full justify-center text-slate-900">
+            <Logo
+              size="lg"
+              tone="inherit"
+              orientation="horizontal"
+              priority
+              className="max-w-full gap-3 [&>span:last-child]:whitespace-normal [&>span:last-child]:text-sm sm:[&>span:last-child]:text-base"
+            />
+          </div>
+
           <CardTitle className="text-center text-2xl font-semibold text-slate-900">
             Welcome back
           </CardTitle>
