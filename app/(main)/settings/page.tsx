@@ -1,5 +1,6 @@
 "use client";
 
+import { ReplayProductTour } from "@/components/onboarding/ProductTourProvider";
 import PushNotificationCard from "@/components/dashboard/settings/PushNotificationCard";
 import ResetDataCard from "@/components/dashboard/settings/ResetDataCard";
 import FamilyMonitoringCard from "@/components/dashboard/settings/FamilyMonitoringCard";
@@ -48,6 +49,8 @@ const Settings = () => {
           <SmsNotificationCard />
 
           <PushNotificationCard />
+
+          <ReplayProductTour />
 
           <ResetDataCard />
         </div>
