@@ -5,8 +5,10 @@ import type { DailyAdherence } from '@/hooks/useAdherence';
 
 export default function AdherenceHistoryChart({
   days,
+  historyLabel = 'Full history',
 }: {
   days: DailyAdherence[];
+  historyLabel?: string;
 }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const selected = days.find((day) => day.date === selectedDate);
@@ -64,7 +66,7 @@ export default function AdherenceHistoryChart({
   return (
     <div className="mt-4 min-w-0">
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        Full history · {days[0].label} – {days[days.length - 1].label}
+        {historyLabel} · {days[0].label} – {days[days.length - 1].label}
       </p>
 
       <div
@@ -81,7 +83,7 @@ export default function AdherenceHistoryChart({
             height,
           }}
           className="text-gray-500 dark:text-gray-400"
-          aria-label="Daily adherence percentage over the full available history"
+          aria-label={`Daily adherence percentage: ${historyLabel}`}
         >
           <title>Historical daily adherence</title>
 

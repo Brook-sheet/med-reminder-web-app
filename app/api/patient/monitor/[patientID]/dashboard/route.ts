@@ -20,6 +20,7 @@ import {
   resolveMedicationTimeZone,
 } from '@/lib/medicationTime';
 import { serializeAnnotations } from '@/lib/medicationAnnotations';
+import { buildAdherenceHistory } from '@/lib/adherenceHistory';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +112,7 @@ export async function GET(
         $ne: true,
       },
     }).select(
-      'firstName lastName condition patientId createdAt',
+      'firstName lastName condition patientId createdAt dataResetAt',
     );
 
     if (!patient) {
@@ -236,8 +237,56 @@ export async function GET(
         log.countsTowardAdherence !== false,
     }));
 
+    // Preserve the existing monitoring calculations and comparison range.
     const analysis = analyzeAdherence(
       rawLogs,
+      now,
+      timeZone,
+    );
+
+    // Full stored history is used only for the line chart.
+    // Match the Patient Role's data-reset boundary.
+    const historyQuery: Record<string, unknown> = {
+      userId: patient._id,
+    };
+
+    if (patient.dataResetAt) {
+      historyQuery.createdAt = {
+        $gt: patient.dataResetAt,
+      };
+    }
+
+    const historyLogs = await MedicationLog.find(historyQuery)
+      .select(
+        '_id medicineId medicineName status scheduledDate scheduledTime ' +
+          'takenAt lateAfterMinutes windowAfterMinutes expectedChamberId ' +
+          'detectedChamberId countsTowardAdherence',
+      )
+      .sort({
+        scheduledDate: 1,
+        scheduledTime: 1,
+        createdAt: 1,
+      })
+      .lean();
+
+    const historyRawLogs: RawLog[] = historyLogs.map((log) => ({
+      id: log._id.toString(),
+      medicineId: log.medicineId?.toString() ?? null,
+      medicineName: log.medicineName,
+      status: String(log.status),
+      scheduledDate: String(log.scheduledDate),
+      scheduledTime: String(log.scheduledTime),
+      takenAt: log.takenAt ?? null,
+      lateAfterMinutes: log.lateAfterMinutes,
+      windowAfterMinutes: log.windowAfterMinutes,
+      expectedChamberId: log.expectedChamberId ?? null,
+      detectedChamberId: log.detectedChamberId ?? null,
+      countsTowardAdherence:
+        log.countsTowardAdherence !== false,
+    }));
+
+    const dailyTrend = buildAdherenceHistory(
+      historyRawLogs,
       now,
       timeZone,
     );
@@ -414,7 +463,10 @@ export async function GET(
           incorrectChamberEvents:
             analysis.features.incorrectChamberEvents,
           riskReasons: analysis.riskReasons,
-          behavioral: analysis.behavioral,
+          behavioral: {
+            ...analysis.behavioral,
+            dailyTrend,
+          },
           insight: analysis.insight,
           recommendation: analysis.recommendation,
         },

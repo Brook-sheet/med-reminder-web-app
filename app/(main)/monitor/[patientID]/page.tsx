@@ -1,14 +1,8 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from 'react';
-import {
-  useParams,
-  useRouter,
-} from 'next/navigation';
+import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
@@ -16,6 +10,7 @@ import {
   CheckCircle,
   ClipboardCheck,
   Eye,
+  FileText,
   Info,
   Loader2,
   Minus,
@@ -26,18 +21,14 @@ import {
   User,
 } from 'lucide-react';
 import { toast } from '@/components/ui/Toast';
+import AdherenceHistoryChart from '@/components/dashboard/AdherenceHistoryChart';
 
 type RiskLevel = 'Low' | 'Moderate' | 'High';
-
 type Trend = 'improving' | 'stable' | 'declining';
 
 interface BehavioralInsight {
   id: string;
-  tone:
-    | 'positive'
-    | 'warning'
-    | 'critical'
-    | 'neutral';
+  tone: 'positive' | 'warning' | 'critical' | 'neutral';
   title: string;
   detail: string;
 }
@@ -250,9 +241,7 @@ const LOG_STYLE: Record<
   },
 };
 
-function formattedDateTime(
-  value?: string | null,
-): string {
+function formattedDateTime(value?: string | null): string {
   if (!value) {
     return '—';
   }
@@ -328,9 +317,8 @@ function AcknowledgeDialog({
             </p>
 
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              Acknowledgment records that you reviewed the
-              entry. It will not change the patient&apos;s
-              final medication status.
+              Acknowledgment records that you reviewed the entry.
+              It will not change the patient&apos;s final medication status.
             </p>
           </div>
         </div>
@@ -340,9 +328,7 @@ function AcknowledgeDialog({
 
           <textarea
             value={note}
-            onChange={(event) =>
-              onNoteChange(event.target.value)
-            }
+            onChange={(event) => onNoteChange(event.target.value)}
             maxLength={500}
             rows={4}
             disabled={saving}
@@ -388,28 +374,18 @@ export default function MonitorDashboardPage() {
   const router = useRouter();
   const patientID = params.patientID as string;
 
-  const [data, setData] =
-    useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] =
-    useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] =
-    useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const [
-    acknowledgmentLog,
-    setAcknowledgmentLog,
-  ] = useState<LogEntry | null>(null);
+  const [acknowledgmentLog, setAcknowledgmentLog] =
+    useState<LogEntry | null>(null);
 
-  const [
-    acknowledgmentNote,
-    setAcknowledgmentNote,
-  ] = useState('');
+  const [acknowledgmentNote, setAcknowledgmentNote] = useState('');
 
-  const [
-    savingAcknowledgment,
-    setSavingAcknowledgment,
-  ] = useState(false);
+  const [savingAcknowledgment, setSavingAcknowledgment] =
+    useState(false);
 
   const fetchDashboard = useCallback(async () => {
     if (!patientID) {
@@ -428,8 +404,7 @@ export default function MonitorDashboardPage() {
 
       if (!response.ok || !json.success) {
         throw new Error(
-          json.error ||
-            'Failed to load patient dashboard',
+          json.error || 'Failed to load patient dashboard',
         );
       }
 
@@ -450,10 +425,7 @@ export default function MonitorDashboardPage() {
   useEffect(() => {
     fetchDashboard();
 
-    const interval = setInterval(
-      fetchDashboard,
-      60_000,
-    );
+    const interval = setInterval(fetchDashboard, 60_000);
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -462,7 +434,6 @@ export default function MonitorDashboardPage() {
     };
 
     window.addEventListener('focus', fetchDashboard);
-
     document.addEventListener(
       'visibilitychange',
       refreshWhenVisible,
@@ -470,12 +441,7 @@ export default function MonitorDashboardPage() {
 
     return () => {
       clearInterval(interval);
-
-      window.removeEventListener(
-        'focus',
-        fetchDashboard,
-      );
-
+      window.removeEventListener('focus', fetchDashboard);
       document.removeEventListener(
         'visibilitychange',
         refreshWhenVisible,
@@ -484,10 +450,7 @@ export default function MonitorDashboardPage() {
   }, [fetchDashboard]);
 
   const submitAcknowledgment = async () => {
-    if (
-      !acknowledgmentLog ||
-      savingAcknowledgment
-    ) {
+    if (!acknowledgmentLog || savingAcknowledgment) {
       return;
     }
 
@@ -512,8 +475,7 @@ export default function MonitorDashboardPage() {
 
       if (!response.ok || !json.success) {
         throw new Error(
-          json.error ||
-            'Unable to acknowledge this record.',
+          json.error || 'Unable to acknowledge this record.',
         );
       }
 
@@ -521,8 +483,7 @@ export default function MonitorDashboardPage() {
       setAcknowledgmentNote('');
 
       toast.success(
-        json.message ||
-          'Medication record acknowledged.',
+        json.message || 'Medication record acknowledged.',
       );
 
       await fetchDashboard();
@@ -602,13 +563,24 @@ export default function MonitorDashboardPage() {
           )}
         </div>
 
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Patient Monitoring
-        </button>
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 print:hidden">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex min-h-11 min-w-0 items-center gap-1.5 text-left text-sm text-gray-500 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" />
+            <span>Back to Patient Monitoring</span>
+          </button>
+
+          <Link
+            href={`/reports/medication?patientID=${encodeURIComponent(patientID)}`}
+            className="rx-press inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-white shadow-sm shadow-blue-600/25 hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/30 sm:gap-2 sm:px-4 sm:text-sm print:hidden"
+          >
+            <FileText className="h-4 w-4 shrink-0" />
+            View Report
+          </Link>
+        </div>
 
         <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -630,9 +602,7 @@ export default function MonitorDashboardPage() {
 
                 <p className="mt-0.5 text-xs text-gray-400">
                   Member since{' '}
-                  {new Date(
-                    patient.memberSince,
-                  ).toLocaleDateString()}
+                  {new Date(patient.memberSince).toLocaleDateString()}
                 </p>
               </div>
             </div>
@@ -676,8 +646,7 @@ export default function MonitorDashboardPage() {
               },
               {
                 label: 'Wrong Chamber',
-                value:
-                  reportSummary.today.incorrectChamber,
+                value: reportSummary.today.incorrectChamber,
                 color: 'text-red-600',
               },
               {
@@ -696,9 +665,7 @@ export default function MonitorDashboardPage() {
                   {item.label}
                 </p>
 
-                <p
-                  className={`mt-1 text-xl font-bold ${item.color}`}
-                >
+                <p className={`mt-1 text-xl font-bold ${item.color}`}>
                   {item.value}
                 </p>
               </div>
@@ -724,9 +691,8 @@ export default function MonitorDashboardPage() {
               </p>
 
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                More completed medication activity is
-                needed before behavioral patterns can be
-                identified.
+                More completed medication activity is needed before
+                behavioral patterns can be identified.
               </p>
 
               <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
@@ -744,9 +710,7 @@ export default function MonitorDashboardPage() {
                     Eligible-dose adherence
                   </span>
 
-                  <span
-                    className={`text-2xl font-bold ${risk.text}`}
-                  >
+                  <span className={`text-2xl font-bold ${risk.text}`}>
                     {adherence.adherenceRate}%
                   </span>
                 </div>
@@ -755,17 +719,14 @@ export default function MonitorDashboardPage() {
                   <div
                     className={`h-3 rounded-full ${risk.bar}`}
                     style={{
-                      width: `${Math.min(
-                        adherence.adherenceRate,
-                        100,
-                      )}%`,
+                      width: `${Math.min(adherence.adherenceRate, 100)}%`,
                     }}
                   />
                 </div>
 
                 <p className="mt-1 text-xs text-gray-400">
-                  Upcoming and active-window pending doses
-                  do not affect this rate.
+                  Upcoming and active-window pending doses do not
+                  affect this rate.
                 </p>
               </div>
 
@@ -789,8 +750,7 @@ export default function MonitorDashboardPage() {
                   },
                   {
                     label: 'Wrong Chamber',
-                    value:
-                      adherence.incorrectChamberEvents,
+                    value: adherence.incorrectChamberEvents,
                   },
                 ].map((item) => (
                   <div
@@ -808,101 +768,66 @@ export default function MonitorDashboardPage() {
                 ))}
               </div>
 
-              <div className="rounded-xl border border-border/50 bg-white/50 p-4 dark:bg-gray-800/50">
+              <div className="min-w-0 rounded-xl border border-border/50 bg-white/50 p-4 dark:bg-gray-800/50">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div
-                    className={`flex items-center gap-1.5 text-sm font-bold ${trend.color}`}
-                  >
-                    <TrendIcon className="h-4 w-4" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Behavioral trend
+                    </p>
 
-                    {adherence.trendAvailable
-                      ? trend.label
-                      : 'Insufficient historical data for trend'}
+                    <div
+                      className={`mt-1 flex items-center gap-1.5 text-sm font-bold ${trend.color}`}
+                    >
+                      <TrendIcon className="h-4 w-4" />
+
+                      {adherence.trendAvailable
+                        ? trend.label
+                        : 'Insufficient historical data'}
+                    </div>
                   </div>
 
                   {adherence.trendAvailable && (
-                    <p className="text-xs text-gray-500">
-                      Previous 7 days{' '}
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Weekly comparison: Previous 7 days{' '}
                       {adherence.previousRate}% → Current
                       7 days {adherence.recentRate}%
                     </p>
                   )}
                 </div>
 
-                <div className="mt-4 grid grid-cols-7 gap-2">
-                  {adherence.behavioral.dailyTrend.map(
-                    (day) => (
-                      <div
-                        key={day.date}
-                        className="text-center"
-                      >
-                        <div className="flex h-16 items-end rounded bg-gray-100 px-1 dark:bg-gray-800">
-                          {day.adherenceRate == null ? (
-                            <div className="mb-2 h-1 w-full rounded bg-gray-300" />
-                          ) : (
-                            <div
-                              className={`w-full rounded-t ${
-                                day.adherenceRate >= 80
-                                  ? 'bg-green-500'
-                                  : day.adherenceRate >= 50
-                                    ? 'bg-amber-500'
-                                    : 'bg-red-500'
-                              }`}
-                              style={{
-                                height: `${Math.max(
-                                  day.adherenceRate,
-                                  6,
-                                )}%`,
-                              }}
-                            />
-                          )}
-                        </div>
-
-                        <p className="mt-1 text-[10px] text-gray-500">
-                          {day.label}
-                        </p>
-
-                        <p className="text-[10px] font-semibold">
-                          {day.adherenceRate == null
-                            ? '—'
-                            : `${day.adherenceRate}%`}
-                        </p>
-                      </div>
-                    ),
-                  )}
-                </div>
+                <AdherenceHistoryChart
+                  key={patientID}
+                  days={adherence.behavioral.dailyTrend}
+                  historyLabel="Full history"
+                />
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                {adherence.behavioral.timeOfDay.map(
-                  (period) => (
-                    <div
-                      key={period.period}
-                      className="rounded-xl border border-border/40 bg-background/60 p-3"
-                    >
-                      <div className="flex justify-between">
-                        <b className="text-sm">
-                          {period.period}
-                        </b>
+                {adherence.behavioral.timeOfDay.map((period) => (
+                  <div
+                    key={period.period}
+                    className="rounded-xl border border-border/40 bg-background/60 p-3"
+                  >
+                    <div className="flex justify-between">
+                      <b className="text-sm">{period.period}</b>
 
-                        <b className="text-sm text-blue-600">
-                          {period.eligible
-                            ? `${period.adherenceRate}%`
-                            : '—'}
-                        </b>
-                      </div>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        {period.eligible}
-                        {' eligible · '}
-                        {period.missed}
-                        {' missed · '}
-                        {period.late}
-                        {' late'}
-                      </p>
+                      <b className="text-sm text-blue-600">
+                        {period.eligible
+                          ? `${period.adherenceRate}%`
+                          : '—'}
+                      </b>
                     </div>
-                  ),
-                )}
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      {period.eligible}
+                      {' eligible · '}
+                      {period.missed}
+                      {' missed · '}
+                      {period.late}
+                      {' late'}
+                    </p>
+                  </div>
+                ))}
               </div>
 
               <div>
@@ -911,35 +836,31 @@ export default function MonitorDashboardPage() {
                 </h3>
 
                 <div className="mt-3 space-y-2">
-                  {adherence.behavioral.insights.length ===
-                  0 ? (
+                  {adherence.behavioral.insights.length === 0 ? (
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-                      No repeated negative behavior has been
-                      detected.
+                      No repeated negative behavior has been detected.
                     </div>
                   ) : (
-                    adherence.behavioral.insights.map(
-                      (item) => (
-                        <div
-                          key={item.id}
-                          className={`rounded-xl border p-3 ${
-                            item.tone === 'positive'
-                              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
-                              : item.tone === 'critical'
-                                ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
-                                : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20'
-                          }`}
-                        >
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {item.title}
-                          </p>
+                    adherence.behavioral.insights.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`rounded-xl border p-3 ${
+                          item.tone === 'positive'
+                            ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
+                            : item.tone === 'critical'
+                              ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                              : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {item.title}
+                        </p>
 
-                          <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300">
-                            {item.detail}
-                          </p>
-                        </div>
-                      ),
-                    )
+                        <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300">
+                          {item.detail}
+                        </p>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -1065,41 +986,33 @@ export default function MonitorDashboardPage() {
 
                     {log.annotations.length > 0 && (
                       <div className="mt-3 space-y-2">
-                        {log.annotations.map(
-                          (annotation) => (
-                            <div
-                              key={annotation._id}
-                              className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-2"
-                            >
-                              <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-                                {annotationTitle(
-                                  annotation.type,
-                                )}
-                              </p>
+                        {log.annotations.map((annotation) => (
+                          <div
+                            key={annotation._id}
+                            className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-2"
+                          >
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                              {annotationTitle(annotation.type)}
+                            </p>
 
-                              {annotation.text && (
-                                <p className="mt-1 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-300">
-                                  {annotation.text}
-                                </p>
-                              )}
-
-                              <p className="mt-1 text-[11px] text-gray-400">
-                                {annotation.authorName} ·{' '}
-                                {formattedDateTime(
-                                  annotation.createdAt,
-                                )}
+                            {annotation.text && (
+                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-300">
+                                {annotation.text}
                               </p>
-                            </div>
-                          ),
-                        )}
+                            )}
+
+                            <p className="mt-1 text-[11px] text-gray-400">
+                              {annotation.authorName} ·{' '}
+                              {formattedDateTime(annotation.createdAt)}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     )}
 
-                    {[
-                      'taken',
-                      'late',
-                      'missed',
-                    ].includes(log.lifecycle) && (
+                    {['taken', 'late', 'missed'].includes(
+                      log.lifecycle,
+                    ) && (
                       <div className="mt-3">
                         {log.acknowledgedByCurrentFamily ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600 dark:text-green-400">
@@ -1146,9 +1059,7 @@ export default function MonitorDashboardPage() {
               setAcknowledgmentNote('');
             }
           }}
-          onConfirm={() =>
-            void submitAcknowledgment()
-          }
+          onConfirm={() => void submitAcknowledgment()}
         />
       )}
     </div>

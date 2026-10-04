@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -16,108 +18,67 @@ import {
   MessageSquareText,
   Radio,
   ShieldAlert,
+  X,
 } from 'lucide-react';
+import { Dialog } from 'radix-ui';
 import { useAlerts } from '@/hooks/useAlerts';
 import type {
   AlertData,
   AlertSeverity,
 } from '@/lib/interfaces/data/Alert';
 
-const SEVERITY:
-  Record<
-    AlertSeverity,
-    {
-      label: string;
-      badge: string;
-      Icon: typeof Bell;
-    }
-  > = {
-    INFO: {
-      label:
-        'Info',
+const SEVERITY: Record<
+  AlertSeverity,
+  {
+    label: string;
+    badge: string;
+    Icon: typeof Bell;
+  }
+> = {
+  INFO: {
+    label: 'Info',
+    badge:
+      'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
+    Icon: Info,
+  },
+  NOTICE: {
+    label: 'Notice',
+    badge:
+      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300',
+    Icon: Clock,
+  },
+  WARNING: {
+    label: 'Warning',
+    badge:
+      'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300',
+    Icon: AlertTriangle,
+  },
+  CRITICAL: {
+    label: 'Critical',
+    badge:
+      'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300',
+    Icon: ShieldAlert,
+  },
+};
 
-      badge:
-        'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
-
-      Icon:
-        Info,
-    },
-
-    NOTICE: {
-      label:
-        'Notice',
-
-      badge:
-        'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300',
-
-      Icon:
-        Clock,
-    },
-
-    WARNING: {
-      label:
-        'Warning',
-
-      badge:
-        'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-300',
-
-      Icon:
-        AlertTriangle,
-    },
-
-    CRITICAL: {
-      label:
-        'Critical',
-
-      badge:
-        'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300',
-
-      Icon:
-        ShieldAlert,
-    },
-  };
-
-function fullTime(
-  value: string,
-): string {
-  return new Date(
-    value,
-  ).toLocaleString(
-    'en-US',
-    {
-      month:
-        'long',
-
-      day:
-        'numeric',
-
-      year:
-        'numeric',
-
-      hour:
-        'numeric',
-
-      minute:
-        '2-digit',
-    },
-  );
+function fullTime(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function annotationTitle(
-  type:
-    AlertData['annotations'][number]['type'],
+  type: AlertData['annotations'][number]['type'],
 ): string {
-  if (
-    type ===
-    'missed_explanation'
-  ) {
+  if (type === 'missed_explanation') {
     return 'Missed-dose explanation';
   }
 
-  if (
-    type ===
-    'family_acknowledgment'
-  ) {
+  if (type === 'family_acknowledgment') {
     return 'Family acknowledgment';
   }
 
@@ -129,22 +90,11 @@ function AlertDetails({
   acknowledge,
 }: {
   alert: AlertData;
-
-  acknowledge:
-    (
-      id: string,
-    ) => Promise<AlertData>;
+  acknowledge: (id: string) => Promise<AlertData>;
 }) {
-  const severity =
-    SEVERITY[
-      alert.severity
-    ];
-
-  const Icon =
-    severity.Icon;
-
-  const annotations =
-    alert.annotations ?? [];
+  const severity = SEVERITY[alert.severity];
+  const Icon = severity.Icon;
+  const annotations = alert.annotations ?? [];
 
   return (
     <div className="rounded-[28px] border border-border/70 bg-card p-5 shadow-sm sm:p-6">
@@ -189,37 +139,31 @@ function AlertDetails({
           </div>
 
           <div className="mt-3 space-y-3">
-            {annotations.map(
-              (annotation) => (
-                <div
-                  key={
-                    annotation._id ||
-                    `${annotation.type}-${annotation.createdAt}`
-                  }
-                  className="rounded-xl border border-blue-100 bg-white/80 p-3 dark:border-blue-900 dark:bg-gray-900/40"
-                >
-                  <p className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                    {annotationTitle(
-                      annotation.type,
-                    )}
-                  </p>
+            {annotations.map((annotation) => (
+              <div
+                key={
+                  annotation._id ||
+                  `${annotation.type}-${annotation.createdAt}`
+                }
+                className="rounded-xl border border-blue-100 bg-white/80 p-3 dark:border-blue-900 dark:bg-gray-900/40"
+              >
+                <p className="text-xs font-bold text-blue-700 dark:text-blue-300">
+                  {annotationTitle(annotation.type)}
+                </p>
 
-                  {annotation.text && (
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-200">
-                      {annotation.text}
-                    </p>
-                  )}
-
-                  <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
-                    {annotation.authorName}
-                    {' · '}
-                    {fullTime(
-                      annotation.createdAt,
-                    )}
+                {annotation.text && (
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-200">
+                    {annotation.text}
                   </p>
-                </div>
-              ),
-            )}
+                )}
+
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  {annotation.authorName}
+                  {' · '}
+                  {fullTime(annotation.createdAt)}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -243,8 +187,7 @@ function AlertDetails({
           <dd className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
             {alert.medication
               ? `${alert.medication.name} ${
-                  alert.medication.dosage ||
-                  ''
+                  alert.medication.dosage || ''
                 }`.trim()
               : 'Not specified'}
           </dd>
@@ -256,10 +199,7 @@ function AlertDetails({
           </dt>
 
           <dd className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            {alert.eventType.replaceAll(
-              '_',
-              ' ',
-            )}
+            {alert.eventType.replaceAll('_', ' ')}
           </dd>
         </div>
 
@@ -269,9 +209,7 @@ function AlertDetails({
           </dt>
 
           <dd className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            {fullTime(
-              alert.occurredAt,
-            )}
+            {fullTime(alert.occurredAt)}
           </dd>
         </div>
 
@@ -292,26 +230,17 @@ function AlertDetails({
 
           <dd className="mt-1 text-sm text-gray-700 dark:text-gray-300">
             In-app
-            {alert.channels.push
-              ? ' · Push'
-              : ''}
-            {alert.channels.sms
-              ? ' · SMS'
-              : ''}
+            {alert.channels.push ? ' · Push' : ''}
+            {alert.channels.sms ? ' · SMS' : ''}
           </dd>
         </div>
       </dl>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {alert.status !==
-          'ACKNOWLEDGED' && (
+        {alert.status !== 'ACKNOWLEDGED' && (
           <button
             type="button"
-            onClick={() =>
-              void acknowledge(
-                alert._id,
-              )
-            }
+            onClick={() => void acknowledge(alert._id)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <Check className="h-4 w-4" />
@@ -344,82 +273,74 @@ export default function AlertsPageClient() {
     markRead,
     acknowledge,
     markAllRead,
-  } =
-    useAlerts(100);
+  } = useAlerts(100);
 
-  const [
-    severityFilter,
-    setSeverityFilter,
-  ] =
-    useState<
-      | 'ALL'
-      | AlertSeverity
-    >('ALL');
+  const [severityFilter, setSeverityFilter] = useState<
+    'ALL' | AlertSeverity
+  >('ALL');
 
-  const [
-    selectedId,
-    setSelectedId,
-  ] =
-    useState<string | null>(
-      null,
-    );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const filtered =
-    useMemo(
-      () =>
-        severityFilter ===
-        'ALL'
-          ? alerts
-          : alerts.filter(
-              (alert) =>
-                alert.severity ===
-                severityFilter,
-            ),
-      [
-        alerts,
-        severityFilter,
-      ],
-    );
+  const lastSelectedButton = useRef<HTMLButtonElement | null>(null);
 
-  const selected =
-    alerts.find(
-      (alert) =>
-        alert._id ===
-        selectedId,
-    ) || null;
+  const [isMobile, setIsMobile] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const selectAlert =
-    async (
-      alert: AlertData,
-    ) => {
-      setSelectedId(
-        alert._id,
-      );
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
 
-      try {
-        /*
-         * Opening an already-read alert refreshes the list
-         * so notes added after alert delivery appear
-         * immediately.
-         */
-        if (!alert.isRead) {
-          await markRead(
-            alert._id,
-          );
-        } else {
-          await refetch();
-        }
-      } catch (updateError) {
-        console.error(
-          updateError,
-        );
+    const update = () => {
+      setIsMobile(!media.matches);
+
+      if (media.matches) {
+        setDetailsOpen(false);
       }
     };
 
+    update();
+    media.addEventListener('change', update);
+
+    return () => {
+      media.removeEventListener('change', update);
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      severityFilter === 'ALL'
+        ? alerts
+        : alerts.filter(
+            (alert) => alert.severity === severityFilter,
+          ),
+    [alerts, severityFilter],
+  );
+
+  const selected =
+    alerts.find((alert) => alert._id === selectedId) || null;
+
+  const selectAlert = async (alert: AlertData) => {
+    setSelectedId(alert._id);
+    setDetailsOpen(true);
+
+    try {
+      /*
+       * Opening an already-read alert refreshes the list
+       * so notes added after alert delivery appear immediately.
+       */
+      if (!alert.isRead) {
+        await markRead(alert._id);
+      } else {
+        await refetch();
+      }
+    } catch (updateError) {
+      console.error(updateError);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Medication Alerts
@@ -433,9 +354,7 @@ export default function AlertsPageClient() {
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-gray-500">
             <Radio
               className={`h-3.5 w-3.5 ${
-                connected
-                  ? 'text-green-500'
-                  : 'text-amber-500'
+                connected ? 'text-green-500' : 'text-amber-500'
               }`}
             />
 
@@ -445,52 +364,36 @@ export default function AlertsPageClient() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card p-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card p-4">
           <div className="flex flex-wrap gap-2">
             {(
-              [
-                'ALL',
-                'NOTICE',
-                'WARNING',
-                'CRITICAL',
-              ] as const
-            ).map(
-              (value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    setSeverityFilter(
-                      value,
-                    )
-                  }
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                    severityFilter ===
-                    value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                  }`}
-                >
-                  {value === 'ALL'
-                    ? 'All Alerts'
-                    : SEVERITY[value]
-                        .label}
-                </button>
-              ),
-            )}
+              ['ALL', 'NOTICE', 'WARNING', 'CRITICAL'] as const
+            ).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSeverityFilter(value)}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  severityFilter === value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                }`}
+              >
+                {value === 'ALL'
+                  ? 'All Alerts'
+                  : SEVERITY[value].label}
+              </button>
+            ))}
           </div>
 
           {unreadCount > 0 && (
             <button
               type="button"
-              onClick={() =>
-                void markAllRead()
-              }
+              onClick={() => void markAllRead()}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400"
             >
               <CheckCircle className="h-4 w-4" />
-              Mark all read (
-              {unreadCount})
+              Mark all read ({unreadCount})
             </button>
           )}
         </div>
@@ -501,148 +404,115 @@ export default function AlertsPageClient() {
           </div>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.85fr)]">
-          <section className="overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-sm">
+        <div className="grid min-w-0 items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.85fr)] lg:grid-rows-[minmax(28rem,auto)]">
+          <section
+            tabIndex={0}
+            aria-label="Medication alert list"
+            className="min-w-0 overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-sm focus-visible:outline-2 focus-visible:outline-blue-500 lg:h-0 lg:min-h-full lg:overflow-y-auto lg:overscroll-contain"
+          >
             {loading ? (
               <p className="p-8 text-center text-sm text-gray-500">
                 Loading alerts…
               </p>
-            ) : filtered.length ===
-              0 ? (
+            ) : filtered.length === 0 ? (
               <div className="p-12 text-center text-gray-400">
                 <Bell className="mx-auto mb-3 h-10 w-10 opacity-40" />
 
-                <p>
-                  No alerts in this category.
-                </p>
+                <p>No alerts in this category.</p>
               </div>
             ) : (
               <div className="divide-y divide-border/60">
-                {filtered.map(
-                  (alert) => {
-                    const severity =
-                      SEVERITY[
-                        alert.severity
-                      ];
+                {filtered.map((alert) => {
+                  const severity = SEVERITY[alert.severity];
+                  const Icon = severity.Icon;
+                  const noteCount = (
+                    alert.annotations ?? []
+                  ).length;
 
-                    const Icon =
-                      severity.Icon;
+                  return (
+                    <button
+                      key={alert._id}
+                      type="button"
+                      aria-pressed={selectedId === alert._id}
+                      aria-haspopup={
+                        isMobile ? 'dialog' : undefined
+                      }
+                      onClick={(event) => {
+                        lastSelectedButton.current =
+                          event.currentTarget;
 
-                    const noteCount =
-                      (
-                        alert.annotations ??
-                        []
-                      ).length;
-
-                    return (
-                      <button
-                        key={
-                          alert._id
-                        }
-                        type="button"
-                        onClick={() =>
-                          void selectAlert(
-                            alert,
-                          )
-                        }
-                        className={`w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
-                          !alert.isRead
-                            ? 'bg-blue-50/70 dark:bg-blue-900/10'
-                            : ''
-                        } ${
-                          selectedId ===
-                          alert._id
-                            ? 'ring-2 ring-inset ring-blue-500'
-                            : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${severity.badge}`}
-                          >
-                            <Icon className="h-4 w-4" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                                {
-                                  alert.title
-                                }
-                              </p>
-
-                              <span className="shrink-0 text-[10px] text-gray-400">
-                                {fullTime(
-                                  alert.createdAt,
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="mt-1 line-clamp-2 text-xs text-gray-600 dark:text-gray-300">
-                              {
-                                alert.message
-                              }
-                            </p>
-
-                            <p className="mt-2 text-[11px] text-gray-400">
-                              {
-                                alert
-                                  .patient
-                                  .name
-                              }
-
-                              {alert.medication
-                                ? ` · ${alert.medication.name}`
-                                : ''}
-
-                              {' · '}
-                              {
-                                alert.status
-                              }
-                            </p>
-
-                            {noteCount >
-                              0 && (
-                              <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                                <MessageSquareText className="h-3 w-3" />
-
-                                {
-                                  noteCount
-                                }{' '}
-
-                                {noteCount ===
-                                1
-                                  ? 'note'
-                                  : 'notes'}
-                              </p>
-                            )}
-                          </div>
+                        void selectAlert(alert);
+                      }}
+                      className={`w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
+                        !alert.isRead
+                          ? 'bg-blue-50/70 dark:bg-blue-900/10'
+                          : ''
+                      } ${
+                        selectedId === alert._id
+                          ? 'ring-2 ring-inset ring-blue-500'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${severity.badge}`}
+                        >
+                          <Icon className="h-4 w-4" />
                         </div>
-                      </button>
-                    );
-                  },
-                )}
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {alert.title}
+                            </p>
+
+                            <span className="shrink-0 text-[10px] text-gray-400">
+                              {fullTime(alert.createdAt)}
+                            </span>
+                          </div>
+
+                          <p className="mt-1 line-clamp-2 text-xs text-gray-600 dark:text-gray-300">
+                            {alert.message}
+                          </p>
+
+                          <p className="mt-2 text-[11px] text-gray-400">
+                            {alert.patient.name}
+
+                            {alert.medication
+                              ? ` · ${alert.medication.name}`
+                              : ''}
+
+                            {' · '}
+                            {alert.status}
+                          </p>
+
+                          {noteCount > 0 && (
+                            <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                              <MessageSquareText className="h-3 w-3" />
+                              {noteCount}{' '}
+                              {noteCount === 1 ? 'note' : 'notes'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </section>
 
-          <aside>
-            {selected ? (
+          <aside
+            aria-label="Selected alert details"
+            className="hidden min-w-0 flex-col lg:flex lg:[&>div]:flex-1"
+          >
+            {!isMobile && selected ? (
               <AlertDetails
-                alert={
-                  selected
-                }
-                acknowledge={async (
-                  id,
-                ) => {
-                  const updated =
-                    await acknowledge(
-                      id,
-                    );
+                alert={selected}
+                acknowledge={async (id) => {
+                  const updated = await acknowledge(id);
 
-                  setSelectedId(
-                    updated._id,
-                  );
+                  setSelectedId(updated._id);
 
                   return updated;
                 }}
@@ -659,10 +529,67 @@ export default function AlertsPageClient() {
           </aside>
         </div>
 
-        <p className="text-center text-xs text-gray-400">
-          Browser Push can be enabled in Settings. SMS is only attempted for configured important alerts.
+        <p className="shrink-0 px-2 pb-0 pt-5 text-center text-xs leading-relaxed text-gray-400">
+          SMS is only
+          attempted for configured important alerts.
         </p>
       </div>
+
+      <Dialog.Root
+        open={isMobile && detailsOpen && Boolean(selected)}
+        onOpenChange={setDetailsOpen}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[1000] bg-slate-950/50 backdrop-blur-sm" />
+
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-[1001] flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-2xl focus:outline-none"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+
+              lastSelectedButton.current?.focus({
+                preventScroll: true,
+              });
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+              <Dialog.Title className="text-base font-semibold text-gray-900 dark:text-white">
+                Alert Details
+              </Dialog.Title>
+
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Close alert details"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-gray-400 dark:hover:bg-gray-800"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </Dialog.Close>
+            </div>
+
+            <Dialog.Description className="sr-only">
+              Review the selected medication alert. Close this
+              dialog to return to the alert list.
+            </Dialog.Description>
+
+            <div className="min-h-0 overflow-y-auto overscroll-contain">
+              {selected && (
+                <AlertDetails
+                  alert={selected}
+                  acknowledge={async (id) => {
+                    const updated = await acknowledge(id);
+
+                    setSelectedId(updated._id);
+
+                    return updated;
+                  }}
+                />
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
