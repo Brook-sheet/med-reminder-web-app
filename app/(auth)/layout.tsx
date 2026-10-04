@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 
@@ -30,6 +31,34 @@ export default function FormLayout({
         )}
 
         <main className="w-full max-w-md">{children}</main>
+
+        <footer className="mt-6 w-full max-w-md px-2 text-center">
+          <nav
+            aria-label="Information and policies"
+            className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-slate-500"
+          >
+            <Link
+              href="/about"
+              className="rounded transition-colors hover:text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-600"
+            >
+              About Rx Box
+            </Link>
+
+            <Link
+              href="/privacy"
+              className="rounded transition-colors hover:text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-600"
+            >
+              Privacy Policy
+            </Link>
+
+            <Link
+              href="/terms"
+              className="rounded transition-colors hover:text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-600"
+            >
+              Terms of Service
+            </Link>
+          </nav>
+        </footer>
       </div>
     </div>
   );
