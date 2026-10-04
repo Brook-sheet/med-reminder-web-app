@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTokenFromRequest, verifyToken } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
+import { isTourPreferenceOriginAllowed } from "@/lib/tourPreferenceOrigin";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
       return json({ error: "Unauthorized" }, 401);
     }
 
-    const role = user.role === "family" ? "family" : "patient";
+    const role =
+      user.role === "family" ? "family" : "patient";
 
     return json({
       userId: String(user._id),
@@ -57,9 +59,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const origin = request.headers.get("origin");
-
-  if (origin && origin !== request.nextUrl.origin) {
+  if (!isTourPreferenceOriginAllowed(request)) {
     return json({ error: "Forbidden" }, 403);
   }
 
@@ -77,7 +77,10 @@ export async function PATCH(request: NextRequest) {
 
   if (
     !body ||
-    (body.status !== "skipped" && body.status !== "completed")
+    (
+      body.status !== "skipped" &&
+      body.status !== "completed"
+    )
   ) {
     return json({ error: "Invalid tour status" }, 400);
   }
@@ -89,7 +92,8 @@ export async function PATCH(request: NextRequest) {
       return json({ error: "Unauthorized" }, 401);
     }
 
-    const role = user.role === "family" ? "family" : "patient";
+    const role =
+      user.role === "family" ? "family" : "patient";
 
     if (
       body.userId !== String(user._id) ||
@@ -120,7 +124,12 @@ export async function PATCH(request: NextRequest) {
     );
 
     return json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error(
+      "[PATCH /api/onboarding] Unable to save tour preferences",
+      error,
+    );
+
     return json(
       { error: "Unable to save tour preferences." },
       500,

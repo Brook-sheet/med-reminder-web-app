@@ -43,6 +43,8 @@ interface Preference {
 const TourContext = createContext<{
   launch: (id: TourId) => void;
   role: TourRole;
+  preferencePending: boolean;
+  retryPreference: () => void;
 } | null>(null);
 
 const TourActiveContext = createContext(false);
@@ -79,6 +81,7 @@ export function ProductTourProvider({
   const [phase, setPhase] = useState<Phase>("closed");
   const [steps, setSteps] = useState<TourStep[]>([]);
   const [index, setIndex] = useState(0);
+  const [preferencePending, setPreferencePending] = useState(false);
 
   const selectedTour = useRef<TourId>("general");
   const checked = useRef(false);
@@ -86,15 +89,12 @@ export function ProductTourProvider({
   const mounted = useRef(true);
   const pending = useRef<Outcome | null>(null);
   const syncing = useRef(false);
-  const notified = useRef(false);
 
   const expectedRoute = useRef<string | null>(null);
   const arrivingFrom = useRef<string | null>(null);
 
   const home = homeFor(role);
-
-  const storageKey =
-    `rx-product-tour-pending:${userId}:${role}`;
+  const storageKey = `rx-product-tour-pending:${userId}:${role}`;
 
   const sync = useCallback(async () => {
     const outcome = pending.current;
@@ -131,22 +131,20 @@ export function ProductTourProvider({
       if (pending.current === outcome) {
         pending.current = null;
 
+        if (mounted.current) {
+          setPreferencePending(false);
+        }
+
         try {
           localStorage.removeItem(storageKey);
         } catch {
           // Storage may be disabled.
         }
       }
-
-      notified.current = false;
     } catch {
-      if (!notified.current && mounted.current) {
-        toast.error(
-          "Tour preference could not sync. We will retry when connected. Replay is available in Settings.",
-        );
-
-        notified.current = true;
-      }
+      // Keep the account-scoped retry queue. Background saves must not
+      // display a new error toast on every login or page refresh.
+      // Settings shows the pending state without interrupting app usage.
     } finally {
       syncing.current = false;
     }
@@ -155,6 +153,7 @@ export function ProductTourProvider({
   const record = useCallback(
     (outcome: Outcome) => {
       checked.current = true;
+      setPreferencePending(true);
 
       pending.current =
         pending.current === "completed"
@@ -162,10 +161,7 @@ export function ProductTourProvider({
           : outcome;
 
       try {
-        localStorage.setItem(
-          storageKey,
-          pending.current,
-        );
+        localStorage.setItem(storageKey, pending.current);
       } catch {
         // Server persistence remains primary.
       }
@@ -214,6 +210,7 @@ export function ProductTourProvider({
         saved === "completed"
       ) {
         pending.current = saved;
+        setPreferencePending(true);
         checked.current = true;
       }
     } catch {
@@ -596,7 +593,14 @@ export function ProductTourProvider({
         : step?.description ?? "";
 
   return (
-    <TourContext.Provider value={{ launch, role }}>
+    <TourContext.Provider
+      value={{
+        launch,
+        role,
+        preferencePending,
+        retryPreference: () => void sync(),
+      }}
+    >
       <TourActiveContext.Provider value={active}>
         {children}
 
@@ -663,6 +667,26 @@ export function ReplayProductTour() {
         Take a Tour Again
       </Button>
 
+      {tour?.preferencePending && (
+        <div
+          className="mt-4 text-sm text-muted-foreground"
+          role="status"
+        >
+          <p>
+            Your tour preference is waiting to sync. We will retry automatically.
+            Until it syncs, the introduction may still appear on another device.
+          </p>
+
+          <Button
+            variant="outline"
+            className="mt-2 min-h-11 px-4"
+            onClick={tour.retryPreference}
+          >
+            Retry Saving Preference
+          </Button>
+        </div>
+      )}
+
       <div className="mt-5 border-t border-border pt-4">
         <label
           htmlFor="page-tour"
@@ -699,9 +723,7 @@ export function ReplayProductTour() {
 
           <Button
             className="min-h-11 px-4"
-            onClick={() =>
-              tour?.launch(selection)
-            }
+            onClick={() => tour?.launch(selection)}
             disabled={!tour}
           >
             Start Page Tour
