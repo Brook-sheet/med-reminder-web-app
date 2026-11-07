@@ -1,33 +1,22 @@
-// app/api/esp32/event/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { connectDB } from '@/lib/mongodb';
-
 import {
   addDaysToMedicationDateKey,
   getMedicationDateKey,
   resolveMedicationTimeZone,
 } from '@/lib/medicationTime';
-
-import {
-  processMedicationEvent,
-} from '@/lib/medicationVerification';
-
+import { processMedicationEvent } from '@/lib/medicationVerification';
 import {
   getRxBoxDailyPlan,
   type RxBoxAlarmGroup,
 } from '@/lib/rxBoxDailyPlan';
-
+import { resolveRxBoxDevice, RxBoxDeviceError } from '@/lib/rxBoxDevice';
 import {
   isValidRxBoxChamberId,
   uniqueRxBoxLogIds,
 } from '@/lib/rxBoxPlanCore';
-
-import {
-  resolveRxBoxDevice,
-  RxBoxDeviceError,
-} from '@/lib/rxBoxDevice';
-
+import { sendDispensedSms } from '@/lib/sms/dispensed';
 import SensorData from '@/models/SensorData';
 
 export const dynamic = 'force-dynamic';
@@ -43,8 +32,7 @@ const SUPPORTED_STATUSES = [
   'heartbeat',
 ] as const;
 
-type RxBoxEventStatus =
-  (typeof SUPPORTED_STATUSES)[number];
+type RxBoxEventStatus = (typeof SUPPORTED_STATUSES)[number];
 
 interface RxBoxEventBody {
   eventId?: unknown;
@@ -55,34 +43,31 @@ interface RxBoxEventBody {
   scheduledTime?: unknown;
   chamberIds?: unknown;
   snoozeCount?: unknown;
+  dispensedAt?: unknown;
 }
 
-function stringField(
-  value: unknown
-): string {
-  return typeof value === 'string'
-    ? value.trim()
-    : '';
+function stringField(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
-function parseChamberIds(
-  value: unknown
-): number[] | null {
-  if (
-    !Array.isArray(value) ||
-    value.length === 0
-  ) {
+function parseDispensedAt(value: unknown): Date | null {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     return null;
   }
 
-  const chambers =
-    value.map(Number);
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseChamberIds(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+
+  const chambers = value.map(Number);
 
   if (
-    chambers.some(
-      (chamber) =>
-        !isValidRxBoxChamberId(chamber)
-    ) ||
+    chambers.some((chamber) => !isValidRxBoxChamberId(chamber)) ||
     new Set(chambers).size !== chambers.length
   ) {
     return null;
@@ -91,19 +76,9 @@ function parseChamberIds(
   return chambers;
 }
 
-function sameChambers(
-  left: number[],
-  right: number[]
-): boolean {
-  const sortedLeft =
-    [...left]
-      .sort((a, b) => a - b)
-      .join(',');
-
-  const sortedRight =
-    [...right]
-      .sort((a, b) => a - b)
-      .join(',');
+function sameChambers(left: number[], right: number[]): boolean {
+  const sortedLeft = [...left].sort((a, b) => a - b).join(',');
+  const sortedRight = [...right].sort((a, b) => a - b).join(',');
 
   return sortedLeft === sortedRight;
 }
@@ -113,72 +88,41 @@ async function findExactPlanGroup(
   deviceId: string,
   planId: string,
   groupId: string
-): Promise<{
-  planDate: string;
-  group: RxBoxAlarmGroup;
-} | null> {
-  const timezone =
-    resolveMedicationTimeZone();
+): Promise<{ planDate: string; group: RxBoxAlarmGroup } | null> {
+  const timezone = resolveMedicationTimeZone();
+  const today = getMedicationDateKey(new Date(), timezone);
 
-  const today =
-    getMedicationDateKey(
-      new Date(),
-      timezone
-    );
-
-  /*
-   * Include yesterday because the final missed event can
-   * arrive after midnight following the complete snooze
-   * sequence.
-   */
+  // A final missed event can arrive after midnight following snoozes.
   const candidateDates = [
     today,
     addDaysToMedicationDateKey(today, -1),
   ];
 
   for (const date of candidateDates) {
-    const plan =
-      await getRxBoxDailyPlan(
-        userId,
-        deviceId,
-        {
-          date,
-          timezone,
-        }
-      );
+    const plan = await getRxBoxDailyPlan(userId, deviceId, {
+      date,
+      timezone,
+    });
 
-    if (
-      plan.planId !== planId ||
-      plan.capacity.exceeded
-    ) {
+    if (plan.planId !== planId || plan.capacity.exceeded) {
       continue;
     }
 
-    const group =
-      plan.groups.find(
-        (candidate) =>
-          candidate.groupId === groupId
-      );
+    const group = plan.groups.find(
+      (candidate) => candidate.groupId === groupId
+    );
 
     if (group) {
-      return {
-        planDate: date,
-        group,
-      };
+      return { planDate: date, group };
     }
   }
 
   return null;
 }
 
-function sensorEventName(
-  status: RxBoxEventStatus
-) {
+function sensorEventName(status: RxBoxEventStatus) {
   if (status === 'taken') {
-    /*
-     * This represents tray pickup detection.
-     * It is not proof that the medicine was swallowed.
-     */
+    // The ultrasonic sensor detects tray pickup.
     return 'container_opened' as const;
   }
 
@@ -193,12 +137,8 @@ function sensorEventName(
   return 'pill_dispensed' as const;
 }
 
-function errorResponse(
-  error: unknown
-) {
-  if (
-    error instanceof RxBoxDeviceError
-  ) {
+function errorResponse(error: unknown) {
+  if (error instanceof RxBoxDeviceError) {
     return NextResponse.json(
       {
         success: false,
@@ -213,97 +153,63 @@ function errorResponse(
     );
   }
 
-  const message =
-    error instanceof Error
-      ? error.message
-      : 'Internal server error';
+  const message = error instanceof Error
+    ? error.message
+    : 'Internal server error';
 
   const clientError =
     /required|invalid|must|unknown|does not match|already finalized/i
       .test(message);
 
-  console.error(
-    '[POST /api/esp32/event]',
-    error
-  );
+  console.error('[POST /api/esp32/event]', error);
 
   return NextResponse.json(
     {
       success: false,
       apiVersion: 1,
-      code: clientError
-        ? 'RX_BOX_INVALID_EVENT'
-        : 'RX_BOX_EVENT_ERROR',
+      code: clientError ? 'RX_BOX_INVALID_EVENT' : 'RX_BOX_EVENT_ERROR',
       error: message,
     },
     {
-      status: clientError
-        ? 400
-        : 500,
+      status: clientError ? 400 : 500,
       headers: NO_CACHE_HEADERS,
     }
   );
 }
 
-export async function POST(
-  request: NextRequest
-) {
+export async function POST(request: NextRequest) {
   try {
     await connectDB();
 
     let body: RxBoxEventBody;
 
     try {
-      body =
-        (await request.json()) as RxBoxEventBody;
+      body = (await request.json()) as RxBoxEventBody;
     } catch {
-      throw new Error(
-        'A valid JSON body is required.'
-      );
+      throw new Error('A valid JSON body is required.');
     }
 
-    const deviceId =
-      stringField(body.deviceId);
+    const deviceId = stringField(body.deviceId);
+    const device = await resolveRxBoxDevice(request, deviceId);
+    const eventId = stringField(body.eventId);
+    const status = stringField(body.status).toLowerCase() as RxBoxEventStatus;
 
-    const device =
-      await resolveRxBoxDevice(
-        request,
-        deviceId
-      );
-
-    const eventId =
-      stringField(body.eventId);
-
-    const status =
-      stringField(
-        body.status
-      ).toLowerCase() as RxBoxEventStatus;
-
-    if (
-      !eventId ||
-      eventId.length > 128
-    ) {
+    if (!eventId || eventId.length > 128) {
       throw new Error(
         'eventId is required and must not exceed 128 characters.'
       );
     }
 
-    if (
-      !SUPPORTED_STATUSES.includes(status)
-    ) {
+    if (!SUPPORTED_STATUSES.includes(status)) {
       throw new Error(
         `status must be one of: ${SUPPORTED_STATUSES.join(', ')}.`
       );
     }
 
-    /*
-     * Check for an event that has already been processed.
-     */
-    const duplicate =
-      await SensorData.findOne({
-        deviceId: device.deviceId,
-        eventId,
-      }).lean();
+    const duplicate = await SensorData.findOne({
+      deviceId: device.deviceId,
+      eventId,
+    }).lean();
 
     if (duplicate) {
       return NextResponse.json(
@@ -312,22 +218,14 @@ export async function POST(
           apiVersion: 1,
           duplicate: true,
           eventId,
-          data:
-            duplicate.rawData?.result ??
-            null,
-          message:
-            'Event was already processed.',
+          data: duplicate.rawData?.result ?? null,
+          message: 'Event was already processed.',
         },
-        {
-          headers: NO_CACHE_HEADERS,
-        }
+        { headers: NO_CACHE_HEADERS }
       );
     }
 
-    /*
-     * Heartbeats confirm connectivity but do not update
-     * medication logs or adherence.
-     */
+    // Heartbeats confirm connectivity without updating medication logs.
     if (status === 'heartbeat') {
       const result = {
         deviceId: device.deviceId,
@@ -341,10 +239,7 @@ export async function POST(
         eventId,
         event: 'heartbeat',
         timestamp: new Date(),
-        rawData: {
-          request: body,
-          result,
-        },
+        rawData: { request: body, result },
         processed: true,
       });
 
@@ -355,62 +250,34 @@ export async function POST(
           duplicate: false,
           eventId,
           data: result,
-          message:
-            'Heartbeat received.',
+          message: 'Heartbeat received.',
         },
-        {
-          headers: NO_CACHE_HEADERS,
-        }
+        { headers: NO_CACHE_HEADERS }
       );
     }
 
-    const planId =
-      stringField(body.planId);
+    const planId = stringField(body.planId);
+    const groupId = stringField(body.groupId);
+    const scheduledTime = stringField(body.scheduledTime);
+    const chamberIds = parseChamberIds(body.chamberIds);
+    const snoozeCount = Number(body.snoozeCount ?? 0);
 
-    const groupId =
-      stringField(body.groupId);
-
-    const scheduledTime =
-      stringField(body.scheduledTime);
-
-    const chamberIds =
-      parseChamberIds(body.chamberIds);
-
-    const snoozeCount =
-      Number(body.snoozeCount ?? 0);
-
-    if (
-      !planId ||
-      !groupId ||
-      !scheduledTime ||
-      !chamberIds
-    ) {
+    if (!planId || !groupId || !scheduledTime || !chamberIds) {
       throw new Error(
         'planId, groupId, scheduledTime, and valid chamberIds are required for medication events.'
       );
     }
 
-    if (
-      !Number.isInteger(snoozeCount) ||
-      snoozeCount < 0 ||
-      snoozeCount > 3
-    ) {
-      throw new Error(
-        'snoozeCount must be a whole number from 0 to 3.'
-      );
+    if (!Number.isInteger(snoozeCount) || snoozeCount < 0 || snoozeCount > 3) {
+      throw new Error('snoozeCount must be a whole number from 0 to 3.');
     }
 
-    /*
-     * Match the event to an exact authenticated daily plan
-     * and alarm group.
-     */
-    const exact =
-      await findExactPlanGroup(
-        device.userId,
-        device.deviceId,
-        planId,
-        groupId
-      );
+    const exact = await findExactPlanGroup(
+      device.userId,
+      device.deviceId,
+      planId,
+      groupId
+    );
 
     if (!exact) {
       throw new Error(
@@ -420,42 +287,26 @@ export async function POST(
 
     if (
       exact.group.scheduledTime !== scheduledTime ||
-      !sameChambers(
-        exact.group.chamberIds,
-        chamberIds
-      )
+      !sameChambers(exact.group.chamberIds, chamberIds)
     ) {
       throw new Error(
         'The event schedule or chamberIds do not match the authenticated group.'
       );
     }
 
-    const timestamp =
-      new Date();
+    const timestamp = new Date();
 
-    /*
-     * Multiple physical pill units belonging to the same
-     * medicine still use one unique adherence log.
-     */
-    const logIds =
-      uniqueRxBoxLogIds(
-        exact.group.logIds
-      );
+    // Multiple pills of the same dose share a single medication log.
+    const logIds = uniqueRxBoxLogIds(exact.group.logIds);
 
-    const eventType =
-      status === 'dispensed'
-        ? 'MEDICATION_DISPENSED'
-        : status === 'taken'
-          ? 'MEDICATION_CONFIRMED'
-          : 'MISSED';
+    const eventType = status === 'dispensed'
+      ? 'MEDICATION_DISPENSED'
+      : status === 'taken'
+        ? 'MEDICATION_CONFIRMED'
+        : 'MISSED';
 
     const results = [];
 
-    /*
-     * Process every unique medication log in the group.
-     * A single ultrasonic pickup therefore confirms every
-     * medicine dispensed into the shared tray at that time.
-     */
     for (const logId of logIds) {
       results.push(
         await processMedicationEvent({
@@ -465,8 +316,7 @@ export async function POST(
           timestamp,
           logId,
           deviceId: device.deviceId,
-          allowHardwareMissedBeforeWindowEnd:
-            status === 'missed',
+          allowHardwareMissedBeforeWindowEnd: status === 'missed',
         })
       );
     }
@@ -493,17 +343,11 @@ export async function POST(
         groupId,
         event: sensorEventName(status),
         timestamp,
-        rawData: {
-          request: body,
-          result,
-        },
+        rawData: { request: body, result },
         processed: true,
       });
     } catch (error) {
-      /*
-       * The unique deviceId + eventId database index
-       * protects against duplicate event records.
-       */
+      // The unique deviceId and eventId index also handles concurrent retries.
       if (
         typeof error === 'object' &&
         error !== null &&
@@ -517,16 +361,38 @@ export async function POST(
             duplicate: true,
             eventId,
             data: result,
-            message:
-              'Event was already processed.',
+            message: 'Event was already processed.',
           },
-          {
-            headers: NO_CACHE_HEADERS,
-          }
+          { headers: NO_CACHE_HEADERS }
         );
       }
 
       throw error;
+    }
+
+    const dispensedAt =
+      status === 'dispensed' ? parseDispensedAt(body.dispensedAt) : null;
+
+    if (dispensedAt) {
+      const medicineNames = [...new Set(results
+        .filter((log) => log.status === 'dispensed')
+        .map((log) => log.medicineName.trim())
+        .filter(Boolean))];
+
+      if (medicineNames.length > 0) {
+        after(async () => {
+          try {
+            await sendDispensedSms({
+              patientId: device.userId,
+              groupId,
+              medicineNames,
+              dispensedAt,
+            });
+          } catch (error) {
+            console.error('[Rx Box] Dispensed SMS error:', error);
+          }
+        });
+      }
     }
 
     return NextResponse.json(
@@ -536,50 +402,33 @@ export async function POST(
         duplicate: false,
         eventId,
         data: result,
-        message:
-          `${status} event processed for ${logIds.length} medication log(s).`,
+        message: `${status} event processed for ${logIds.length} medication log(s).`,
       },
-      {
-        headers: NO_CACHE_HEADERS,
-      }
+      { headers: NO_CACHE_HEADERS }
     );
   } catch (error) {
     return errorResponse(error);
   }
 }
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   try {
     await connectDB();
 
     const deviceId =
-      new URL(request.url)
-        .searchParams
-        .get('deviceId')
-        ?.trim() ??
-      '';
+      new URL(request.url).searchParams.get('deviceId')?.trim() ?? '';
 
-    const device =
-      await resolveRxBoxDevice(
-        request,
-        deviceId
-      );
+    const device = await resolveRxBoxDevice(request, deviceId);
 
     return NextResponse.json(
       {
         success: true,
         apiVersion: 1,
         deviceId: device.deviceId,
-        message:
-          'Rx Box event API is online.',
-        supportedStatuses:
-          SUPPORTED_STATUSES,
+        message: 'Rx Box event API is online.',
+        supportedStatuses: SUPPORTED_STATUSES,
       },
-      {
-        headers: NO_CACHE_HEADERS,
-      }
+      { headers: NO_CACHE_HEADERS }
     );
   } catch (error) {
     return errorResponse(error);
