@@ -1,129 +1,366 @@
-// hooks/usePushNotifications.ts
-'use client';
-import { useState, useEffect, useCallback } from 'react';
+"use client";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX: TypeScript 5.7+ made ArrayBuffer types stricter.
-// Uint8Array.from() returns Uint8Array<ArrayBufferLike> but pushManager.subscribe()
-// requires BufferSource which expects Uint8Array<ArrayBuffer>.
-//
-// Solution: build the array manually via new Uint8Array(length) which
-// always returns Uint8Array<ArrayBuffer> (not the wider ArrayBufferLike).
-// ─────────────────────────────────────────────────────────────────────────────
-function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  // Index-based construction guarantees Uint8Array<ArrayBuffer> (not ArrayBufferLike)
-  const output = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i++) {
-    output[i] = rawData.charCodeAt(i);
+import {
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+
+function applicationKey(
+  value: string
+): Uint8Array<ArrayBuffer> {
+  const raw = atob(
+    value
+      .replace(/-/g, "+")
+      .replace(/_/g, "/") +
+      "=".repeat(
+        (4 - (value.length % 4)) % 4
+      )
+  );
+
+  const bytes =
+    new Uint8Array(raw.length);
+
+  for (
+    let i = 0;
+    i < raw.length;
+    i++
+  ) {
+    bytes[i] =
+      raw.charCodeAt(i);
   }
-  return output;
+
+  return bytes;
+}
+
+async function api(body: object) {
+  const response = await fetch(
+    "/api/push/subscribe",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  const result =
+    await response.json();
+
+  if (
+    !response.ok ||
+    !result.success
+  ) {
+    throw new Error(
+      result.error ||
+        "Unable to update notifications."
+    );
+  }
+
+  return result;
+}
+
+async function registration() {
+  await navigator.serviceWorker.register(
+    "/sw.js",
+    {
+      scope: "/",
+      updateViaCache: "none",
+    }
+  );
+
+  return Promise.race([
+    navigator.serviceWorker.ready,
+
+    new Promise<never>(
+      (_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "The app is still preparing. Please try again."
+              )
+            ),
+          15000
+        );
+      }
+    ),
+  ]);
 }
 
 export function usePushNotifications() {
-  const [supported, setSupported]   = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission>('default');
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [supported, setSupported] =
+    useState(false);
 
-  // ── Detect browser support (client-only) ───────────────────────────────────
+  const [subscribed, setSubscribed] =
+    useState(false);
+
+  const [permission, setPermission] =
+    useState<NotificationPermission>(
+      "default"
+    );
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const refresh =
+    useCallback(async () => {
+      if (
+        !window.isSecureContext ||
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !("Notification" in window)
+      ) {
+        return;
+      }
+
+      setSupported(true);
+
+      setPermission(
+        Notification.permission
+      );
+
+      try {
+        const reg =
+          await registration();
+
+        const sub =
+          await reg.pushManager.getSubscription();
+
+        if (!sub) {
+          setSubscribed(false);
+          return;
+        }
+
+        if (
+          Notification.permission ===
+          "denied"
+        ) {
+          await api({
+            action: "remove",
+            endpoint: sub.endpoint,
+          });
+
+          await sub.unsubscribe();
+
+          setSubscribed(false);
+          return;
+        }
+
+        const result = await api({
+          action: "status",
+          endpoint: sub.endpoint,
+        });
+
+        /*
+         * Retire a browser subscription
+         * that no longer belongs to the
+         * currently signed-in account.
+         */
+        if (!result.subscribed) {
+          await sub.unsubscribe();
+        }
+
+        setSubscribed(
+          result.subscribed &&
+            Notification.permission ===
+              "granted"
+        );
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to check device notifications."
+        );
+      }
+    }, []);
+
   useEffect(() => {
-    const isSupported =
-      typeof window !== 'undefined' &&
-      'serviceWorker' in navigator &&
-      'PushManager' in window;
+    void refresh();
 
-    setSupported(isSupported);
-
-    if (isSupported && 'Notification' in window) {
-      setPermission(Notification.permission);
-    }
-  }, []);
-
-  // ── Subscribe ──────────────────────────────────────────────────────────────
-  // Depends only on `supported`; React state setters are stable and don't need
-  // to be listed in the dependency array.
-  const subscribe = useCallback(async () => {
-    if (!supported) {
-      setError('Push notifications are not supported in this browser.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // 1. Register service worker
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      await navigator.serviceWorker.ready;
-
-      // 2. Request notification permission
-      const perm = await Notification.requestPermission();
-      setPermission(perm);
-
-      if (perm !== 'granted') {
-        setError(
-          'Notification permission denied. Please allow notifications in your browser settings.'
-        );
-        return;
+    const onVisible = () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        void refresh();
       }
+    };
 
-      // 3. Fetch VAPID public key from server
-      const keyRes = await fetch('/api/push/vapid-public-key');
-      const { publicKey } = (await keyRes.json()) as { publicKey: string };
+    document.addEventListener(
+      "visibilitychange",
+      onVisible
+    );
 
-      if (!publicKey) {
-        setError(
-          'Push notifications are not configured on the server (missing VAPID key). ' +
-          'Please add NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to your .env.local.'
-        );
-        return;
-      }
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible
+      );
+    };
+  }, [refresh]);
 
-      // 4. Subscribe — urlBase64ToUint8Array now returns Uint8Array<ArrayBuffer>
-      //    which satisfies the BufferSource type required by pushManager.subscribe()
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
+  const subscribe =
+    useCallback(async () => {
+      if (!supported) return;
 
-      // 5. Send subscription to server
-      const saveRes = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sub.toJSON()),
-      });
+      setError(null);
+      setLoading(true);
 
-      if (saveRes.ok) {
+      try {
+        /*
+         * This must run directly from the
+         * user's button click.
+         */
+        const granted =
+          await Notification.requestPermission();
+
+        setPermission(granted);
+
+        if (
+          granted !== "granted"
+        ) {
+          throw new Error(
+            granted === "denied"
+              ? "Notifications are blocked. Allow them in your browser or device settings."
+              : "Permission was not granted. You can try again when ready."
+          );
+        }
+
+        const reg =
+          await registration();
+
+        const keyResponse =
+          await fetch(
+            "/api/push/vapid-public-key",
+            {
+              cache: "no-store",
+            }
+          );
+
+        const { publicKey } =
+          await keyResponse.json();
+
+        if (
+          !keyResponse.ok ||
+          !publicKey
+        ) {
+          throw new Error(
+            "Device notifications are not configured yet."
+          );
+        }
+
+        const key =
+          applicationKey(publicKey);
+
+        let sub =
+          await reg.pushManager.getSubscription();
+
+        if (
+          sub?.options
+            .applicationServerKey
+        ) {
+          const existing =
+            new Uint8Array(
+              sub.options
+                .applicationServerKey
+            );
+
+          const changed =
+            existing.length !==
+              key.length ||
+            existing.some(
+              (byte, i) =>
+                byte !== key[i]
+            );
+
+          if (changed) {
+            await api({
+              action: "remove",
+              endpoint: sub.endpoint,
+            });
+
+            await sub.unsubscribe();
+
+            sub = null;
+          }
+        }
+
+        sub ??=
+          await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: key,
+          });
+
+        await api(sub.toJSON());
+
         setSubscribed(true);
-      } else {
-        setError('Failed to save push subscription. Please try again.');
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to enable notifications."
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Push subscription failed:', err);
-      setError('Failed to enable push notifications. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [supported]);
+    }, [supported]);
 
-  // ── Unsubscribe ────────────────────────────────────────────────────────────
-  const unsubscribe = useCallback(async () => {
-    if (!supported) return;
-    try {
-      const reg = await navigator.serviceWorker.getRegistration('/sw.js');
-      if (reg) {
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) await sub.unsubscribe();
+  const unsubscribe =
+    useCallback(async () => {
+      setError(null);
+      setLoading(true);
+
+      try {
+        const reg =
+          await navigator.serviceWorker.getRegistration(
+            "/"
+          );
+
+        const sub =
+          await reg?.pushManager.getSubscription();
+
+        if (sub) {
+          await api({
+            action: "remove",
+            endpoint: sub.endpoint,
+          });
+
+          const removed =
+            await sub.unsubscribe();
+
+          if (!removed) {
+            throw new Error(
+              "Device delivery was disabled. Please reload to refresh browser status."
+            );
+          }
+        }
+
+        setSubscribed(false);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to disable notifications."
+        );
+      } finally {
+        setLoading(false);
       }
-      setSubscribed(false);
-    } catch (err) {
-      console.error('Unsubscribe failed:', err);
-    }
-  }, [supported]);
+    }, []);
 
-  return { supported, subscribed, permission, loading, error, subscribe, unsubscribe };
+  return {
+    supported,
+    subscribed,
+    permission,
+    loading,
+    error,
+    subscribe,
+    unsubscribe,
+  };
 }

@@ -16,18 +16,21 @@ import {
   type MedicationReminderSchedulerResult,
 } from "@/lib/medicationReminderScheduler";
 
+import {
+  queueAdaptiveNotifications,
+} from "@/lib/pwa/adaptiveNotifications";
+
+import {
+  recoverRecentMedicationNotifications,
+} from "@/lib/pwa/medicationNotifications";
+
 import type {
   ApiResponse,
 } from "@/lib/interfaces/data/Api";
 
-export const runtime =
-  "nodejs";
-
-export const dynamic =
-  "force-dynamic";
-
-export const maxDuration =
-  60;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function safelyCompare(
   provided: string,
@@ -61,26 +64,19 @@ function safelyCompare(
 function isAuthorized(
   request: NextRequest
 ): boolean {
-  const cronSecret =
-    process.env
-      .CRON_SECRET
-      ?.trim();
+  const secret =
+    process.env.CRON_SECRET?.trim();
 
-  if (!cronSecret) {
-    return false;
-  }
+  if (!secret) return false;
 
   const authorization =
     request.headers
       .get("authorization")
       ?.trim() || "";
 
-  const expectedAuthorization =
-    `Bearer ${cronSecret}`;
-
   return safelyCompare(
     authorization,
-    expectedAuthorization
+    `Bearer ${secret}`
   );
 }
 
@@ -103,16 +99,9 @@ function noStoreResponse<T>(
 async function executeScheduler(
   request: NextRequest
 ) {
-  const cronSecret =
-    process.env
-      .CRON_SECRET
-      ?.trim();
-
-  if (!cronSecret) {
-    console.error(
-      "[Medication Reminder Cron] CRON_SECRET is not configured."
-    );
-
+  if (
+    !process.env.CRON_SECRET?.trim()
+  ) {
     return noStoreResponse(
       {
         success: false,
@@ -123,16 +112,13 @@ async function executeScheduler(
     );
   }
 
-  if (!isAuthorized(request)) {
-    console.warn(
-      "[Medication Reminder Cron] Unauthorized scheduler request."
-    );
-
+  if (
+    !isAuthorized(request)
+  ) {
     return noStoreResponse(
       {
         success: false,
-        error:
-          "Unauthorized.",
+        error: "Unauthorized.",
       },
       401
     );
@@ -146,26 +132,26 @@ async function executeScheduler(
         new Date()
       );
 
-    const hasPartialErrors =
-      result.errors.length > 0;
+    await queueAdaptiveNotifications();
+
+    await recoverRecentMedicationNotifications();
 
     return noStoreResponse<MedicationReminderSchedulerResult>(
       {
         success: true,
 
         message:
-          hasPartialErrors
+          result.errors.length > 0
             ? "Medication reminder scheduler completed with some patient errors."
             : "Medication reminder scheduler completed successfully.",
 
-        data:
-          result,
+        data: result,
       },
       200
     );
   } catch (error) {
     console.error(
-      "[Medication Reminder Cron] Scheduler failed:",
+      "[Medication Reminder Cron]",
       error
     );
 
@@ -180,25 +166,14 @@ async function executeScheduler(
   }
 }
 
-/*
- * Vercel Cron invokes the route using GET.
- */
 export async function GET(
   request: NextRequest
 ) {
-  return executeScheduler(
-    request
-  );
+  return executeScheduler(request);
 }
 
-/*
- * POST is also supported for authorized manual
- * testing or another external scheduler.
- */
 export async function POST(
   request: NextRequest
 ) {
-  return executeScheduler(
-    request
-  );
+  return executeScheduler(request);
 }

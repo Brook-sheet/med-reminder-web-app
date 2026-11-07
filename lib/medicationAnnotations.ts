@@ -1,18 +1,19 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 import MedicationLog, {
   type IMedicationAnnotation,
+  type IMedicationLogDocument,
   type MedicationAnnotationType,
-} from '@/models/MedicationLog';
+} from "@/models/MedicationLog";
 
-import MonitoringRequest from '@/models/MonitoringRequest';
-import User from '@/models/User';
+import MonitoringRequest from "@/models/MonitoringRequest";
+import User from "@/models/User";
 
 export interface PublicMedicationAnnotation {
   _id: string;
   type: MedicationAnnotationType;
   text: string;
-  authorRole: 'patient' | 'family';
+  authorRole: "patient" | "family";
   authorName: string;
   createdAt: string;
 }
@@ -23,9 +24,9 @@ export interface AddAnnotationResult {
 }
 
 const FINAL_STATUSES = [
-  'taken',
-  'late',
-  'missed',
+  "taken",
+  "late",
+  "missed",
 ] as const;
 
 function userDisplayName(user: {
@@ -33,38 +34,30 @@ function userDisplayName(user: {
   middleName?: string;
   lastName?: string;
 }): string {
-  return [
-    user.firstName,
-    user.middleName,
-    user.lastName,
-  ]
-    .map(
-      (part) =>
-        part?.trim()
-    )
-    .filter(Boolean)
-    .join(' ') || 'User';
+  return (
+    [
+      user.firstName,
+      user.middleName,
+      user.lastName,
+    ]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(" ") || "User"
+  );
 }
 
 export function normalizeAnnotationText(
   value: unknown
 ): string {
-  if (
-    typeof value !==
-    'string'
-  ) {
-    return '';
+  if (typeof value !== "string") {
+    return "";
   }
 
-  const text =
-    value.trim();
+  const text = value.trim();
 
-  if (
-    text.length >
-    500
-  ) {
+  if (text.length > 500) {
     throw new Error(
-      'Annotation text must not exceed 500 characters.'
+      "Annotation text must not exceed 500 characters."
     );
   }
 
@@ -73,43 +66,32 @@ export function normalizeAnnotationText(
 
 export function serializeAnnotations(
   annotations:
-    | Array<
-        Partial<IMedicationAnnotation>
-      >
+    | Array<Partial<IMedicationAnnotation>>
     | null
     | undefined
 ): PublicMedicationAnnotation[] {
-  return (
-    annotations ??
-    []
-  ).map(
+  return (annotations ?? []).map(
     (annotation) => ({
       _id:
-        annotation._id
-          ?.toString() ??
-        '',
+        annotation._id?.toString() ??
+        "",
 
       type:
-        annotation.type as
-          MedicationAnnotationType,
+        annotation.type as MedicationAnnotationType,
 
       text:
-        annotation.text ??
-        '',
+        annotation.text ?? "",
 
       authorRole:
-        annotation.authorRole ===
-        'family'
-          ? 'family'
-          : 'patient',
+        annotation.authorRole === "family"
+          ? "family"
+          : "patient",
 
       authorName:
-        annotation.authorName ??
-        'User',
+        annotation.authorName ?? "User",
 
       createdAt:
-        annotation.createdAt instanceof
-        Date
+        annotation.createdAt instanceof Date
           ? annotation.createdAt.toISOString()
           : new Date(
               annotation.createdAt ??
@@ -123,11 +105,9 @@ export async function appendPatientAnnotation(
   input: {
     patientId: string;
     logId: string;
-
     type:
-      | 'patient_note'
-      | 'missed_explanation';
-
+      | "patient_note"
+      | "missed_explanation";
     text: unknown;
   }
 ): Promise<PublicMedicationAnnotation> {
@@ -137,7 +117,7 @@ export async function appendPatientAnnotation(
     )
   ) {
     throw new Error(
-      'A valid medication log ID is required.'
+      "A valid medication log ID is required."
     );
   }
 
@@ -148,51 +128,40 @@ export async function appendPatientAnnotation(
 
   if (!text) {
     throw new Error(
-      'Please enter a note or explanation.'
+      "Please enter a note or explanation."
     );
   }
 
   const patient =
     await User.findOne({
-      _id:
-        input.patientId,
-
-      role:
-        'patient',
-
+      _id: input.patientId,
+      role: "patient",
       isDeleted: {
-        $ne:
-          true,
+        $ne: true,
       },
     })
       .select(
-        'firstName middleName lastName'
+        "firstName middleName lastName"
       )
       .lean();
 
   if (!patient) {
     throw new Error(
-      'Patient account was not found.'
+      "Patient account was not found."
     );
   }
 
-  const requiredStatuses =
-    input.type ===
-    'missed_explanation'
-      ? [
-          'missed',
-        ]
-      : [
-          'taken',
-          'late',
-        ];
+  const requiredStatuses:
+    IMedicationLogDocument["status"][] =
+    input.type === "missed_explanation"
+      ? ["missed"]
+      : ["taken", "late"];
 
   const annotation = {
     _id:
       new mongoose.Types.ObjectId(),
 
-    type:
-      input.type,
+    type: input.type,
 
     text,
 
@@ -202,12 +171,10 @@ export async function appendPatientAnnotation(
       ),
 
     authorRole:
-      'patient' as const,
+      "patient" as const,
 
     authorName:
-      userDisplayName(
-        patient
-      ),
+      userDisplayName(patient),
 
     createdAt:
       new Date(),
@@ -216,42 +183,32 @@ export async function appendPatientAnnotation(
   const updated =
     await MedicationLog.updateOne(
       {
-        _id:
-          input.logId,
-
-        userId:
-          input.patientId,
-
+        _id: input.logId,
+        userId: input.patientId,
         status: {
-          $in:
-            requiredStatuses,
+          $in: requiredStatuses,
         },
       },
       {
         $push: {
-          annotations:
-            annotation,
+          annotations: annotation,
         },
       }
     );
 
   if (
-    updated.matchedCount ===
-    0
+    updated.matchedCount === 0
   ) {
     throw new Error(
-      input.type ===
-      'missed_explanation'
-        ? 'A missed-dose explanation can only be added to your finalized missed medication record.'
-        : 'A patient note can only be added to your finalized taken or late medication record.'
+      input.type === "missed_explanation"
+        ? "A missed-dose explanation can only be added to your finalized missed medication record."
+        : "A patient note can only be added to your finalized taken or late medication record."
     );
   }
 
-  return serializeAnnotations(
-    [
-      annotation,
-    ]
-  )[0];
+  return serializeAnnotations([
+    annotation,
+  ])[0];
 }
 
 export async function appendFamilyAcknowledgment(
@@ -267,7 +224,7 @@ export async function appendFamilyAcknowledgment(
     )
   ) {
     throw new Error(
-      'A valid medication log ID is required.'
+      "A valid medication log ID is required."
     );
   }
 
@@ -278,93 +235,70 @@ export async function appendFamilyAcknowledgment(
 
   const family =
     await User.findOne({
-      _id:
-        input.familyId,
-
-      role:
-        'family',
-
+      _id: input.familyId,
+      role: "family",
       isDeleted: {
-        $ne:
-          true,
+        $ne: true,
       },
     })
       .select(
-        'firstName middleName lastName'
+        "firstName middleName lastName"
       )
       .lean();
 
   if (!family) {
     throw new Error(
-      'Family account was not found.'
+      "Family account was not found."
     );
   }
 
   const log =
     await MedicationLog.findOne({
-      _id:
-        input.logId,
-
+      _id: input.logId,
       status: {
-        $in:
-          FINAL_STATUSES,
+        $in: FINAL_STATUSES,
       },
     })
       .select(
-        'userId annotations'
+        "userId annotations"
       )
       .lean();
 
   if (!log) {
     throw new Error(
-      'Only a finalized taken, late, or missed record can be acknowledged.'
+      "Only a finalized taken, late, or missed record can be acknowledged."
     );
   }
 
   const approved =
-    await MonitoringRequest.exists(
-      {
-        patientId:
-          log.userId,
-
-        familyId:
-          input.familyId,
-
-        status:
-          'approved',
-      }
-    );
+    await MonitoringRequest.exists({
+      patientId: log.userId,
+      familyId: input.familyId,
+      status: "approved",
+    });
 
   if (!approved) {
     throw new Error(
-      'You do not have active monitoring access to this patient.'
+      "You do not have active monitoring access to this patient."
     );
   }
 
   const existing =
-    (
-      log.annotations ??
-      []
-    ).find(
+    (log.annotations ?? []).find(
       (annotation) =>
         annotation.type ===
-          'family_acknowledgment' &&
-        annotation.authorId
-          ?.toString() ===
+          "family_acknowledgment" &&
+        annotation.authorId?.toString() ===
           input.familyId
     );
 
   if (existing) {
     return {
-      duplicate:
-        true,
-
+      duplicate: true,
       annotation:
-        serializeAnnotations(
-          [
-            existing,
-          ]
-        )[0],
+        serializeAnnotations([
+          existing,
+        ])[0],
     };
   }
 
@@ -373,7 +307,7 @@ export async function appendFamilyAcknowledgment(
       new mongoose.Types.ObjectId(),
 
     type:
-      'family_acknowledgment' as const,
+      "family_acknowledgment" as const,
 
     text,
 
@@ -383,12 +317,10 @@ export async function appendFamilyAcknowledgment(
       ),
 
     authorRole:
-      'family' as const,
+      "family" as const,
 
     authorName:
-      userDisplayName(
-        family
-      ),
+      userDisplayName(family),
 
     createdAt:
       new Date(),
@@ -397,22 +329,18 @@ export async function appendFamilyAcknowledgment(
   const updated =
     await MedicationLog.findOneAndUpdate(
       {
-        _id:
-          input.logId,
-
-        userId:
-          log.userId,
+        _id: input.logId,
+        userId: log.userId,
 
         status: {
-          $in:
-            FINAL_STATUSES,
+          $in: FINAL_STATUSES,
         },
 
         annotations: {
           $not: {
             $elemMatch: {
               type:
-                'family_acknowledgment',
+                "family_acknowledgment",
 
               authorId:
                 new mongoose.Types.ObjectId(
@@ -424,13 +352,11 @@ export async function appendFamilyAcknowledgment(
       },
       {
         $push: {
-          annotations:
-            annotation,
+          annotations: annotation,
         },
       },
       {
-        new:
-          true,
+        new: true,
       }
     );
 
@@ -439,53 +365,41 @@ export async function appendFamilyAcknowledgment(
       await MedicationLog.findById(
         input.logId
       )
-        .select(
-          'annotations'
-        )
+        .select("annotations")
         .lean();
 
     const duplicate =
       (
-        duplicateLog
-          ?.annotations ??
+        duplicateLog?.annotations ??
         []
       ).find(
         (item) =>
           item.type ===
-            'family_acknowledgment' &&
-          item.authorId
-            ?.toString() ===
+            "family_acknowledgment" &&
+          item.authorId?.toString() ===
             input.familyId
       );
 
     if (duplicate) {
       return {
-        duplicate:
-          true,
-
+        duplicate: true,
         annotation:
-          serializeAnnotations(
-            [
-              duplicate,
-            ]
-          )[0],
+          serializeAnnotations([
+            duplicate,
+          ])[0],
       };
     }
 
     throw new Error(
-      'This medication record could not be acknowledged.'
+      "This medication record could not be acknowledged."
     );
   }
 
   return {
-    duplicate:
-      false,
-
+    duplicate: false,
     annotation:
-      serializeAnnotations(
-        [
-          annotation,
-        ]
-      )[0],
+      serializeAnnotations([
+        annotation,
+      ])[0],
   };
 }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Geist,
   Geist_Mono,
@@ -13,6 +13,12 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "@/components/ui/Toast";
 import RouteProgress from "@/components/ui/RouteProgress";
+import PwaRegistration from "@/components/pwa/PwaRegistration";
+import splashScreens from "@/lib/pwa/splash.json";
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+};
 
 const inter = Inter({
   subsets: ["latin"],
@@ -37,6 +43,13 @@ export const metadata: Metadata = {
   description:
     "Smart medication reminder and adherence monitoring system.",
   applicationName: "Rx Box: Smart Pillbox",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Rx Box",
+    statusBarStyle: "default",
+    startupImage: splashScreens,
+  },
   icons: {
     icon: [
       {
@@ -45,7 +58,7 @@ export const metadata: Metadata = {
       },
     ],
     shortcut: "/brand/icon.png",
-    apple: "/brand/icon.png",
+    apple: "/pwa/apple-touch-icon.png",
   },
 };
 
@@ -57,10 +70,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn(
-        "font-sans",
-        inter.variable
-      )}
+      className={cn("font-sans", inter.variable)}
       suppressHydrationWarning
     >
       <body
@@ -72,6 +82,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <PwaRegistration />
           <RouteProgress />
 
           <ToastProvider>

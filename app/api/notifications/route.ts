@@ -19,11 +19,8 @@ import {
 } from "@/lib/mongodb";
 
 import {
-  sendExpoPushToUser,
-} from "@/lib/notificationChannels";
-
-import type {
-  ChannelDeliveryResult,
+  sendWebPushToUser,
+  type ChannelDeliveryResult,
 } from "@/lib/notificationChannels";
 
 import Notification from "@/models/Notification";
@@ -35,7 +32,7 @@ import type {
 
 import User from "@/models/User";
 
-const NOTIFICATION_TYPES =
+const TYPES =
   new Set<NotificationType>([
     "upcoming_reminder",
     "due_alarm",
@@ -55,7 +52,7 @@ const NOTIFICATION_TYPES =
     "chat_message",
   ]);
 
-const NOTIFICATION_SCREENS =
+const SCREENS =
   new Set<NotificationNavigationScreen>([
     "dashboard",
     "alerts",
@@ -70,12 +67,7 @@ const NOTIFICATION_SCREENS =
   ]);
 
 interface NotificationUser {
-  _id:
-    mongoose.Types.ObjectId;
-
-  isDeleted?:
-    boolean;
-
+  _id: mongoose.Types.ObjectId;
   notificationPreferences?: {
     inApp?: boolean;
     push?: boolean;
@@ -87,190 +79,91 @@ async function getAuthUser(
   request: NextRequest
 ) {
   const token =
-    getTokenFromRequest(
-      request
-    );
+    getTokenFromRequest(request);
 
   return token
     ? verifyToken(token)
     : null;
 }
 
-function requiredString(
+function text(
   value: unknown,
-  maximumLength: number
+  maximum: number
 ): string {
   return typeof value ===
     "string"
     ? value
         .trim()
-        .slice(
-          0,
-          maximumLength
-        )
+        .slice(0, maximum)
     : "";
 }
 
-function optionalString(
+function optionalText(
   value: unknown,
-  maximumLength: number
-): string | undefined {
-  const result =
-    requiredString(
-      value,
-      maximumLength
-    );
-
-  return result ||
-    undefined;
-}
-
-function optionalObjectId(
-  value: unknown
-):
-  | mongoose.Types.ObjectId
-  | undefined {
-  if (
-    typeof value !==
-      "string" ||
-    !mongoose.Types.ObjectId.isValid(
-      value
-    )
-  ) {
-    return undefined;
-  }
-
-  return new mongoose.Types.ObjectId(
-    value
+  maximum: number
+) {
+  return (
+    text(value, maximum) ||
+    undefined
   );
 }
 
-function getNotificationType(
+function objectId(
   value: unknown
-):
-  | NotificationType
-  | null {
-  if (
-    typeof value !==
-    "string"
-  ) {
-    return null;
-  }
-
-  const type =
-    value.trim() as
-      NotificationType;
-
-  return NOTIFICATION_TYPES.has(
-    type
-  )
-    ? type
-    : null;
-}
-
-function getNotificationScreen(
-  value: unknown
-):
-  | NotificationNavigationScreen
-  | undefined {
-  if (
-    typeof value !==
-    "string"
-  ) {
-    return undefined;
-  }
-
-  const screen =
-    value.trim() as
-      NotificationNavigationScreen;
-
-  return NOTIFICATION_SCREENS.has(
-    screen
-  )
-    ? screen
+) {
+  return typeof value ===
+    "string" &&
+    mongoose.Types.ObjectId.isValid(
+      value
+    )
+    ? new mongoose.Types.ObjectId(
+        value
+      )
     : undefined;
 }
 
-function getInternalUrl(
+function internalUrl(
   value: unknown
-): string | undefined {
-  if (
-    typeof value !==
-    "string"
-  ) {
-    return undefined;
-  }
+) {
+  const url = text(
+    value,
+    500
+  );
 
-  const url =
-    value
-      .trim()
-      .slice(
-        0,
-        500
-      );
-
-  if (
-    !url ||
-    !url.startsWith(
-      "/"
-    ) ||
-    url.startsWith(
-      "//"
-    )
-  ) {
-    return undefined;
-  }
-
-  return url;
+  return url &&
+    url.startsWith("/") &&
+    !url.startsWith("//")
+    ? url
+    : undefined;
 }
 
-function getRiskLevel(
+function riskLevel(
   value: unknown
-):
-  | "Low"
-  | "Moderate"
-  | "High"
-  | undefined {
-  if (
-    value ===
-      "Low" ||
-    value ===
-      "Moderate" ||
-    value ===
-      "High"
-  ) {
-    return value;
-  }
-
-  return undefined;
+): "Low" | "Moderate" | "High" | undefined {
+  return value === "Low" ||
+    value === "Moderate" ||
+    value === "High"
+    ? value
+    : undefined;
 }
 
-function getAdherenceRate(
+function adherenceRate(
   value: unknown
-): number | undefined {
-  if (
-    typeof value !==
-      "number" ||
-    !Number.isFinite(
-      value
-    ) ||
-    value <
-      0 ||
-    value >
-      100
-  ) {
-    return undefined;
-  }
-
-  return value;
+) {
+  return typeof value ===
+    "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100
+    ? value
+    : undefined;
 }
 
-function defaultNavigation(
+function navigation(
   type: NotificationType
 ): {
   screen:
     NotificationNavigationScreen;
-
   url: string;
 } {
   switch (type) {
@@ -279,110 +172,123 @@ function defaultNavigation(
     case "chat_request_declined":
     case "chat_message":
       return {
-        screen:
-          "chats",
-
-        url:
-          "/chats",
+        screen: "chats",
+        url: "/chats",
       };
 
     case "monitoring_request":
       return {
-        screen:
-          "settings",
-
-        url:
-          "/settings",
+        screen: "settings",
+        url: "/settings",
       };
 
     case "monitoring_approved":
     case "monitoring_declined":
     case "monitoring_revoked":
       return {
-        screen:
-          "monitoring",
-
-        url:
-          "/monitor",
+        screen: "monitoring",
+        url: "/monitor",
       };
 
     case "medication_alert":
     case "critical_alert":
       return {
-        screen:
-          "alerts",
-
-        url:
-          "/alerts",
+        screen: "alerts",
+        url: "/alerts",
       };
 
     case "adherence_alert":
     case "food_monitoring_ready":
     case "food_monitoring_alert":
       return {
-        screen:
-          "adherence",
-
-        url:
-          "/",
+        screen: "adherence",
+        url: "/",
       };
 
-    case "upcoming_reminder":
-    case "due_alarm":
-    case "intake_confirmed":
     default:
       return {
-        screen:
-          "dashboard",
-
-        url:
-          "/",
+        screen: "dashboard",
+        url: "/",
       };
   }
 }
 
-async function sendMobileNotification(
+async function deliver(
   userId: string,
   pushEnabled: boolean,
   payload: Parameters<
-    typeof sendExpoPushToUser
+    typeof sendWebPushToUser
   >[1]
 ): Promise<ChannelDeliveryResult> {
   if (!pushEnabled) {
     return {
-      status:
-        "SKIPPED",
-
-      sentCount:
-        0,
-
+      status: "SKIPPED",
+      sentCount: 0,
       error:
         "Push notifications are disabled for this account.",
     };
   }
 
+  const primary =
+    payload.type ===
+      "intake_confirmed" ||
+    (
+      payload.type ===
+        "upcoming_reminder" &&
+      !payload.title.startsWith(
+        "Heads-up:"
+      )
+    ) ||
+    (
+      payload.type ===
+        "due_alarm" &&
+      !payload.title.startsWith(
+        "Follow-up Reminder"
+      )
+    );
+
+  if (primary) {
+    return {
+      status: "SKIPPED",
+      sentCount: 0,
+      error:
+        "Handled by server medication delivery.",
+    };
+  }
+
   try {
-    return await sendExpoPushToUser(
+    return await sendWebPushToUser(
       userId,
       payload
     );
   } catch (error) {
     console.warn(
-      "[Notification API] Mobile delivery failed:",
+      "[Notification API]",
       error
     );
 
     return {
-      status:
-        "FAILED",
-
-      sentCount:
-        0,
-
+      status: "FAILED",
+      sentCount: 0,
       error:
-        "Mobile notification delivery failed.",
+        "Notification delivery failed.",
     };
   }
+}
+
+function failure(
+  error: string,
+  status: number
+) {
+  return NextResponse.json<ApiResponse>(
+    {
+      success: false,
+      error,
+    },
+    {
+      status,
+    }
+  );
 }
 
 export async function GET(
@@ -395,15 +301,9 @@ export async function GET(
       );
 
     if (!auth) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+      return failure(
+        "Unauthorized",
+        401
       );
     }
 
@@ -412,35 +312,24 @@ export async function GET(
     const [
       notifications,
       unreadCount,
-    ] =
-      await Promise.all([
-        Notification.find({
-          userId:
-            auth.userId,
+    ] = await Promise.all([
+      Notification.find({
+        userId: auth.userId,
+      })
+        .sort({
+          createdAt: -1,
         })
-          .sort({
-            createdAt: -1,
-          })
-          .limit(
-            50
-          )
-          .lean(),
+        .limit(50)
+        .lean(),
 
-        Notification.countDocuments(
-          {
-            userId:
-              auth.userId,
-
-            read:
-              false,
-          }
-        ),
-      ]);
+      Notification.countDocuments({
+        userId: auth.userId,
+        read: false,
+      }),
+    ]);
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
+      success: true,
       data: {
         notifications,
         unreadCount,
@@ -452,15 +341,9 @@ export async function GET(
       error
     );
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success: false,
-        error:
-          "Internal server error",
-      },
-      {
-        status: 500,
-      }
+    return failure(
+      "Internal server error",
+      500
     );
   }
 }
@@ -475,224 +358,173 @@ export async function POST(
       );
 
     if (!auth) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+      return failure(
+        "Unauthorized",
+        401
       );
     }
 
     const body =
       await request
         .json()
-        .catch(
-          () => ({})
-        );
+        .catch(() => ({}));
 
-    const type =
-      getNotificationType(
-        body.type
-      );
+    const type = text(
+      body.type,
+      100
+    ) as NotificationType;
 
-    const title =
-      requiredString(
-        body.title,
-        150
-      );
+    const title = text(
+      body.title,
+      150
+    );
 
-    const message =
-      requiredString(
-        body.message,
-        1500
-      );
+    const message = text(
+      body.message,
+      1500
+    );
 
     if (
-      !type ||
+      !TYPES.has(type) ||
       !title ||
       !message
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "A valid type, title, and message are required.",
-        },
-        {
-          status: 400,
-        }
+      return failure(
+        "A valid type, title, and message are required.",
+        400
       );
     }
 
-    const rawScreen =
-      typeof body.screen ===
-      "string"
-        ? body.screen.trim()
-        : "";
+    const rawScreen = text(
+      body.screen,
+      100
+    );
 
     const suppliedScreen =
-      getNotificationScreen(
-        body.screen
-      );
+      SCREENS.has(
+        rawScreen as
+          NotificationNavigationScreen
+      )
+        ? rawScreen as
+            NotificationNavigationScreen
+        : undefined;
 
     if (
       rawScreen &&
       !suppliedScreen
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Invalid notification screen.",
-        },
-        {
-          status: 400,
-        }
+      return failure(
+        "Invalid notification screen.",
+        400
       );
     }
 
-    const rawUrl =
-      typeof body.url ===
-      "string"
-        ? body.url.trim()
-        : "";
+    const rawUrl = text(
+      body.url,
+      500
+    );
 
     const suppliedUrl =
-      getInternalUrl(
-        body.url
-      );
+      internalUrl(body.url);
 
     if (
       rawUrl &&
       !suppliedUrl
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "Notification URL must be an internal application path.",
-        },
-        {
-          status: 400,
-        }
+      return failure(
+        "Notification URL must be an internal application path.",
+        400
       );
     }
 
-    const navigation =
-      defaultNavigation(
-        type
-      );
+    const defaults =
+      navigation(type);
 
     const screen =
       suppliedScreen ||
-      navigation.screen;
+      defaults.screen;
 
     const url =
       suppliedUrl ||
-      navigation.url;
+      defaults.url;
 
     const medicineId =
-      optionalObjectId(
-        body.medicineId
-      );
+      objectId(body.medicineId);
 
     const alertId =
-      optionalObjectId(
-        body.alertId
-      );
+      objectId(body.alertId);
 
     const monitoringRequestId =
-      optionalObjectId(
+      objectId(
         body.monitoringRequestId
       );
 
     const chatRequestId =
-      optionalObjectId(
+      objectId(
         body.chatRequestId
       );
 
     const conversationId =
-      optionalObjectId(
+      objectId(
         body.conversationId
       );
 
     const messageId =
-      optionalObjectId(
-        body.messageId
-      );
+      objectId(body.messageId);
 
     const medicationLogId =
-      optionalObjectId(
+      objectId(
         body.medicationLogId ||
           body.logId
       );
 
     const medicineName =
-      optionalString(
+      optionalText(
         body.medicineName,
         200
       );
 
     const patientId =
-      optionalString(
+      optionalText(
         body.patientId,
         100
       );
 
-    const riskLevel =
-      getRiskLevel(
+    const risk =
+      riskLevel(
         body.riskLevel
       );
 
-    const adherenceRate =
-      getAdherenceRate(
+    const rate =
+      adherenceRate(
         body.adherenceRate
       );
 
     await connectDB();
 
-    const rawUser =
+    const currentUser =
       await User.findOne({
-        _id:
-          auth.userId,
-
+        _id: auth.userId,
         isDeleted: {
-          $ne:
-            true,
+          $ne: true,
         },
       })
         .select(
           "_id isDeleted notificationPreferences"
         )
-        .lean();
-
-    const currentUser =
-      rawUser as unknown as
-        | NotificationUser
-        | null;
+        .lean() as unknown as
+          NotificationUser | null;
 
     if (!currentUser) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error:
-            "User not found",
-        },
-        {
-          status: 404,
-        }
+      return failure(
+        "User not found",
+        404
       );
     }
 
     const notification =
       await Notification.create({
-        userId:
-          currentUser._id,
-
+        userId: currentUser._id,
         type,
         title,
         message,
@@ -700,15 +532,11 @@ export async function POST(
         url,
 
         ...(medicineId
-          ? {
-              medicineId,
-            }
+          ? { medicineId }
           : {}),
 
         ...(alertId
-          ? {
-              alertId,
-            }
+          ? { alertId }
           : {}),
 
         ...(monitoringRequestId
@@ -718,138 +546,95 @@ export async function POST(
           : {}),
 
         ...(chatRequestId
-          ? {
-              chatRequestId,
-            }
+          ? { chatRequestId }
           : {}),
 
         ...(conversationId
-          ? {
-              conversationId,
-            }
+          ? { conversationId }
           : {}),
 
         ...(messageId
-          ? {
-              messageId,
-            }
+          ? { messageId }
           : {}),
 
         ...(medicationLogId
-          ? {
-              medicationLogId,
-            }
+          ? { medicationLogId }
           : {}),
 
         ...(medicineName
-          ? {
-              medicineName,
-            }
+          ? { medicineName }
           : {}),
 
         ...(patientId
+          ? { patientId }
+          : {}),
+
+        ...(risk
+          ? { riskLevel: risk }
+          : {}),
+
+        ...(rate !== undefined
           ? {
-              patientId,
+              adherenceRate: rate,
             }
           : {}),
 
-        ...(riskLevel
-          ? {
-              riskLevel,
-            }
-          : {}),
-
-        ...(adherenceRate !==
-        undefined
-          ? {
-              adherenceRate,
-            }
-          : {}),
-
-        read:
-          false,
+        read: false,
       });
 
-    /*
-     * This endpoint is currently called by the browser
-     * NotificationManager, which already shows its own
-     * browser notification.
-     *
-     * Send only through Expo here to prevent duplicate
-     * browser Web Push notifications.
-     */
     const delivery =
-      await sendMobileNotification(
+      await deliver(
         currentUser._id.toString(),
-
         currentUser
           .notificationPreferences
           ?.push !== false,
-
         {
           title,
-          body:
-            message,
+          body: message,
           type,
           screen,
           url,
-
           medicineId:
             medicineId?.toString(),
-
           medicineName,
           patientId,
-
           alertId:
             alertId?.toString(),
-
           conversationId:
             conversationId?.toString(),
-
           messageId:
             messageId?.toString(),
-
           requestId:
             (
               monitoringRequestId ||
               chatRequestId
             )?.toString(),
-
           monitoringRequestId:
             monitoringRequestId?.toString(),
-
           chatRequestId:
             chatRequestId?.toString(),
-
           logId:
             medicationLogId?.toString(),
-
-          riskLevel,
-
-          severity:
-            riskLevel,
+          riskLevel: risk,
+          severity: risk,
         }
       );
 
     return NextResponse.json<ApiResponse>(
       {
-        success:
-          true,
-
+        success: true,
         data: {
           notification,
           delivery,
         },
-
         message:
           delivery.status ===
           "SENT"
-            ? "Notification saved and sent to the mobile device."
-            : "Notification saved. Mobile delivery was skipped or unavailable.",
+            ? "Notification saved and sent to subscribed devices."
+            : "Notification saved. Device delivery was handled separately, skipped, or unavailable.",
       },
       {
-        status:
-          201,
+        status: 201,
       }
     );
   } catch (error) {
@@ -858,18 +643,9 @@ export async function POST(
       error
     );
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success:
-          false,
-
-        error:
-          "Internal server error",
-      },
-      {
-        status:
-          500,
-      }
+    return failure(
+      "Internal server error",
+      500
     );
   }
 }
@@ -884,27 +660,16 @@ export async function PATCH(
       );
 
     if (!auth) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            "Unauthorized",
-        },
-        {
-          status:
-            401,
-        }
+      return failure(
+        "Unauthorized",
+        401
       );
     }
 
     const body =
       await request
         .json()
-        .catch(
-          () => ({})
-        );
+        .catch(() => ({}));
 
     const action =
       typeof body.action ===
@@ -921,44 +686,35 @@ export async function PATCH(
     await connectDB();
 
     if (
-      action ===
-      "markAllRead"
+      action === "markAllRead"
     ) {
       await Notification.updateMany(
         {
-          userId:
-            auth.userId,
+          userId: auth.userId,
         },
         {
           $set: {
-            read:
-              true,
+            read: true,
           },
         }
       );
 
       return NextResponse.json<ApiResponse>({
-        success:
-          true,
-
+        success: true,
         message:
           "All notifications marked as read",
       });
     }
 
     if (
-      action ===
-      "deleteAll"
+      action === "deleteAll"
     ) {
       await Notification.deleteMany({
-        userId:
-          auth.userId,
+        userId: auth.userId,
       });
 
       return NextResponse.json<ApiResponse>({
-        success:
-          true,
-
+        success: true,
         message:
           "All notifications deleted",
       });
@@ -970,123 +726,72 @@ export async function PATCH(
         notificationId
       )
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            "A valid notification ID is required.",
-        },
-        {
-          status:
-            400,
-        }
+      return failure(
+        "A valid notification ID is required.",
+        400
       );
     }
 
+    const filter = {
+      _id: notificationId,
+      userId: auth.userId,
+    };
+
     if (
-      action ===
-      "delete"
+      action === "delete"
     ) {
       const deleted =
         await Notification.findOneAndDelete(
-          {
-            _id:
-              notificationId,
-
-            userId:
-              auth.userId,
-          }
+          filter
         );
 
       if (!deleted) {
-        return NextResponse.json<ApiResponse>(
-          {
-            success:
-              false,
-
-            error:
-              "Notification not found.",
-          },
-          {
-            status:
-              404,
-          }
+        return failure(
+          "Notification not found.",
+          404
         );
       }
 
       return NextResponse.json<ApiResponse>({
-        success:
-          true,
-
+        success: true,
         message:
           "Notification deleted",
       });
     }
 
     if (
-      action ===
-      "markRead"
+      action === "markRead"
     ) {
       const updated =
         await Notification.findOneAndUpdate(
-          {
-            _id:
-              notificationId,
-
-            userId:
-              auth.userId,
-          },
+          filter,
           {
             $set: {
-              read:
-                true,
+              read: true,
             },
           },
           {
-            new:
-              true,
+            new: true,
           }
         );
 
       if (!updated) {
-        return NextResponse.json<ApiResponse>(
-          {
-            success:
-              false,
-
-            error:
-              "Notification not found.",
-          },
-          {
-            status:
-              404,
-          }
+        return failure(
+          "Notification not found.",
+          404
         );
       }
 
       return NextResponse.json<ApiResponse>({
-        success:
-          true,
-
+        success: true,
         message:
           "Notification marked as read",
       });
     }
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success:
-          false,
-
-        error:
-          "Invalid action",
-      },
-      {
-        status:
-          400,
-      }
+    return failure(
+      "Invalid action",
+      400
     );
   } catch (error) {
     console.error(
@@ -1094,18 +799,9 @@ export async function PATCH(
       error
     );
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success:
-          false,
-
-        error:
-          "Internal server error",
-      },
-      {
-        status:
-          500,
-      }
+    return failure(
+      "Internal server error",
+      500
     );
   }
 }

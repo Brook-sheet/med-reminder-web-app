@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+
 import {
   Bell,
   History,
@@ -18,8 +19,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import PwaInstall from "@/components/pwa/PwaInstall";
+
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useMonitoringRequestCount } from "@/hooks/useMonitoringRequestCount";
+
 import { Spinner } from "@/components/ui/Spinner";
 import { startRouteProgress } from "@/components/ui/RouteProgress";
 import { Logo } from "@/components/brand/Logo";
@@ -47,18 +51,22 @@ const Navbar = ({ role }: NavbarProps) => {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const { unreadCount } = useChatNotifications();
-  const { pendingCount } = useMonitoringRequestCount(role === "patient");
+
+  const { pendingCount } = useMonitoringRequestCount(
+    role === "patient"
+  );
 
   // Close the mobile drawer when the route changes.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Prevent background scrolling while the mobile drawer is open.
+  // Prevent background scrolling while the drawer is open.
   useEffect(() => {
     if (!open) return;
 
     const previous = document.body.style.overflow;
+
     document.body.style.overflow = "hidden";
 
     return () => {
@@ -94,6 +102,7 @@ const Navbar = ({ role }: NavbarProps) => {
       });
 
       startRouteProgress();
+
       router.push("/sign-in");
       router.refresh();
     } finally {
@@ -101,7 +110,9 @@ const Navbar = ({ role }: NavbarProps) => {
     }
   };
 
-  const closeSidebar = () => setOpen(false);
+  const closeSidebar = () => {
+    setOpen(false);
+  };
 
   const items: NavItem[] = [
     ...(role === "patient"
@@ -169,7 +180,8 @@ const Navbar = ({ role }: NavbarProps) => {
   const isActive = (item: NavItem) =>
     item.exact
       ? pathname === item.href
-      : pathname === item.href || pathname.startsWith(`${item.href}/`);
+      : pathname === item.href ||
+        pathname.startsWith(`${item.href}/`);
 
   return (
     <div>
@@ -179,13 +191,19 @@ const Navbar = ({ role }: NavbarProps) => {
           onClick={closeSidebar}
           className="flex min-w-0 flex-1 items-center rounded-xl py-1 transition-opacity duration-[var(--rx-duration-fast)] active:opacity-70"
         >
-          <Logo size="sm" tone="inherit" priority />
+          <Logo
+            size="sm"
+            tone="inherit"
+            priority
+          />
         </Link>
 
         <button
           type="button"
           className="rx-press inline-flex shrink-0 items-center justify-center rounded-2xl border border-[var(--brand-surface-border)] bg-white/70 p-2 text-[var(--brand-surface-ink)] shadow-sm shadow-slate-900/5 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20"
-          onClick={() => setOpen((current) => !current)}
+          onClick={() =>
+            setOpen((current) => !current)
+          }
           aria-label="Toggle navigation menu"
           aria-expanded={open}
         >
@@ -228,10 +246,13 @@ const Navbar = ({ role }: NavbarProps) => {
 
       <aside
         className={`rx-drawer fixed top-0 z-50 h-screen w-72 max-w-[calc(100vw-1rem)] overflow-hidden border-r border-sky-200/60 bg-gradient-to-b from-sky-50/90 via-white/80 to-blue-50/90 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700/70 dark:from-slate-900/95 dark:via-slate-950/85 dark:to-slate-900/95 md:max-w-none ${
-          open ? "translate-x-0" : "-translate-x-full"
+          open
+            ? "translate-x-0"
+            : "-translate-x-full"
         } md:translate-x-0`}
       >
         <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+          {/* Brand */}
           <div className="rx-brand-bar rx-animate-in flex shrink-0 items-center rounded-[28px] border px-3 py-4 transition-shadow duration-[var(--rx-duration-base)] hover:shadow-lg">
             <Logo
               size="md"
@@ -242,6 +263,12 @@ const Navbar = ({ role }: NavbarProps) => {
             />
           </div>
 
+          {/* Install button below the logo on all screen sizes */}
+          <PwaInstall
+            className="justify-center text-sm"
+            onAction={closeSidebar}
+          />
+
           <nav
             aria-label="Main navigation"
             className="shrink-0 space-y-6"
@@ -251,13 +278,20 @@ const Navbar = ({ role }: NavbarProps) => {
                 title: "Main Menu",
                 items: items.filter(
                   (item) =>
-                    !["/profile", "/settings"].includes(item.href),
+                    ![
+                      "/profile",
+                      "/settings",
+                    ].includes(item.href)
                 ),
               },
               {
                 title: "Account",
-                items: items.filter((item) =>
-                  ["/profile", "/settings"].includes(item.href),
+                items: items.filter(
+                  (item) =>
+                    [
+                      "/profile",
+                      "/settings",
+                    ].includes(item.href)
                 ),
               },
             ].map((section) => (
@@ -285,7 +319,11 @@ const Navbar = ({ role }: NavbarProps) => {
                         key={item.href}
                         href={item.href}
                         onClick={closeSidebar}
-                        aria-current={active ? "page" : undefined}
+                        aria-current={
+                          active
+                            ? "page"
+                            : undefined
+                        }
                         className={`group relative flex items-center gap-3 overflow-hidden rounded-3xl border px-4 py-3 transition-[background-color,border-color,color,transform] duration-[var(--rx-duration-base)] ease-[var(--rx-ease-standard)] active:scale-[0.98] ${
                           active
                             ? "border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/15"
@@ -310,12 +348,15 @@ const Navbar = ({ role }: NavbarProps) => {
                             aria-hidden="true"
                           />
 
-                          {item.badge && item.badge > 0 ? (
+                          {item.badge &&
+                          item.badge > 0 ? (
                             <span
                               key={item.badge}
                               className="rx-pop-in absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm shadow-red-500/40"
                             >
-                              {item.badge > 99 ? "99+" : item.badge}
+                              {item.badge > 99
+                                ? "99+"
+                                : item.badge}
                             </span>
                           ) : null}
                         </span>
@@ -341,7 +382,10 @@ const Navbar = ({ role }: NavbarProps) => {
             >
               <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center">
                 {loggingOut ? (
-                  <Spinner size="sm" label="Signing out" />
+                  <Spinner
+                    size="sm"
+                    label="Signing out"
+                  />
                 ) : (
                   <LogOut
                     width={ICON_SIZE}
@@ -352,7 +396,9 @@ const Navbar = ({ role }: NavbarProps) => {
                 )}
               </span>
 
-              {loggingOut ? "Signing out…" : "Logout"}
+              {loggingOut
+                ? "Signing out…"
+                : "Logout"}
             </button>
           </div>
         </div>

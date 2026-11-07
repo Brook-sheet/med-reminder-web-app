@@ -1,18 +1,29 @@
-import mongoose from 'mongoose';
-import { NextRequest } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
+import mongoose from "mongoose";
+
+import {
+  NextRequest,
+} from "next/server";
+
+import {
+  connectDB,
+} from "@/lib/mongodb";
+
 import {
   getTokenFromRequest,
   verifyToken,
-} from '@/lib/auth';
-import MedicationLog from '@/models/MedicationLog';
-import MonitoringRequest from '@/models/MonitoringRequest';
-import User from '@/models/User';
+} from "@/lib/auth";
+
+import MedicationLog, {
+  type IMedicationLogDocument,
+} from "@/models/MedicationLog";
+
+import MonitoringRequest from "@/models/MonitoringRequest";
+import User from "@/models/User";
 
 export type MedicationLogAnnotationType =
-  | 'patient_note'
-  | 'missed_explanation'
-  | 'family_acknowledgment';
+  | "patient_note"
+  | "missed_explanation"
+  | "family_acknowledgment";
 
 type AnnotationInput = {
   type?: string;
@@ -22,15 +33,25 @@ type AnnotationInput = {
 };
 
 type StoredAnnotation = {
-  _id?: {
-    toString(): string;
-  } | string;
+  _id?:
+    | {
+        toString(): string;
+      }
+    | string;
+
   type: MedicationLogAnnotationType;
   text: string;
-  authorId?: {
-    toString(): string;
-  } | string;
-  authorRole: 'patient' | 'family';
+
+  authorId?:
+    | {
+        toString(): string;
+      }
+    | string;
+
+  authorRole:
+    | "patient"
+    | "family";
+
   authorName: string;
   createdAt: Date | string;
 };
@@ -39,29 +60,39 @@ type MedicationLogRecord = {
   _id: {
     toString(): string;
   };
-  userId: {
-    toString(): string;
-  } | string;
-  status: string;
-  annotations?: StoredAnnotation[];
+
+  userId:
+    | {
+        toString(): string;
+      }
+    | string;
+
+  status:
+    IMedicationLogDocument["status"];
+
+  annotations?:
+    StoredAnnotation[];
 };
 
-export class MedicationLogAnnotationError extends Error {
+export class MedicationLogAnnotationError
+  extends Error {
   status: number;
 
   constructor(
     message: string,
-    status = 400,
+    status = 400
   ) {
     super(message);
+
     this.name =
-      'MedicationLogAnnotationError';
+      "MedicationLogAnnotationError";
+
     this.status = status;
   }
 }
 
 async function getAuthenticatedUser(
-  request: NextRequest,
+  request: NextRequest
 ) {
   const token =
     getTokenFromRequest(request);
@@ -72,8 +103,8 @@ async function getAuthenticatedUser(
 
   if (!auth) {
     throw new MedicationLogAnnotationError(
-      'Unauthorized.',
-      401,
+      "Unauthorized.",
+      401
     );
   }
 
@@ -81,57 +112,76 @@ async function getAuthenticatedUser(
 }
 
 function serializeAnnotations(
-  values: StoredAnnotation[] | undefined,
+  values:
+    | StoredAnnotation[]
+    | undefined
 ) {
   return (values ?? [])
     .map((annotation) => ({
       _id:
         annotation._id?.toString() ??
-        '',
-      type: annotation.type,
-      text: annotation.text,
+        "",
+
+      type:
+        annotation.type,
+
+      text:
+        annotation.text,
+
       authorId:
         annotation.authorId?.toString() ??
-        '',
+        "",
+
       authorRole:
         annotation.authorRole,
+
       authorName:
         annotation.authorName,
-      createdAt: new Date(
-        annotation.createdAt,
-      ).toISOString(),
+
+      createdAt:
+        new Date(
+          annotation.createdAt
+        ).toISOString(),
     }))
     .sort(
       (first, second) =>
         new Date(
-          first.createdAt,
+          first.createdAt
         ).getTime() -
         new Date(
-          second.createdAt,
-        ).getTime(),
+          second.createdAt
+        ).getTime()
     );
 }
 
 async function findAuthorizedLog(
   request: NextRequest,
-  logId: string,
+  logId: string
 ) {
-  if (!mongoose.isValidObjectId(logId)) {
+  if (
+    !mongoose.isValidObjectId(
+      logId
+    )
+  ) {
     throw new MedicationLogAnnotationError(
-      'Invalid medication log ID.',
-      400,
+      "Invalid medication log ID.",
+      400
     );
   }
 
   const auth =
-    await getAuthenticatedUser(request);
+    await getAuthenticatedUser(
+      request
+    );
 
   await connectDB();
 
   const rawLog =
-    await MedicationLog.findById(logId)
+    await MedicationLog.findById(
+      logId
+    )
       .select(
-        '_id userId status annotations',
+        "_id userId status annotations"
       )
       .lean();
 
@@ -142,35 +192,43 @@ async function findAuthorizedLog(
 
   if (!log) {
     throw new MedicationLogAnnotationError(
-      'Medication log not found.',
-      404,
+      "Medication log not found.",
+      404
     );
   }
 
   const patientObjectId =
     log.userId.toString();
 
-  if (auth.role === 'patient') {
+  if (
+    auth.role === "patient"
+  ) {
     if (
-      patientObjectId !== auth.userId
+      patientObjectId !==
+      auth.userId
     ) {
       throw new MedicationLogAnnotationError(
-        'Access denied.',
-        403,
+        "Access denied.",
+        403
       );
     }
   } else {
     const approvedRelationship =
       await MonitoringRequest.exists({
-        patientId: patientObjectId,
-        familyId: auth.userId,
-        status: 'approved',
+        patientId:
+          patientObjectId,
+        familyId:
+          auth.userId,
+        status:
+          "approved",
       });
 
-    if (!approvedRelationship) {
+    if (
+      !approvedRelationship
+    ) {
       throw new MedicationLogAnnotationError(
-        'An active approved monitoring relationship is required.',
-        403,
+        "An active approved monitoring relationship is required.",
+        403
       );
     }
   }
@@ -183,22 +241,22 @@ async function findAuthorizedLog(
 }
 
 function resolveAnnotationType(
-  input: AnnotationInput,
+  input: AnnotationInput
 ): MedicationLogAnnotationType {
   const type =
     input.type ||
     input.annotationType ||
     input.noteType ||
-    '';
+    "";
 
   if (
-    type !== 'patient_note' &&
-    type !== 'missed_explanation' &&
-    type !== 'family_acknowledgment'
+    type !== "patient_note" &&
+    type !== "missed_explanation" &&
+    type !== "family_acknowledgment"
   ) {
     throw new MedicationLogAnnotationError(
-      'Invalid annotation type.',
-      400,
+      "Invalid annotation type.",
+      400
     );
   }
 
@@ -206,82 +264,94 @@ function resolveAnnotationType(
 }
 
 function validateAnnotationPermission(
-  role: 'patient' | 'family',
+  role: "patient" | "family",
   type: MedicationLogAnnotationType,
-  status: string,
+  status: string
 ) {
-  const finalizedStatuses = new Set([
-    'taken',
-    'late',
-    'missed',
-    'unverified',
-    'incorrect_chamber',
-  ]);
+  const finalizedStatuses =
+    new Set([
+      "taken",
+      "late",
+      "missed",
+      "unverified",
+      "incorrect_chamber",
+    ]);
 
-  if (!finalizedStatuses.has(status)) {
+  if (
+    !finalizedStatuses.has(
+      status
+    )
+  ) {
     throw new MedicationLogAnnotationError(
-      'Notes can only be added after the medication activity is finalized.',
-      409,
+      "Notes can only be added after the medication activity is finalized.",
+      409
     );
   }
 
   if (
-    role === 'patient' &&
-    type === 'family_acknowledgment'
+    role === "patient" &&
+    type ===
+      "family_acknowledgment"
   ) {
     throw new MedicationLogAnnotationError(
-      'Patients cannot add family acknowledgments.',
-      403,
+      "Patients cannot add family acknowledgments.",
+      403
     );
   }
 
   if (
-    role === 'family' &&
-    type !== 'family_acknowledgment'
+    role === "family" &&
+    type !==
+      "family_acknowledgment"
   ) {
     throw new MedicationLogAnnotationError(
-      'Family accounts may only add family acknowledgments.',
-      403,
+      "Family accounts may only add family acknowledgments.",
+      403
     );
   }
 
   if (
-    type === 'missed_explanation' &&
-    status !== 'missed'
+    type ===
+      "missed_explanation" &&
+    status !== "missed"
   ) {
     throw new MedicationLogAnnotationError(
-      'A missed-dose explanation can only be added to a missed medication.',
-      409,
+      "A missed-dose explanation can only be added to a missed medication.",
+      409
     );
   }
 
   if (
-    type === 'patient_note' &&
-    status === 'missed'
+    type === "patient_note" &&
+    status === "missed"
   ) {
     throw new MedicationLogAnnotationError(
-      'Use a missed-dose explanation for a missed medication.',
-      409,
+      "Use a missed-dose explanation for a missed medication.",
+      409
     );
   }
 }
 
 export async function readMedicationLogAnnotations(
   request: NextRequest,
-  logId: string,
+  logId: string
 ) {
   const { log } =
     await findAuthorizedLog(
       request,
-      logId,
+      logId
     );
 
   return {
-    _id: log._id.toString(),
-    status: log.status,
+    _id:
+      log._id.toString(),
+
+    status:
+      log.status,
+
     annotations:
       serializeAnnotations(
-        log.annotations,
+        log.annotations
       ),
   };
 }
@@ -289,7 +359,7 @@ export async function readMedicationLogAnnotations(
 export async function appendMedicationLogAnnotation(
   request: NextRequest,
   logId: string,
-  input: AnnotationInput,
+  input: AnnotationInput
 ) {
   const {
     auth,
@@ -297,56 +367,65 @@ export async function appendMedicationLogAnnotation(
     patientObjectId,
   } = await findAuthorizedLog(
     request,
-    logId,
+    logId
   );
 
   const type =
-    resolveAnnotationType(input);
+    resolveAnnotationType(
+      input
+    );
 
   validateAnnotationPermission(
     auth.role,
     type,
-    log.status,
+    log.status
   );
 
   const text = String(
-    input.text ?? '',
+    input.text ?? ""
   ).trim();
 
   if (
     type !==
-      'family_acknowledgment' &&
+      "family_acknowledgment" &&
     !text
   ) {
     throw new MedicationLogAnnotationError(
-      'A note is required.',
-      400,
+      "A note is required.",
+      400
     );
   }
 
-  if (text.length > 500) {
+  if (
+    text.length > 500
+  ) {
     throw new MedicationLogAnnotationError(
-      'The note cannot exceed 500 characters.',
-      400,
+      "The note cannot exceed 500 characters.",
+      400
     );
   }
 
-  const author = await User.findOne({
-    _id: auth.userId,
-    role: auth.role,
-    isDeleted: {
-      $ne: true,
-    },
-  })
-    .select(
-      'firstName middleName lastName',
-    )
-    .lean();
+  const author =
+    await User.findOne({
+      _id:
+        auth.userId,
+
+      role:
+        auth.role,
+
+      isDeleted: {
+        $ne: true,
+      },
+    })
+      .select(
+        "firstName middleName lastName"
+      )
+      .lean();
 
   if (!author) {
     throw new MedicationLogAnnotationError(
-      'User not found.',
-      404,
+      "User not found.",
+      404
     );
   }
 
@@ -356,55 +435,69 @@ export async function appendMedicationLogAnnotation(
     author.lastName,
   ]
     .filter(Boolean)
-    .join(' ')
+    .join(" ")
     .trim();
 
   const annotation = {
     type,
+
     text:
       type ===
-        'family_acknowledgment' &&
+        "family_acknowledgment" &&
       !text
-        ? 'Acknowledged'
+        ? "Acknowledged"
         : text,
+
     authorId:
       new mongoose.Types.ObjectId(
-        auth.userId,
+        auth.userId
       ),
-    authorRole: auth.role,
+
+    authorRole:
+      auth.role,
+
     authorName:
       authorName ||
-      (auth.role === 'patient'
-        ? 'Patient'
-        : 'Family member'),
-    createdAt: new Date(),
+      (
+        auth.role === "patient"
+          ? "Patient"
+          : "Family member"
+      ),
+
+    createdAt:
+      new Date(),
   };
 
   /*
    * Only annotations are appended.
-   *
-   * This does not change status, takenAt,
-   * source, hardware state, or alert state.
+   * Medication status and hardware
+   * state remain unchanged.
    */
   const rawUpdated =
     await MedicationLog.findOneAndUpdate(
       {
-        _id: logId,
-        userId: patientObjectId,
-        status: log.status,
+        _id:
+          logId,
+
+        userId:
+          patientObjectId,
+
+        status:
+          log.status,
       },
       {
         $push: {
-          annotations: annotation,
+          annotations:
+            annotation,
         },
       },
       {
         new: true,
         runValidators: true,
-      },
+      }
     )
       .select(
-        '_id userId status annotations',
+        "_id userId status annotations"
       )
       .lean();
 
@@ -415,21 +508,27 @@ export async function appendMedicationLogAnnotation(
 
   if (!updated) {
     throw new MedicationLogAnnotationError(
-      'The medication activity changed. Refresh and try again.',
-      409,
+      "The medication activity changed. Refresh and try again.",
+      409
     );
   }
 
   const annotations =
     serializeAnnotations(
-      updated.annotations,
+      updated.annotations
     );
 
   return {
-    _id: updated._id.toString(),
-    status: updated.status,
+    _id:
+      updated._id.toString(),
+
+    status:
+      updated.status,
+
     annotations,
+
     annotation:
-      annotations.at(-1) ?? null,
+      annotations.at(-1) ??
+      null,
   };
 }

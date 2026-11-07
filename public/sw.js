@@ -1,161 +1,249 @@
-// public/sw.js
-// Enhanced service worker for Med App Reminder
-// Handles all push notification types: upcoming_reminder, due_alarm, intake_confirmed, adherence_alert
+/*
+ * Only public offline assets are cached.
+ * Medical pages and APIs stay network-only.
+ */
 
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
+const CACHE = "rxbox-public-v1";
+const OFFLINE = "/pwa/offline.html";
 
-  let data = {};
-  try {
-    data = event.data.json();
-  } catch {
-    data = { title: 'Medication Reminder', body: event.data.text() };
-  }
-
-  const { title, body, type, riskLevel, severity, medicineName, alertId, url } = data;
-
-  // Configure notification appearance based on type
-  let icon = '/favicon.ico';
-  let badge = '/favicon.ico';
-  let tag = `med-${type || 'reminder'}-${Date.now()}`;
-  let requireInteraction = false;
-  let vibrate = [200];
-  let actions = [];
-
-  switch (type) {
-    case 'upcoming_reminder':
-      requireInteraction = false;
-      vibrate = [200, 100];
-      actions = [
-        { action: 'view', title: 'View Schedule' },
-        { action: 'dismiss', title: 'Dismiss' },
-      ];
-      break;
-
-    case 'due_alarm':
-      requireInteraction = true; // stays until dismissed
-      vibrate = [300, 100, 300, 100, 300, 100, 300];
-      actions = [
-        { action: 'view', title: 'Open App' },
-        { action: 'dismiss', title: 'Snooze' },
-      ];
-      break;
-
-    case 'intake_confirmed':
-      requireInteraction = false;
-      vibrate = [100, 50, 100];
-      actions = [
-        { action: 'view', title: 'View Stats' },
-        { action: 'dismiss', title: 'OK' },
-      ];
-      break;
-
-    case 'adherence_alert':
-      requireInteraction = riskLevel === 'High';
-      vibrate = riskLevel === 'High' ? [200, 100, 200, 100, 200] : [200];
-      actions = [
-        { action: 'view', title: 'View Dashboard' },
-        { action: 'dismiss', title: 'Dismiss' },
-      ];
-      break;
-
-    case 'medication_alert':
-      requireInteraction = severity === 'CRITICAL';
-      vibrate = severity === 'CRITICAL'
-        ? [300, 100, 300, 100, 300]
-        : [200, 100, 200];
-      actions = [
-        { action: 'view', title: 'View Alert' },
-        { action: 'dismiss', title: 'Dismiss' },
-      ];
-      break;
-
-    default:
-      vibrate = [200];
-      actions = [
-        { action: 'view', title: 'View' },
-        { action: 'dismiss', title: 'Dismiss' },
-      ];
-  }
-
-  let displayBody = body || 'You have a medication reminder.';
-
-  const options = {
-    body: displayBody,
-    icon,
-    badge,
-    tag,
-    requireInteraction,
-    vibrate,
-    data: {
-      url: url || (type === 'medication_alert' ? '/alerts' : '/'),
-      type,
-      riskLevel,
-      severity,
-      alertId,
-      medicineName,
-      timestamp: Date.now(),
-    },
-    actions,
-    // Silent for gentle reminders, not for alarms
-    silent: type === 'upcoming_reminder',
-  };
-
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    self.registration.showNotification(title || 'Med App Reminder', options)
+    caches
+      .open(CACHE)
+      .then((cache) =>
+        cache.addAll([
+          OFFLINE,
+          "/pwa/icon-192.png",
+        ])
+      )
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter(
+              (key) =>
+                key.startsWith(
+                  "rxbox-public-"
+                ) && key !== CACHE
+            )
+            .map((key) =>
+              caches.delete(key)
+            )
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
 
-  if (event.action === 'dismiss') {
-    // Just close — no navigation
+self.addEventListener("fetch", (event) => {
+  if (
+    event.request.method !== "GET" ||
+    event.request.mode !== "navigate"
+  ) {
     return;
   }
 
-  // 'view' action or clicking the notification body
-  const url = event.notification.data?.url || '/';
+  if (
+    new URL(event.request.url).origin !==
+    self.location.origin
+  ) {
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request).catch(() =>
+      caches.match(OFFLINE)
+    )
+  );
+});
+
+function internalUrl(value) {
+  try {
+    const url = new URL(
+      typeof value === "string"
+        ? value
+        : "/",
+      self.location.origin
+    );
+
+    return url.origin ===
+      self.location.origin
+      ? url.href
+      : self.location.origin + "/";
+  } catch {
+    return self.location.origin + "/";
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+
+  try {
+    payload = event.data
+      ? event.data.json()
+      : {};
+  } catch {
+    payload = {
+      body: event.data.text(),
+    };
+  }
+
+  if (
+    !payload ||
+    typeof payload !== "object"
+  ) {
+    payload = {};
+  }
+
+  const data = {
+    ...(payload.data || {}),
+    ...payload,
+  };
+
+  const identity =
+    data.messageId ||
+    data.alertId ||
+    data.eventId ||
+    data.logId;
+
+  const tag = identity
+    ? `rxbox-${data.type || "notice"}-${identity}`
+    : undefined;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing window if available
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          return client.focus();
+    self.registration.showNotification(
+      payload.title || "Rx Box",
+      {
+        body:
+          payload.body ||
+          "You have a new notification. Open Rx Box to view it.",
+
+        icon: "/pwa/icon-192.png",
+
+        ...(tag ? { tag } : {}),
+
+        requireInteraction:
+          data.type === "due_alarm" ||
+          data.severity === "CRITICAL",
+
+        data: {
+          url: internalUrl(data.url),
+          type: data.type,
+        },
+
+        actions: [
+          {
+            action: "view",
+            title: "Open Rx Box",
+          },
+          {
+            action: "dismiss",
+            title: "Dismiss",
+          },
+        ],
+      }
+    )
+  );
+});
+
+self.addEventListener(
+  "notificationclick",
+  (event) => {
+    event.notification.close();
+
+    if (event.action === "dismiss") {
+      return;
+    }
+
+    const url = internalUrl(
+      event.notification.data?.url
+    );
+
+    event.waitUntil(
+      (async () => {
+        const windows =
+          await self.clients.matchAll({
+            type: "window",
+            includeUncontrolled: true,
+          });
+
+        for (const client of windows) {
+          if (
+            new URL(client.url).origin !==
+            self.location.origin
+          ) {
+            continue;
+          }
+
+          try {
+            const navigated =
+              await client.navigate(url);
+
+            if (navigated) {
+              return await navigated.focus();
+            }
+          } catch {
+            // Try another window or open a new one.
+          }
         }
-      }
-      // Open new window
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })
-  );
-});
 
-// ── Push subscription change handler ────────────────────────────────────────
-self.addEventListener('pushsubscriptionchange', (event) => {
-  event.waitUntil(
-    self.registration.pushManager.subscribe({
-      userVisibleOnly: true,
-    }).then((subscription) => {
-      // Re-register subscription with server
-      return fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-    })
-  );
-});
+        return self.clients.openWindow(url);
+      })()
+    );
+  }
+);
 
-// ── Service worker lifecycle ─────────────────────────────────────────────────
-self.addEventListener('install', () => {
-  console.log('[SW] Installing...');
-  self.skipWaiting();
-});
+/*
+ * Renew using the existing application server key.
+ * Permission is never requested from this worker.
+ */
+self.addEventListener(
+  "pushsubscriptionchange",
+  (event) => {
+    event.waitUntil(
+      (async () => {
+        const key =
+          event.oldSubscription?.options
+            .applicationServerKey;
 
-self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating...');
-  event.waitUntil(clients.claim());
-});
+        if (!key) return;
+
+        const subscription =
+          event.newSubscription ||
+          (await self.registration.pushManager.subscribe(
+            {
+              userVisibleOnly: true,
+              applicationServerKey: key,
+            }
+          ));
+
+        const response = await fetch(
+          "/api/push/subscribe",
+          {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              ...subscription.toJSON(),
+              action: "renew",
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          await subscription.unsubscribe();
+        }
+      })()
+    );
+  }
+);
