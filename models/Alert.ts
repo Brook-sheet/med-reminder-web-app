@@ -5,6 +5,7 @@ import mongoose, {
 } from "mongoose";
 
 export type AlertEventType =
+  | "PREDICTED_ADHERENCE_RISK"
   | "MEDICATION_LATE"
   | "MEDICATION_MISSED"
   | "MEDICATION_VERIFIED"
@@ -161,6 +162,7 @@ const AlertSchema =
           String,
 
         enum: [
+          "PREDICTED_ADHERENCE_RISK",
           "MEDICATION_LATE",
           "MEDICATION_MISSED",
           "MEDICATION_VERIFIED",

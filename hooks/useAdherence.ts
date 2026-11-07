@@ -14,6 +14,8 @@
 
 'use client';
 
+import type { PredictionResult } from '@/lib/prediction/adherencePrediction';
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 
 export interface AdaptiveReminderConfig {
@@ -45,7 +47,7 @@ export interface AdaptiveIntervention {
   interventionSummary: string;
   isEscalation: boolean;
   drivingRiskLevel: string;
-  interventionConfidence: number;
+  interventionConfidence: number | null;
   keySignals: string[];
   interventionReason: string;
   clinicalActionSuggestion: string;
@@ -89,6 +91,7 @@ export interface MedicationPattern {
 }
 
 export interface AdherenceData {
+  prediction?: PredictionResult;
   analysisType: 'rule_based_behavioral';
   hasSufficientData: boolean;
   riskLevel: 'Low' | 'Moderate' | 'High';

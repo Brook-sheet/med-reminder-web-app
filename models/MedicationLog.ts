@@ -29,6 +29,8 @@ export interface IMedicationLogDocument
   scheduledTime: string;
   scheduledDate: string;
   takenAt?: Date;
+  /** First final outcome receipt time, unaffected by annotations or plan refreshes. */
+  outcomeRecordedAt?: Date | null;
 
   status:
     | 'pending'
@@ -151,6 +153,11 @@ const MedicationLogSchema =
         type: String,
         required: true,
         index: true,
+      },
+
+      outcomeRecordedAt: {
+        type: Date,
+        default: null,
       },
 
       takenAt: {

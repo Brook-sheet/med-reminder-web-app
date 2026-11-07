@@ -1,3 +1,4 @@
+import { getPatientPrediction } from '@/lib/prediction/service';
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
@@ -285,6 +286,8 @@ export async function GET(
         log.countsTowardAdherence !== false,
     }));
 
+    const prediction = await getPatientPrediction(patient._id.toString(), now);
+
     const dailyTrend = buildAdherenceHistory(
       historyRawLogs,
       now,
@@ -436,6 +439,7 @@ export async function GET(
           memberSince: patient.createdAt,
         },
         adherence: {
+          prediction,
           hasSufficientData:
             analysis.features.hasSufficientData,
           riskLevel: analysis.finalRiskLevel,

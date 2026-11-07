@@ -116,6 +116,10 @@ const ALERT_POLICIES:
     AlertEventType,
     AlertPolicy
   > = {
+  PREDICTED_ADHERENCE_RISK: {
+    createAlert: true, severity: "WARNING", push: true, sms: false,
+    defaultTitle: "Predicted adherence risk",
+  },
   MEDICATION_VERIFIED: {
     createAlert:
       true,
@@ -411,6 +415,7 @@ function smsAlertType(
     AlertEventType
 ): SmsAlertType {
   if (
+    eventType === "PREDICTED_ADHERENCE_RISK" ||
     eventType ===
       "MEDICATION_EVENT_WARNING" ||
     eventType ===

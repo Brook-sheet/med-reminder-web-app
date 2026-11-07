@@ -1,5 +1,5 @@
 // lib/foodMonitoring.ts
-// Condition-Specific Food Monitoring System with Random Forest ML Classification
+// Condition-Specific Food Monitoring with a hand-authored rule ensemble
 // Medical references:
 // - WHO Guidelines on sugars intake (2015)
 // - WHO SHAKE technical package for sodium reduction (2016)
@@ -272,7 +272,7 @@ export function isFoodMonitoringApplicable(condition: string): boolean {
 }
 
 // ── RANDOM FOREST FOOD RISK CLASSIFIER ───────────────────────────────────
-// Simulates a trained Random Forest using clinically-grounded decision trees
+// Hand-authored trees; no training occurs. Vote agreement is not ML confidence.
 // Each tree evaluates a specific dietary risk dimension
 
 interface FoodFeatures {
@@ -375,7 +375,7 @@ function extractFoodFeatures(
   };
 }
 
-// Random Forest Decision Trees for food risk
+// Hand-authored decision rules for food risk
 interface FoodDecisionTree {
   name: string;
   weight: number;
@@ -500,7 +500,7 @@ function ruleBasedFoodClassify(
 }
 
 /**
- * Main food risk calculation with Random Forest + Rule-based hybrid
+ * Food risk calculation using fixed rules and ensemble votes
  */
 export function calculateFoodRisk(
   entries: FoodLogEntry[],
@@ -550,13 +550,13 @@ export function calculateFoodRisk(
   const normalizedBase = (rawAvg / 3) * 100;
   const normalizedScore = Math.min(100, normalizedBase + freqPenalty * 5);
 
-  // Extract ML features
+  // Extract questionnaire features
   const features = extractFoodFeatures(entries, condition);
 
   // Rule-based classification
   const ruleRisk = ruleBasedFoodClassify(normalizedScore, features, condition);
 
-  // ML Random Forest classification
+  // Rule-ensemble classification (legacy API names retained)
   const mlResult = randomForestFoodPredict(features);
 
   // Conservative final decision (take higher risk)

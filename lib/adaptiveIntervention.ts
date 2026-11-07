@@ -1,16 +1,7 @@
 /**
- * lib/adaptiveIntervention.ts
- *
- * Adaptive AI Intervention Engine
- * Transforms ML predictions into intelligent, personalized adherence interventions.
- *
- * Architecture:
- * 1. Rule-Based Clinical Safety Layer
- * 2. Feature Extraction & Behavioral Analytics Layer
- * 3. Random Forest Predictive Risk Classification
- * 4. Adaptive AI Intervention Engine
- * 5. Personalized Reminder & Predictive Adherence Support Layer
- * 6. Caregiver Escalation & Monitoring Layer
+ * Rule-based behavioral intervention recommendations.
+ * Legacy ML-named parameters are compatibility inputs, not a trained model.
+ * Learned next-group prediction lives in lib/prediction.
  */
 
 import {

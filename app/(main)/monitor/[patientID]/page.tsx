@@ -1,5 +1,8 @@
 'use client';
 
+import PredictionPanel from '@/components/dashboard/PredictionPanel';
+import type { PredictionResult } from '@/lib/prediction/adherencePrediction';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -34,6 +37,7 @@ interface BehavioralInsight {
 }
 
 interface AdherenceInfo {
+  prediction?: PredictionResult;
   hasSufficientData: boolean;
   riskLevel: RiskLevel;
   adherenceRate: number;
@@ -612,7 +616,7 @@ export default function MonitorDashboardPage() {
                 className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${risk.badge}`}
               >
                 <RiskIcon className="h-3.5 w-3.5" />
-                {adherence.riskLevel} Behavioral Risk
+                {adherence.riskLevel} Observed Behavioral Risk
               </span>
             )}
           </div>
@@ -681,6 +685,8 @@ export default function MonitorDashboardPage() {
               Behavioral Adherence Analysis
             </h2>
           </div>
+
+          <PredictionPanel prediction={adherence.prediction} />
 
           {!adherence.hasSufficientData ? (
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-center dark:border-blue-800 dark:bg-blue-900/20">

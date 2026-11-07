@@ -1,3 +1,4 @@
+import { getPatientPrediction } from "@/lib/prediction/service";
 import { isProductTourReadOnly } from "@/lib/productTourReadOnly";
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
     );
 
     const { features } = analysis;
+    const prediction = await getPatientPrediction(auth.userId, now);
 
     const previousRiskLevel = user?.lastRiskLevel as
       | "Low"
@@ -193,6 +195,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         analysisType: "rule_based_behavioral",
+        prediction,
         hasSufficientData: features.hasSufficientData,
         riskLevel: analysis.finalRiskLevel,
         adherenceRate: features.adherenceRate,
@@ -235,8 +238,8 @@ export async function GET(request: NextRequest) {
             features.hasSufficientData &&
             adaptive.isEscalation,
           drivingRiskLevel: adaptive.drivingRiskLevel,
-          interventionConfidence:
-            adaptive.interventionConfidence,
+          interventionConfidence: null,
+          confidenceNote: "Rule-based intervention; no calibrated confidence is available.",
           keySignals: adaptive.keySignals,
           interventionReason:
             adaptive.reminderConfig.interventionReason,

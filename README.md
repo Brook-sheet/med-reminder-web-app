@@ -4,6 +4,12 @@
 **Project Type:** Capstone Project  
 **Focus:** Internet of Things (IoT), Machine Learning, and Medication Adherence Monitoring
 
+## Predictive modeling implementation
+
+Medication forecasting now uses a per-patient regularized logistic regression fitted from eligible stored outcomes. Insufficient histories produce no probability; preliminary estimates are labeled; predictive family alerts require an initial chronological validation check. Existing historical risk rules and event SMS remain separate. No real-patient accuracy or clinical-validation result is claimed.
+
+See [repository assessment, model specification, tests, and deployment requirements](docs/AI_REPOSITORY_REVIEW.md). Run `npm test` for regression tests and `npm run evaluate:adherence -- /secure/path/patient-records.json` for read-only evaluation of authorized real records.
+
 ## 📌 About the Project
 
 **Rx Box** is an AI-driven smart pillbox designed to support medication adherence among individuals with hypertension and diabetes. The system combines an IoT-enabled pillbox, mobile application, web-based monitoring interface, and predictive behavior analysis to help users monitor medication schedules and identify possible adherence risks.
@@ -37,7 +43,7 @@ The system detects medication compartment access, records medication activity as
 | Technology | Purpose |
 |---|---|
 | ESP32 | Microcontroller for the smart pillbox |
-| Compartment Sensors / Limit Switches | Detects compartment access |
+| Tray ultrasonic sensor (current API contract) | Detects pickup as a proxy; firmware is maintained separately |
 | Buzzer and LED | Provides physical medication reminders |
 | Wi-Fi | Enables device communication |
 | MongoDB Atlas | Cloud-based database |

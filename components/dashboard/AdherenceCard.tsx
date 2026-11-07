@@ -14,6 +14,7 @@ import {
   useAdherence,
   type BehavioralInsight,
 } from '@/hooks/useAdherence';
+import PredictionPanel from './PredictionPanel';
 import AdherenceHistoryChart from './AdherenceHistoryChart';
 
 const RISK_STYLE = {
@@ -164,6 +165,7 @@ export default function AdherenceCard() {
             </p>
           )}
         </div>
+        <PredictionPanel prediction={data.prediction} />
       </section>
     );
   }
@@ -189,9 +191,11 @@ export default function AdherenceCard() {
           className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${risk.badge}`}
         >
           <RiskIcon className="h-3.5 w-3.5" />
-          {data.riskLevel} Behavioral Risk
+          {data.riskLevel} Observed Behavioral Risk
         </span>
       </div>
+
+      <PredictionPanel prediction={data.prediction} />
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">

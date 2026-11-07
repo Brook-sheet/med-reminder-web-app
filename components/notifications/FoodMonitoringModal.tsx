@@ -163,7 +163,7 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                 </p>
               </div>
 
-              {/* ML Analysis */}
+              {/* Rule analysis */}
               {result.mlRiskLevel && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-border/50 bg-gray-50 dark:bg-gray-800/50 p-3">
@@ -188,7 +188,7 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Brain className="w-3.5 h-3.5 text-purple-500" />
                       <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                        ML Model
+                        Rule ensemble
                       </span>
                     </div>
                     <p className={`text-sm font-bold ${
@@ -199,7 +199,7 @@ const FoodMonitoringModal: React.FC<FoodMonitoringModalProps> = ({
                       {result.mlRiskLevel} Risk
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      {result.mlConfidence}% confidence
+                      {result.mlConfidence}% rule agreement
                     </p>
                   </div>
                 </div>

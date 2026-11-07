@@ -1,3 +1,4 @@
+import { notifyPredictedAdherenceRisk } from "@/lib/prediction/notifications";
 import mongoose from "mongoose";
 
 import {
@@ -903,6 +904,8 @@ export async function runMedicationReminderScheduler(
         result[deliveryResult] +=
           1;
       }
+
+      await notifyPredictedAdherenceRisk(user._id.toString(), schedulerNow);
     } catch (error) {
       const message =
         error instanceof Error

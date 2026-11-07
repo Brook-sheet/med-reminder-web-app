@@ -402,7 +402,7 @@ export default function SmsNotificationCard() {
               htmlFor="smsPhoneNumber"
               className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
-              Your Philippine mobile number
+              Your mobile number
             </label>
 
             <input
@@ -572,7 +572,7 @@ export default function SmsNotificationCard() {
           </div>
 
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            A queued result means TextBee accepted the request. Always verify that the physical phone received the SMS.
+            Always verify that the physical phone received the SMS.
           </p>
         </div>
       )}

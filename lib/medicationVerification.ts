@@ -507,6 +507,8 @@ export async function finalizeExpiredMedicationLogs(
             status:
               'missed',
 
+            outcomeRecordedAt: new Date(),
+
             source:
               'system',
 
@@ -1227,6 +1229,7 @@ export async function processMedicationEvent(
       {
         $set: {
           status,
+          ...(status !== 'dispensed' ? { outcomeRecordedAt: new Date() } : {}),
 
           /*
            * Dispensed means waiting for pickup.
