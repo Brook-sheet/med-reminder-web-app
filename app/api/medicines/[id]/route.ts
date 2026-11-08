@@ -1,17 +1,15 @@
 // app/api/medicines/[id]/route.ts
-import {
-  NextRequest,
-  NextResponse,
-} from 'next/server';
 
+import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 
-import {
-  connectDB,
-} from '@/lib/mongodb';
-
+import { connectDB } from '@/lib/mongodb';
 import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
+
+import {
+  synchronizeMedicineLogs,
+} from '@/lib/medicationVerification';
 
 import {
   getTokenFromRequest,
@@ -27,13 +25,8 @@ import {
   isValidMedicationDateKey,
 } from '@/lib/medicationTime';
 
-async function getAuthUser(
-  request: NextRequest
-) {
-  const token =
-    getTokenFromRequest(
-      request
-    );
+async function getAuthUser(request: NextRequest) {
+  const token = getTokenFromRequest(request);
 
   if (!token) {
     return null;
@@ -47,122 +40,67 @@ export async function GET(
   {
     params,
   }: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
+    params: Promise<{ id: string }>;
+  },
 ) {
   try {
-    const user =
-      await getAuthUser(
-        request
-      );
+    const user = await getAuthUser(request);
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Unauthorized',
+          error: 'Unauthorized',
         },
-        {
-          status: 401,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 401 },
       );
     }
 
-    const {
-      id,
-    } = await params;
+    const { id } = await params;
 
-    if (
-      !mongoose.isValidObjectId(
-        id
-      )
-    ) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Invalid medicine ID',
+          error: 'Invalid medicine ID',
         },
-        {
-          status: 400,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 400 },
       );
     }
 
     await connectDB();
 
-    const medicine =
-      await Medicine.findOne({
-        _id: id,
-        userId:
-          user.userId,
-      });
+    const medicine = await Medicine.findOne({
+      _id: id,
+      userId: user.userId,
+    });
 
     if (!medicine) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Medicine not found',
+          error: 'Medicine not found',
         },
-        {
-          status: 404,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 404 },
       );
     }
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success: true,
-        data: medicine,
-      },
-      {
-        status: 200,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
-    );
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: medicine,
+    });
   } catch (error) {
     console.error(
       '[GET /api/medicines/[id]] Error:',
-      error
+      error,
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error:
-          'Internal server error',
+        error: 'Internal server error',
       },
-      {
-        status: 500,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
+      { status: 500 },
     );
   }
 }
@@ -181,34 +119,22 @@ const VALID_FREQUENCIES = [
 const TIME_REGEX =
   /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
 
-function isValidDate(
-  dateString: string
-): boolean {
-  return isValidMedicationDateKey(
-    dateString
-  );
+function isValidDate(dateString: string): boolean {
+  return isValidMedicationDateKey(dateString);
 }
 
-function isValidTime(
-  timeString: string
-): boolean {
-  return TIME_REGEX.test(
-    timeString.trim()
-  );
+function isValidTime(timeString: string): boolean {
+  return TIME_REGEX.test(timeString.trim());
 }
 
 function sanitizeMedicineName(
-  raw: unknown
+  raw: unknown,
 ): string | null {
-  if (
-    typeof raw !==
-    'string'
-  ) {
+  if (typeof raw !== 'string') {
     return null;
   }
 
-  const trimmed =
-    raw.trim();
+  const trimmed = raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -217,19 +143,11 @@ function sanitizeMedicineName(
     return null;
   }
 
-  if (
-    !/[a-zA-Z0-9]/.test(
-      trimmed
-    )
-  ) {
+  if (!/[a-zA-Z0-9]/.test(trimmed)) {
     return null;
   }
 
-  if (
-    /^[^a-zA-Z0-9]+$/.test(
-      trimmed
-    )
-  ) {
+  if (/^[^a-zA-Z0-9]+$/.test(trimmed)) {
     return null;
   }
 
@@ -237,17 +155,13 @@ function sanitizeMedicineName(
 }
 
 function sanitizeDosage(
-  raw: unknown
+  raw: unknown,
 ): string | null {
-  if (
-    typeof raw !==
-    'string'
-  ) {
+  if (typeof raw !== 'string') {
     return null;
   }
 
-  const trimmed =
-    raw.trim();
+  const trimmed = raw.trim();
 
   if (
     trimmed.length === 0 ||
@@ -256,11 +170,7 @@ function sanitizeDosage(
     return null;
   }
 
-  if (
-    !/[a-zA-Z0-9]/.test(
-      trimmed
-    )
-  ) {
+  if (!/[a-zA-Z0-9]/.test(trimmed)) {
     return null;
   }
 
@@ -273,7 +183,7 @@ interface ValidationResult {
 }
 
 function validateMedicinePayload(
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ): ValidationResult {
   const {
     name,
@@ -288,29 +198,17 @@ function validateMedicinePayload(
     lateAfterMinutes,
   } = body;
 
-  const cleanName =
-    sanitizeMedicineName(
-      name
-    );
-
-  if (!cleanName) {
+  if (!sanitizeMedicineName(name)) {
     return {
       valid: false,
-
       error:
         'Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.',
     };
   }
 
-  const cleanDosage =
-    sanitizeDosage(
-      dosage
-    );
-
-  if (!cleanDosage) {
+  if (!sanitizeDosage(dosage)) {
     return {
       valid: false,
-
       error:
         'Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.',
     };
@@ -318,69 +216,48 @@ function validateMedicinePayload(
 
   if (
     !frequency ||
-    typeof frequency !==
-      'string'
+    typeof frequency !== 'string'
   ) {
     return {
       valid: false,
-
-      error:
-        'Frequency is required.',
+      error: 'Frequency is required.',
     };
   }
 
-  if (
-    !VALID_FREQUENCIES.includes(
-      frequency
-    )
-  ) {
+  if (!VALID_FREQUENCIES.includes(frequency)) {
     return {
       valid: false,
-
       error:
         `Frequency must be one of: ${VALID_FREQUENCIES.join(', ')}.`,
     };
   }
 
   if (
-    !Array.isArray(
-      scheduledTimes
-    ) ||
-    scheduledTimes.length ===
-      0
+    !Array.isArray(scheduledTimes) ||
+    scheduledTimes.length === 0
   ) {
     return {
       valid: false,
-
       error:
         'At least one scheduled time is required.',
     };
   }
 
-  if (
-    scheduledTimes.length >
-      24
-  ) {
+  if (scheduledTimes.length > 24) {
     return {
       valid: false,
-
       error:
         'A maximum of 24 scheduled times is allowed.',
     };
   }
 
-  for (
-    const time of
-    scheduledTimes
-  ) {
+  for (const time of scheduledTimes) {
     if (
-      typeof time !==
-        'string' ||
+      typeof time !== 'string' ||
       !isValidTime(time)
     ) {
       return {
         valid: false,
-
         error:
           `Invalid scheduled time "${String(time)}". Expected format: "H:MM AM" or "H:MM PM".`,
       };
@@ -390,23 +267,17 @@ function validateMedicinePayload(
   const normalizedTimes =
     scheduledTimes as string[];
 
-  const uniqueTimes =
-    new Set(
-      normalizedTimes.map(
-        (time) =>
-          time
-            .trim()
-            .toUpperCase()
-      )
-    );
+  const uniqueTimes = new Set(
+    normalizedTimes.map((time) =>
+      time.trim().toUpperCase(),
+    ),
+  );
 
   if (
-    uniqueTimes.size !==
-      normalizedTimes.length
+    uniqueTimes.size !== normalizedTimes.length
   ) {
     return {
       valid: false,
-
       error:
         'Duplicate scheduled times are not allowed.',
     };
@@ -418,15 +289,11 @@ function validateMedicinePayload(
     startDate !== ''
   ) {
     if (
-      typeof startDate !==
-        'string' ||
-      !isValidDate(
-        startDate
-      )
+      typeof startDate !== 'string' ||
+      !isValidDate(startDate)
     ) {
       return {
         valid: false,
-
         error:
           'Start date must be a valid date in YYYY-MM-DD format.',
       };
@@ -439,34 +306,24 @@ function validateMedicinePayload(
     endDate !== ''
   ) {
     if (
-      typeof endDate !==
-        'string' ||
-      !isValidDate(
-        endDate
-      )
+      typeof endDate !== 'string' ||
+      !isValidDate(endDate)
     ) {
       return {
         valid: false,
-
         error:
           'End date must be a valid date in YYYY-MM-DD format.',
       };
     }
 
     const scheduleStart =
-      typeof startDate ===
-        'string' &&
-      startDate
+      typeof startDate === 'string' && startDate
         ? startDate
         : getMedicationDateKey();
 
-    if (
-      endDate &&
-      endDate < scheduleStart
-    ) {
+    if (endDate && endDate < scheduleStart) {
       return {
         valid: false,
-
         error:
           'End date cannot be before start date.',
       };
@@ -476,32 +333,22 @@ function validateMedicinePayload(
   const normalizedPillsPerDose =
     pillsPerDose == null
       ? 1
-      : Number(
-          pillsPerDose
-        );
+      : Number(pillsPerDose);
 
   if (
-    !Number.isInteger(
-      normalizedPillsPerDose
-    ) ||
-    normalizedPillsPerDose <
-      1 ||
-    normalizedPillsPerDose >
-      4
+    !Number.isInteger(normalizedPillsPerDose) ||
+    normalizedPillsPerDose < 1 ||
+    normalizedPillsPerDose > 4
   ) {
     return {
       valid: false,
-
       error:
         'Pills per scheduled dose must be a whole number from 1 to 4.',
     };
   }
 
   for (
-    const [
-      field,
-      value,
-    ] of Object.entries({
+    const [field, value] of Object.entries({
       windowBeforeMinutes,
       windowAfterMinutes,
       lateAfterMinutes,
@@ -512,19 +359,15 @@ function validateMedicinePayload(
       value !== null &&
       value !== ''
     ) {
-      const minutes =
-        Number(value);
+      const minutes = Number(value);
 
       if (
-        !Number.isInteger(
-          minutes
-        ) ||
+        !Number.isInteger(minutes) ||
         minutes < 0 ||
         minutes > 720
       ) {
         return {
           valid: false,
-
           error:
             `${field} must be a whole number from 0 to 720.`,
         };
@@ -533,28 +376,19 @@ function validateMedicinePayload(
   }
 
   if (
-    lateAfterMinutes !==
-      undefined &&
-    windowAfterMinutes !==
-      undefined &&
-    Number(
-      lateAfterMinutes
-    ) >
-      Number(
-        windowAfterMinutes
-      )
+    lateAfterMinutes !== undefined &&
+    windowAfterMinutes !== undefined &&
+    Number(lateAfterMinutes) >
+      Number(windowAfterMinutes)
   ) {
     return {
       valid: false,
-
       error:
         'Late threshold cannot be longer than the after-window.',
     };
   }
 
-  return {
-    valid: true,
-  };
+  return { valid: true };
 }
 
 export async function PUT(
@@ -562,461 +396,237 @@ export async function PUT(
   {
     params,
   }: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
+    params: Promise<{ id: string }>;
+  },
 ) {
   try {
-    const user =
-      await getAuthUser(
-        request
-      );
+    const user = await getAuthUser(request);
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Unauthorized',
+          error: 'Unauthorized',
         },
-        {
-          status: 401,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 401 },
       );
     }
 
-    const {
-      id,
-    } = await params;
+    const { id } = await params;
 
-    if (
-      !mongoose.isValidObjectId(
-        id
-      )
-    ) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Invalid medicine ID',
+          error: 'Invalid medicine ID',
         },
-        {
-          status: 400,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 400 },
       );
     }
 
     await connectDB();
 
-    let body:
-      Record<string, unknown>;
+    let body: Record<string, unknown>;
 
     try {
       body =
-        (await request.json()) as Record<string, unknown>;
+        (await request.json()) as Record<
+          string,
+          unknown
+        >;
     } catch (parseError) {
       console.error(
         '[PUT /api/medicines/[id]] JSON parse error:',
-        parseError
+        parseError,
       );
 
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Invalid JSON body.',
+          error: 'Invalid JSON body.',
         },
-        {
-          status: 400,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 400 },
       );
     }
 
     const validation =
-      validateMedicinePayload(
-        body
-      );
+      validateMedicinePayload(body);
 
-    if (
-      !validation.valid
-    ) {
+    if (!validation.valid) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            validation.error,
+          error: validation.error,
         },
-        {
-          status: 400,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 400 },
       );
     }
 
-    const name =
-      body.name as string;
-
-    const dosage =
-      body.dosage as string;
-
-    const frequency =
-      body.frequency as string;
+    const name = body.name as string;
+    const dosage = body.dosage as string;
+    const frequency = body.frequency as string;
 
     const scheduledTimes =
-      body.scheduledTimes as
-        string[];
+      body.scheduledTimes as string[];
 
     const notes =
-      typeof body.notes ===
-        'string'
+      typeof body.notes === 'string'
         ? body.notes
         : undefined;
 
     const startDate =
-      typeof body.startDate ===
-        'string'
+      typeof body.startDate === 'string'
         ? body.startDate
         : undefined;
 
     const endDate =
-      typeof body.endDate ===
-        'string'
+      typeof body.endDate === 'string'
         ? body.endDate
         : undefined;
 
     const pillsPerDose =
-      body.pillsPerDose ==
-        null
+      body.pillsPerDose == null
         ? 1
-        : Number(
-            body.pillsPerDose
-          );
+        : Number(body.pillsPerDose);
 
     const windowBeforeMinutes =
-      body.windowBeforeMinutes ==
-        null
+      body.windowBeforeMinutes == null
         ? 30
-        : Number(
-            body.windowBeforeMinutes
-          );
+        : Number(body.windowBeforeMinutes);
 
     const windowAfterMinutes =
-      body.windowAfterMinutes ==
-        null
+      body.windowAfterMinutes == null
         ? 90
-        : Number(
-            body.windowAfterMinutes
-          );
+        : Number(body.windowAfterMinutes);
 
     const lateAfterMinutes =
-      body.lateAfterMinutes ==
-        null
+      body.lateAfterMinutes == null
         ? 30
-        : Number(
-            body.lateAfterMinutes
-          );
+        : Number(body.lateAfterMinutes);
 
     const normalizedTimes =
-      scheduledTimes.map(
-        (time) =>
-          time.trim()
-      );
+      scheduledTimes.map((time) => time.trim());
 
     /*
-     * No chamberId is accepted here.
-     * The daily Rx Box plan assigns chambers.
+     * Update the existing medicine and its planned dose logs
+     * together. If synchronization fails, the transaction
+     * rolls back the medicine update too.
+     *
+     * No chamberId is accepted here. The daily Rx Box plan
+     * assigns chambers.
      */
     const medicine =
-      await Medicine.findOneAndUpdate(
-        {
-          _id: id,
-          userId:
-            user.userId,
+      await mongoose.connection.transaction(
+        async (session) => {
+          const updated =
+            await Medicine.findOneAndUpdate(
+              {
+                _id: id,
+                userId: user.userId,
+              },
+              {
+                name: name.trim(),
+                dosage: dosage.trim(),
+                frequency,
+                scheduledTimes: normalizedTimes,
+                pillsPerDose,
+                windowBeforeMinutes,
+                windowAfterMinutes,
+                lateAfterMinutes,
+
+                startDate:
+                  startDate && startDate.trim()
+                    ? startDate.trim()
+                    : undefined,
+
+                endDate:
+                  endDate && endDate.trim()
+                    ? endDate.trim()
+                    : null,
+
+                notes:
+                  typeof notes === 'string'
+                    ? notes.trim().slice(0, 500)
+                    : '',
+
+                updatedAt: new Date(),
+              },
+              {
+                new: true,
+                runValidators: true,
+                upsert: false,
+                session,
+              },
+            );
+
+          if (!updated) {
+            return null;
+          }
+
+          const today =
+            getMedicationDateKey();
+
+          const futureDates =
+            await MedicationLog.distinct(
+              'scheduledDate',
+              {
+                userId: user.userId,
+                medicineId: id,
+                scheduledDate: {
+                  $gte: today,
+                },
+              },
+            ).session(session);
+
+          for (
+            const date of new Set([
+              today,
+              ...futureDates,
+            ])
+          ) {
+            await synchronizeMedicineLogs(
+              updated,
+              date,
+              session,
+            );
+          }
+
+          return updated;
         },
-        {
-          name:
-            name.trim(),
-
-          dosage:
-            dosage.trim(),
-
-          frequency,
-
-          scheduledTimes:
-            normalizedTimes,
-
-          pillsPerDose,
-
-          windowBeforeMinutes,
-
-          windowAfterMinutes,
-
-          lateAfterMinutes,
-
-          startDate:
-            startDate &&
-            startDate.trim()
-              ? startDate.trim()
-              : undefined,
-
-          endDate:
-            endDate &&
-            endDate.trim()
-              ? endDate.trim()
-              : null,
-
-          notes:
-            typeof notes ===
-              'string'
-              ? notes
-                  .trim()
-                  .slice(
-                    0,
-                    500
-                  )
-              : '',
-
-          updatedAt:
-            new Date(),
-        },
-        {
-          new: true,
-          runValidators: true,
-        }
       );
 
     if (!medicine) {
       console.warn(
-        `[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`
+        `[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`,
       );
 
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Medicine not found',
+          error: 'Medicine not found',
         },
-        {
-          status: 404,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 404 },
       );
     }
 
-    try {
-      const today =
-        getMedicationDateKey();
-
-      /*
-       * Only unresolved logs for today are regenerated.
-       * Previous days and finalized records are preserved.
-       */
-      await MedicationLog.deleteMany({
-        userId:
-          user.userId,
-
-        medicineId:
-          id,
-
-        scheduledDate:
-          today,
-
-        status: {
-          $in: [
-            'pending',
-            'reminder',
-            'dispensed',
-          ],
-        },
-      });
-
-      const isActiveToday =
-        medicine.startDate <=
-          today &&
-        (
-          !medicine.endDate ||
-          medicine.endDate >=
-            today
-        );
-
-      if (isActiveToday) {
-        for (
-          const time of
-          normalizedTimes
-        ) {
-          try {
-            await MedicationLog.updateOne(
-              {
-                userId:
-                  user.userId,
-
-                medicineId:
-                  id,
-
-                scheduledDate:
-                  today,
-
-                scheduledTime:
-                  time,
-
-                countsTowardAdherence: {
-                  $ne: false,
-                },
-              },
-              {
-                $setOnInsert: {
-                  userId:
-                    user.userId,
-
-                  medicineId:
-                    id,
-
-                  medicineName:
-                    medicine.name,
-
-                  dosage:
-                    medicine.dosage,
-
-                  scheduledDate:
-                    today,
-
-                  scheduledTime:
-                    time,
-
-                  status:
-                    'pending',
-
-                  source:
-                    'auto',
-
-                  eventType:
-                    'SCHEDULED',
-
-                  expectedChamberId:
-                    null,
-
-                  expectedChamberIds:
-                    [],
-
-                  windowBeforeMinutes:
-                    medicine
-                      .windowBeforeMinutes,
-
-                  windowAfterMinutes:
-                    medicine
-                      .windowAfterMinutes,
-
-                  lateAfterMinutes:
-                    medicine
-                      .lateAfterMinutes,
-
-                  countsTowardAdherence:
-                    true,
-                },
-              },
-              {
-                upsert: true,
-              }
-            );
-          } catch (
-            upsertError
-          ) {
-            /*
-             * Code 11000 = duplicate key on the unique
-             * (userId, medicineId, scheduledDate,
-             * scheduledTime) index. This means a concurrent
-             * ensureMedicationLogsForDate() call (triggered
-             * by a dashboard/plan fetch happening at the
-             * same moment as this save) already created the
-             * exact same log first. The correct single log
-             * already exists - this is the race being
-             * guarded against, not a real failure.
-             */
-            const isDuplicateKeyError =
-              typeof upsertError ===
-                'object' &&
-              upsertError !== null &&
-              'code' in upsertError &&
-              (upsertError as { code?: number }).code ===
-                11000;
-
-            if (!isDuplicateKeyError) {
-              throw upsertError;
-            }
-          }
-        }
-      }
-    } catch (logError) {
-      /*
-       * The medicine update is already saved. Log refresh
-       * failure is recorded without corrupting old history.
-       */
-      console.error(
-        '[PUT /api/medicines/[id]] Error updating medication logs:',
-        logError
-      );
-    }
-
-    return NextResponse.json<ApiResponse>(
-      {
-        success: true,
-        data: medicine,
-        message:
-          'Medicine updated successfully',
-      },
-      {
-        status: 200,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
-    );
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: medicine,
+      message:
+        'Medicine updated successfully',
+    });
   } catch (error) {
     console.error(
       '[PUT /api/medicines/[id]] Unhandled error:',
-      error
+      error,
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error:
-          'Internal server error',
+        error: 'Internal server error',
       },
-      {
-        status: 500,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
+      { status: 500 },
     );
   }
 }
@@ -1026,58 +636,31 @@ export async function DELETE(
   {
     params,
   }: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
+    params: Promise<{ id: string }>;
+  },
 ) {
   try {
-    const user =
-      await getAuthUser(
-        request
-      );
+    const user = await getAuthUser(request);
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Unauthorized',
+          error: 'Unauthorized',
         },
-        {
-          status: 401,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 401 },
       );
     }
 
-    const {
-      id,
-    } = await params;
+    const { id } = await params;
 
-    if (
-      !mongoose.isValidObjectId(
-        id
-      )
-    ) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Invalid medicine ID',
+          error: 'Invalid medicine ID',
         },
-        {
-          status: 400,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 400 },
       );
     }
 
@@ -1090,36 +673,22 @@ export async function DELETE(
       await Medicine.findOneAndUpdate(
         {
           _id: id,
-          userId:
-            user.userId,
+          userId: user.userId,
         },
         {
-          isActive:
-            false,
-
-          updatedAt:
-            new Date(),
+          isActive: false,
+          updatedAt: new Date(),
         },
-        {
-          new: true,
-        }
+        { new: true },
       );
 
     if (!medicine) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Medicine not found',
+          error: 'Medicine not found',
         },
-        {
-          status: 404,
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-        }
+        { status: 404 },
       );
     }
 
@@ -1131,15 +700,11 @@ export async function DELETE(
      * Historical and finalized adherence records remain.
      */
     await MedicationLog.deleteMany({
-      userId:
-        user.userId,
-
-      medicineId:
-        medicine._id,
+      userId: user.userId,
+      medicineId: medicine._id,
 
       scheduledDate: {
-        $gte:
-          todayString,
+        $gte: todayString,
       },
 
       status: {
@@ -1150,42 +715,23 @@ export async function DELETE(
       },
     });
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success: true,
-
-        message:
-          'Medicine deleted successfully',
-      },
-      {
-        status: 200,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
-    );
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message:
+        'Medicine deleted successfully',
+    });
   } catch (error) {
     console.error(
       '[DELETE /api/medicines/[id]] Error:',
-      error
+      error,
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error:
-          'Internal server error',
+        error: 'Internal server error',
       },
-      {
-        status: 500,
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-      }
+      { status: 500 },
     );
   }
 }
