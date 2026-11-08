@@ -2,42 +2,39 @@ import mongoose, {
   Document,
   Model,
   Schema,
-} from "mongoose";
+} from 'mongoose';
 
 export type AlertEventType =
-  | "PREDICTED_ADHERENCE_RISK"
-  | "MEDICATION_LATE"
-  | "MEDICATION_MISSED"
-  | "MEDICATION_VERIFIED"
-  | "MEDICATION_EVENT_WARNING"
-  | "CRITICAL_MEDICATION_EVENT"
-  | "POSSIBLE_EXCESS_INTAKE";
+  | 'PREDICTED_ADHERENCE_RISK'
+  | 'MEDICATION_LATE'
+  | 'MEDICATION_MISSED'
+  | 'MEDICATION_VERIFIED'
+  | 'MEDICATION_EVENT_WARNING'
+  | 'CRITICAL_MEDICATION_EVENT'
+  | 'POSSIBLE_EXCESS_INTAKE';
 
 export type AlertSeverity =
-  | "INFO"
-  | "NOTICE"
-  | "WARNING"
-  | "CRITICAL";
+  | 'INFO'
+  | 'NOTICE'
+  | 'WARNING'
+  | 'CRITICAL';
 
 export type AlertStatus =
-  | "UNREAD"
-  | "READ"
-  | "ACKNOWLEDGED";
+  | 'UNREAD'
+  | 'READ'
+  | 'ACKNOWLEDGED';
 
 export type DeliveryStatus =
-  | "NOT_REQUESTED"
-  | "PENDING"
-  | "QUEUED"
-  | "SENT"
-  | "SKIPPED"
-  | "FAILED";
+  | 'NOT_REQUESTED'
+  | 'PENDING'
+  | 'QUEUED'
+  | 'SENT'
+  | 'SKIPPED'
+  | 'FAILED';
 
 export interface IAlertDocument
-  extends Document<
-    mongoose.Types.ObjectId
-  > {
-  patientId:
-    mongoose.Types.ObjectId;
+  extends Document<mongoose.Types.ObjectId> {
+  patientId: mongoose.Types.ObjectId;
 
   monitorId?:
     | mongoose.Types.ObjectId
@@ -57,7 +54,11 @@ export interface IAlertDocument
   title: string;
   message: string;
   status: AlertStatus;
+
   isRead: boolean;
+  popupShown: boolean;
+  popupShownAt?: Date | null;
+
   occurredAt: Date;
   readAt?: Date | null;
   acknowledgedAt?: Date | null;
@@ -69,21 +70,13 @@ export interface IAlertDocument
   };
 
   delivery: {
-    pushStatus:
-      DeliveryStatus;
-
-    smsStatus:
-      DeliveryStatus;
-
+    pushStatus: DeliveryStatus;
+    smsStatus: DeliveryStatus;
     pushError?: string;
     smsError?: string;
   };
 
-  metadata?:
-    Record<
-      string,
-      unknown
-    >;
+  metadata?: Record<string, unknown>;
 
   createdAt: Date;
   updatedAt: Date;
@@ -93,327 +86,217 @@ const AlertSchema =
   new Schema<IAlertDocument>(
     {
       patientId: {
-        type:
-          Schema.Types
-            .ObjectId,
-
-        ref:
-          "User",
-
-        required:
-          true,
-
-        index:
-          true,
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true,
       },
 
       monitorId: {
-        type:
-          Schema.Types
-            .ObjectId,
-
-        ref:
-          "User",
-
-        default:
-          null,
-
-        index:
-          true,
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+        index: true,
       },
 
       medicationId: {
-        type:
-          Schema.Types
-            .ObjectId,
-
-        ref:
-          "Medicine",
-
-        default:
-          null,
+        type: Schema.Types.ObjectId,
+        ref: 'Medicine',
+        default: null,
       },
 
       medicationLogId: {
-        type:
-          Schema.Types
-            .ObjectId,
-
-        ref:
-          "MedicationLog",
-
-        default:
-          null,
+        type: Schema.Types.ObjectId,
+        ref: 'MedicationLog',
+        default: null,
       },
 
       eventKey: {
-        type:
-          String,
-
-        required:
-          true,
-
-        trim:
-          true,
+        type: String,
+        required: true,
+        trim: true,
       },
 
       eventType: {
-        type:
-          String,
-
+        type: String,
         enum: [
-          "PREDICTED_ADHERENCE_RISK",
-          "MEDICATION_LATE",
-          "MEDICATION_MISSED",
-          "MEDICATION_VERIFIED",
-          "MEDICATION_EVENT_WARNING",
-          "CRITICAL_MEDICATION_EVENT",
-          "POSSIBLE_EXCESS_INTAKE",
+          'PREDICTED_ADHERENCE_RISK',
+          'MEDICATION_LATE',
+          'MEDICATION_MISSED',
+          'MEDICATION_VERIFIED',
+          'MEDICATION_EVENT_WARNING',
+          'CRITICAL_MEDICATION_EVENT',
+          'POSSIBLE_EXCESS_INTAKE',
         ],
-
-        required:
-          true,
-
-        index:
-          true,
+        required: true,
+        index: true,
       },
 
       severity: {
-        type:
-          String,
-
+        type: String,
         enum: [
-          "INFO",
-          "NOTICE",
-          "WARNING",
-          "CRITICAL",
+          'INFO',
+          'NOTICE',
+          'WARNING',
+          'CRITICAL',
         ],
-
-        required:
-          true,
-
-        index:
-          true,
+        required: true,
+        index: true,
       },
 
       title: {
-        type:
-          String,
-
-        required:
-          true,
-
-        trim:
-          true,
-
-        maxlength:
-          160,
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 160,
       },
 
       message: {
-        type:
-          String,
-
-        required:
-          true,
-
-        trim:
-          true,
-
-        maxlength:
-          600,
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 600,
       },
 
       status: {
-        type:
-          String,
-
+        type: String,
         enum: [
-          "UNREAD",
-          "READ",
-          "ACKNOWLEDGED",
+          'UNREAD',
+          'READ',
+          'ACKNOWLEDGED',
         ],
-
-        default:
-          "UNREAD",
-
-        index:
-          true,
+        default: 'UNREAD',
+        index: true,
       },
 
       isRead: {
-        type:
-          Boolean,
+        type: Boolean,
+        default: false,
+        index: true,
+      },
 
-        default:
-          false,
+      /*
+       * Popup display is independent from reading.
+       * These defaults are stored on new alerts.
+       */
+      popupShown: {
+        type: Boolean,
+        default: false,
+      },
 
-        index:
-          true,
+      popupShownAt: {
+        type: Date,
+        default: null,
       },
 
       occurredAt: {
-        type:
-          Date,
-
-        required:
-          true,
-
-        default:
-          Date.now,
-
-        index:
-          true,
+        type: Date,
+        required: true,
+        default: Date.now,
+        index: true,
       },
 
       readAt: {
-        type:
-          Date,
-
-        default:
-          null,
+        type: Date,
+        default: null,
       },
 
       acknowledgedAt: {
-        type:
-          Date,
-
-        default:
-          null,
+        type: Date,
+        default: null,
       },
 
       channels: {
         inApp: {
-          type:
-            Boolean,
-
-          default:
-            true,
+          type: Boolean,
+          default: true,
         },
 
         push: {
-          type:
-            Boolean,
-
-          default:
-            false,
+          type: Boolean,
+          default: false,
         },
 
         sms: {
-          type:
-            Boolean,
-
-          default:
-            false,
+          type: Boolean,
+          default: false,
         },
       },
 
       delivery: {
         pushStatus: {
-          type:
-            String,
-
+          type: String,
           enum: [
-            "NOT_REQUESTED",
-            "PENDING",
-            "QUEUED",
-            "SENT",
-            "SKIPPED",
-            "FAILED",
+            'NOT_REQUESTED',
+            'PENDING',
+            'QUEUED',
+            'SENT',
+            'SKIPPED',
+            'FAILED',
           ],
-
-          default:
-            "NOT_REQUESTED",
+          default: 'NOT_REQUESTED',
         },
 
         smsStatus: {
-          type:
-            String,
-
+          type: String,
           enum: [
-            "NOT_REQUESTED",
-            "PENDING",
-            "QUEUED",
-            "SENT",
-            "SKIPPED",
-            "FAILED",
+            'NOT_REQUESTED',
+            'PENDING',
+            'QUEUED',
+            'SENT',
+            'SKIPPED',
+            'FAILED',
           ],
-
-          default:
-            "NOT_REQUESTED",
+          default: 'NOT_REQUESTED',
         },
 
         pushError: {
-          type:
-            String,
-
-          default:
-            "",
+          type: String,
+          default: '',
         },
 
         smsError: {
-          type:
-            String,
-
-          default:
-            "",
+          type: String,
+          default: '',
         },
       },
 
       metadata: {
-        type:
-          Schema.Types
-            .Mixed,
-
-        default:
-          {},
+        type: Schema.Types.Mixed,
+        default: {},
       },
     },
     {
-      timestamps:
-        true,
-    }
+      timestamps: true,
+    },
   );
 
 AlertSchema.index({
-  monitorId:
-    1,
-
-  createdAt:
-    -1,
+  monitorId: 1,
+  createdAt: -1,
 });
 
 AlertSchema.index({
-  monitorId:
-    1,
-
-  isRead:
-    1,
-
-  createdAt:
-    -1,
+  monitorId: 1,
+  isRead: 1,
+  createdAt: -1,
 });
 
 AlertSchema.index(
   {
-    eventKey:
-      1,
-
-    monitorId:
-      1,
+    eventKey: 1,
+    monitorId: 1,
   },
   {
-    unique:
-      true,
-  }
+    unique: true,
+  },
 );
 
-const Alert:
-  Model<IAlertDocument> =
+const Alert: Model<IAlertDocument> =
   mongoose.models.Alert ||
   mongoose.model<IAlertDocument>(
-    "Alert",
-    AlertSchema
+    'Alert',
+    AlertSchema,
   );
 
 export default Alert;

@@ -59,6 +59,10 @@ interface PopulatedAlert {
   message: string;
   status: AlertData['status'];
   isRead: boolean;
+
+  popupShown?: boolean;
+  popupShownAt?: Date | null;
+
   occurredAt: Date;
   readAt?: Date | null;
   acknowledgedAt?: Date | null;
@@ -78,8 +82,8 @@ function isPopulatedMedicationLog(
 ): value is PopulatedMedicationLogReference {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      '_id' in value,
+    typeof value === 'object' &&
+    '_id' in value,
   );
 }
 
@@ -92,16 +96,20 @@ function serializeAnnotations(
         ANNOTATION_TYPES.has(
           annotation.type as AlertAnnotationType,
         ) &&
-        (annotation.authorRole === 'patient' ||
-          annotation.authorRole === 'family'),
+        (
+          annotation.authorRole === 'patient' ||
+          annotation.authorRole === 'family'
+        ),
     )
     .map((annotation) => ({
-      _id: annotation._id?.toString() ?? '',
+      _id:
+        annotation._id?.toString() ?? '',
 
       type:
         annotation.type as AlertAnnotationType,
 
-      text: String(annotation.text ?? ''),
+      text:
+        String(annotation.text ?? ''),
 
       authorRole:
         annotation.authorRole as
@@ -112,13 +120,16 @@ function serializeAnnotations(
         String(
           annotation.authorName ?? '',
         ).trim() ||
-        (annotation.authorRole === 'patient'
-          ? 'Patient'
-          : 'Family member'),
+        (
+          annotation.authorRole === 'patient'
+            ? 'Patient'
+            : 'Family member'
+        ),
 
-      createdAt: new Date(
-        annotation.createdAt ?? Date.now(),
-      ).toISOString(),
+      createdAt:
+        new Date(
+          annotation.createdAt ?? Date.now(),
+        ).toISOString(),
     }))
     .sort(
       (first, second) =>
@@ -203,6 +214,22 @@ export function serializeAlert(
 
     isRead:
       alert.isRead,
+
+    /*
+     * Legacy documents have no reliable popup history.
+     * Keep them in the bell without replaying old popups.
+     *
+     * Only an explicitly stored false is eligible.
+     */
+    popupShown:
+      alert.popupShown !== false,
+
+    popupShownAt:
+      alert.popupShownAt
+        ? new Date(
+            alert.popupShownAt,
+          ).toISOString()
+        : null,
 
     occurredAt:
       new Date(

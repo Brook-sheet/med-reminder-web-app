@@ -14,9 +14,7 @@ import type {
   ApiResponse,
 } from '@/lib/interfaces/data/Api';
 
-import {
-  connectDB,
-} from '@/lib/mongodb';
+import { connectDB } from '@/lib/mongodb';
 
 import {
   getApprovedPatientIdsForMonitor,
@@ -31,84 +29,87 @@ import Medicine from '@/models/Medicine';
 import MedicationLog from '@/models/MedicationLog';
 import User from '@/models/User';
 
-export const dynamic =
-  'force-dynamic';
+export const dynamic = 'force-dynamic';
 
-type AlertRouteContext = {
+type Context = {
   params: Promise<{
     alertId: string;
   }>;
 };
 
-async function authorizeFamily(
-  request: NextRequest
+const population = [
+  {
+    path: 'patientId',
+    model: User,
+    select:
+      'firstName lastName patientId',
+  },
+  {
+    path: 'medicationId',
+    model: Medicine,
+    select: 'name dosage',
+  },
+  {
+    path: 'medicationLogId',
+    model: MedicationLog,
+    select: 'annotations',
+  },
+];
+
+function failure(
+  error: string,
+  status: number,
+) {
+  return NextResponse.json<ApiResponse>(
+    {
+      success: false,
+      error,
+    },
+    { status },
+  );
+}
+
+async function authorize(
+  request: NextRequest,
 ) {
   const token =
-    getTokenFromRequest(
-      request
-    );
+    getTokenFromRequest(request);
 
-  const auth =
-    token
-      ? await verifyToken(
-          token
-        )
-      : null;
+  const auth = token
+    ? await verifyToken(token)
+    : null;
 
-  return auth?.role ===
-    'family'
+  return auth?.role === 'family'
     ? auth
     : null;
 }
 
 export async function GET(
   request: NextRequest,
-  context: AlertRouteContext
+  context: Context,
 ) {
   try {
     const auth =
-      await authorizeFamily(
-        request
-      );
+      await authorize(request);
 
     if (!auth) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Access denied.',
-        },
-        {
-          status:
-            403,
-        }
+      return failure(
+        'Access denied.',
+        403,
       );
     }
 
-    const {
-      alertId,
-    } =
+    const { alertId } =
       await context.params;
 
     if (
       !mongoose.isValidObjectId(
-        alertId
+        alertId,
       )
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Invalid alert ID.',
-        },
-        {
-          status:
-            400,
-        }
+      return failure(
+        'Invalid alert ID.',
+        400,
       );
     }
 
@@ -116,182 +117,89 @@ export async function GET(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId
+        auth.userId,
       );
 
     const alert =
-      await Alert.findOne(
-        {
-          _id:
-            alertId,
+      await Alert.findOne({
+        _id: alertId,
+        monitorId: auth.userId,
 
-          monitorId:
-            auth.userId,
-
-          patientId: {
-            $in:
-              patientIds,
-          },
-        }
-      )
-        .populate({
-          path:
-            'patientId',
-
-          model:
-            User,
-
-          select:
-            'firstName lastName patientId',
-        })
-        .populate({
-          path:
-            'medicationId',
-
-          model:
-            Medicine,
-
-          select:
-            'name dosage',
-        })
-        .populate({
-          path:
-            'medicationLogId',
-
-          model:
-            MedicationLog,
-
-          select:
-            'annotations',
-        })
+        patientId: {
+          $in: patientIds,
+        },
+      })
+        .populate(population)
         .lean();
 
     if (!alert) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Alert not found.',
-        },
-        {
-          status:
-            404,
-        }
+      return failure(
+        'Alert not found.',
+        404,
       );
     }
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
-      data:
-        serializeAlert(
-          alert
-        ),
+      success: true,
+      data: serializeAlert(alert),
     });
   } catch (error) {
     console.error(
       '[GET /api/alerts/[alertId]]',
-      error
+      error,
     );
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success:
-          false,
-
-        error:
-          'Internal server error',
-      },
-      {
-        status:
-          500,
-      }
+    return failure(
+      'Internal server error',
+      500,
     );
   }
 }
 
 export async function PATCH(
   request: NextRequest,
-  context: AlertRouteContext
+  context: Context,
 ) {
   try {
     const auth =
-      await authorizeFamily(
-        request
-      );
+      await authorize(request);
 
     if (!auth) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Access denied.',
-        },
-        {
-          status:
-            403,
-        }
+      return failure(
+        'Access denied.',
+        403,
       );
     }
 
-    const {
-      alertId,
-    } =
+    const { alertId } =
       await context.params;
 
     if (
       !mongoose.isValidObjectId(
-        alertId
+        alertId,
       )
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Invalid alert ID.',
-        },
-        {
-          status:
-            400,
-        }
+      return failure(
+        'Invalid alert ID.',
+        400,
       );
     }
 
     const body =
-      (await request.json()) as {
-        action?:
-          | 'read'
-          | 'acknowledge';
-      };
+      await request
+        .json()
+        .catch(() => ({}));
 
     if (
-      !body.action ||
       ![
         'read',
         'acknowledge',
-      ].includes(
-        body.action
-      )
+        'claimPopup',
+      ].includes(body.action)
     ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'action must be read or acknowledge.',
-        },
-        {
-          status:
-            400,
-        }
+      return failure(
+        'action must be read, acknowledge, or claimPopup.',
+        400,
       );
     }
 
@@ -299,142 +207,114 @@ export async function PATCH(
 
     const patientIds =
       await getApprovedPatientIdsForMonitor(
-        auth.userId
+        auth.userId,
       );
 
-    const now =
-      new Date();
+    const filter = {
+      _id: alertId,
+      monitorId: auth.userId,
+
+      patientId: {
+        $in: patientIds,
+      },
+    };
+
+    const now = new Date();
+
+    if (
+      body.action === 'claimPopup'
+    ) {
+      /*
+       * One atomic update chooses one winner across
+       * sessions, tabs, devices, and repeated events.
+       *
+       * Popup display never changes isRead.
+       */
+      const alert =
+        await Alert.findOneAndUpdate(
+          {
+            ...filter,
+            popupShown: false,
+            isRead: false,
+            status: 'UNREAD',
+
+            'channels.inApp': {
+              $ne: false,
+            },
+          },
+          {
+            $set: {
+              popupShown: true,
+              popupShownAt: now,
+            },
+          },
+          { new: true },
+        )
+          .populate(population)
+          .lean();
+
+      return NextResponse.json<ApiResponse>({
+        success: true,
+
+        data: {
+          claimed: Boolean(alert),
+
+          alert:
+            alert
+              ? serializeAlert(alert)
+              : null,
+        },
+      });
+    }
 
     /*
-     * Acknowledgment changes only the alert state.
-     * It does not modify the medication log and
-     * does not send another SMS.
+     * Reading and acknowledging keep their existing
+     * behavior. They do not modify medication logs
+     * or send another SMS.
      */
     const update =
-      body.action ===
-      'acknowledge'
+      body.action === 'acknowledge'
         ? {
-            status:
-              'ACKNOWLEDGED',
-
-            isRead:
-              true,
-
-            readAt:
-              now,
-
-            acknowledgedAt:
-              now,
+            status: 'ACKNOWLEDGED',
+            isRead: true,
+            readAt: now,
+            acknowledgedAt: now,
           }
         : {
-            status:
-              'READ',
-
-            isRead:
-              true,
-
-            readAt:
-              now,
+            status: 'READ',
+            isRead: true,
+            readAt: now,
           };
 
     const alert =
       await Alert.findOneAndUpdate(
-        {
-          _id:
-            alertId,
-
-          monitorId:
-            auth.userId,
-
-          patientId: {
-            $in:
-              patientIds,
-          },
-        },
-        {
-          $set:
-            update,
-        },
-        {
-          new:
-            true,
-        }
+        filter,
+        { $set: update },
+        { new: true },
       )
-        .populate({
-          path:
-            'patientId',
-
-          model:
-            User,
-
-          select:
-            'firstName lastName patientId',
-        })
-        .populate({
-          path:
-            'medicationId',
-
-          model:
-            Medicine,
-
-          select:
-            'name dosage',
-        })
-        .populate({
-          path:
-            'medicationLogId',
-
-          model:
-            MedicationLog,
-
-          select:
-            'annotations',
-        })
+        .populate(population)
         .lean();
 
     if (!alert) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success:
-            false,
-
-          error:
-            'Alert not found.',
-        },
-        {
-          status:
-            404,
-        }
+      return failure(
+        'Alert not found.',
+        404,
       );
     }
 
     return NextResponse.json<ApiResponse>({
-      success:
-        true,
-
-      data:
-        serializeAlert(
-          alert
-        ),
+      success: true,
+      data: serializeAlert(alert),
     });
   } catch (error) {
     console.error(
       '[PATCH /api/alerts/[alertId]]',
-      error
+      error,
     );
 
-    return NextResponse.json<ApiResponse>(
-      {
-        success:
-          false,
-
-        error:
-          'Internal server error',
-      },
-      {
-        status:
-          500,
-      }
+    return failure(
+      'Internal server error',
+      500,
     );
   }
 }

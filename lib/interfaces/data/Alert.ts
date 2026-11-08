@@ -49,11 +49,9 @@ export interface AlertData {
 
   medicationLogId: string | null;
 
-  /**
-   * These annotations are loaded dynamically from the
-   * medication log associated with this alert.
-   *
-   * Adding an annotation does not create or resend an alert.
+  /*
+   * Loaded dynamically from the related medication log.
+   * Adding an annotation does not resend the alert.
    */
   annotations: AlertAnnotationData[];
 
@@ -62,7 +60,11 @@ export interface AlertData {
   title: string;
   message: string;
   status: AlertStatus;
+
   isRead: boolean;
+  popupShown: boolean;
+  popupShownAt: string | null;
+
   occurredAt: string;
   readAt: string | null;
   acknowledgedAt: string | null;
