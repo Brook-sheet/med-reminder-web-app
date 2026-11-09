@@ -1,16 +1,20 @@
-// models/Medicine.ts
+
 import mongoose, {
   Schema,
   Document,
   Model,
-} from 'mongoose';
+} from "mongoose";
 
 import {
   getMedicationDateKey,
-} from '@/lib/medicationTime';
+} from "@/lib/medicationTime";
 
-export interface IMedicineDocument
-  extends Document {
+export interface IMedicineChamberAssignment {
+  scheduledTime: string;
+  chamberIds: number[];
+}
+
+export interface IMedicineDocument extends Document {
   userId: mongoose.Types.ObjectId;
   name: string;
   dosage: string;
@@ -19,8 +23,23 @@ export interface IMedicineDocument
   pillsPerDose: number;
 
   /**
-   * Legacy data only.
-   * Daily Rx Box plans no longer use this field.
+   * Manual assignments for individual scheduled doses.
+   *
+   * Example:
+   * [
+   *   { scheduledTime: "8:00 AM", chamberIds: [1] },
+   *   { scheduledTime: "8:00 PM", chamberIds: [3] }
+   * ]
+   *
+   * Multiple tablets may be placed in one chamber.
+   * A chamber must not be assigned to different
+   * dispensing times in the same daily loading cycle.
+   */
+  chamberAssignments: IMedicineChamberAssignment[];
+
+  /**
+   * Legacy chamber assignment.
+   * Preserved for compatibility with older records.
    */
   chamberId?: number | null;
 
@@ -35,15 +54,52 @@ export interface IMedicineDocument
   updatedAt: Date;
 }
 
+const ChamberAssignmentSchema =
+  new Schema<IMedicineChamberAssignment>(
+    {
+      scheduledTime: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+
+      chamberIds: {
+        type: [Number],
+        required: true,
+        default: [],
+
+        validate: {
+          validator: (ids: number[]) =>
+            Array.isArray(ids) &&
+            ids.length > 0 &&
+            ids.length <= 4 &&
+            new Set(ids).size === ids.length &&
+            ids.every(
+              (id) =>
+                Number.isInteger(id) &&
+                id >= 1 &&
+                id <= 4
+            ),
+
+          message:
+            "Each scheduled dose must have unique chamber IDs from 1 to 4.",
+        },
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
 const MedicineSchema =
   new Schema<IMedicineDocument>(
     {
       userId: {
         type: Schema.Types.ObjectId,
-        ref: 'User',
+        ref: "User",
         required: [
           true,
-          'User ID is required',
+          "User ID is required",
         ],
         index: true,
       },
@@ -52,7 +108,7 @@ const MedicineSchema =
         type: String,
         required: [
           true,
-          'Medicine name is required',
+          "Medicine name is required",
         ],
         trim: true,
       },
@@ -61,7 +117,7 @@ const MedicineSchema =
         type: String,
         required: [
           true,
-          'Dosage is required',
+          "Dosage is required",
         ],
         trim: true,
       },
@@ -70,22 +126,25 @@ const MedicineSchema =
         type: String,
         required: [
           true,
-          'Frequency is required',
+          "Frequency is required",
         ],
-        default: 'Once daily',
+        default: "Once daily",
       },
 
       scheduledTimes: {
         type: [String],
         required: [
           true,
-          'At least one scheduled time is required',
+          "At least one scheduled time is required",
         ],
+
         validate: {
           validator: (times: string[]) =>
+            Array.isArray(times) &&
             times.length > 0,
+
           message:
-            'At least one scheduled time is required',
+            "At least one scheduled time is required",
         },
       },
 
@@ -96,7 +155,11 @@ const MedicineSchema =
         default: 1,
       },
 
-      // Kept only for compatibility with existing documents.
+      chamberAssignments: {
+        type: [ChamberAssignmentSchema],
+        default: [],
+      },
+
       chamberId: {
         type: Number,
         min: 1,
@@ -128,7 +191,7 @@ const MedicineSchema =
 
       notes: {
         type: String,
-        default: '',
+        default: "",
       },
 
       startDate: {
@@ -152,12 +215,11 @@ const MedicineSchema =
     }
   );
 
-const Medicine:
-  Model<IMedicineDocument> =
-    mongoose.models.Medicine ||
-    mongoose.model<IMedicineDocument>(
-      'Medicine',
-      MedicineSchema
-    );
+const Medicine: Model<IMedicineDocument> =
+  mongoose.models.Medicine ||
+  mongoose.model<IMedicineDocument>(
+    "Medicine",
+    MedicineSchema
+  );
 
 export default Medicine;

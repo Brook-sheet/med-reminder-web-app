@@ -1,12 +1,24 @@
+
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import TimePicker from "@/components/ui/TimePicker";
-import type { Medicine } from "@/lib/interfaces/data/Medicine";
+
+import type {
+  Medicine,
+  MedicineChamberAssignment,
+} from "@/lib/interfaces/data/Medicine";
 
 interface MedicineModalProps {
   isOpen: boolean;
@@ -14,10 +26,20 @@ interface MedicineModalProps {
   onSave: (
     data: Omit<
       Medicine,
-      "_id" | "userId" | "createdAt" | "updatedAt" | "isActive"
+      | "_id"
+      | "userId"
+      | "createdAt"
+      | "updatedAt"
+      | "isActive"
     >
   ) => Promise<void>;
   initialData?: Medicine | null;
+}
+
+interface ScheduleRow {
+  id: string;
+  time: string;
+  chamberIds: number[];
 }
 
 const FREQUENCY_OPTIONS = [
@@ -31,46 +53,380 @@ const FREQUENCY_OPTIONS = [
   "As needed",
 ];
 
-const FIXED_SCHEDULE_COUNTS: Record<string, number> = {
+const FIXED_SCHEDULE_COUNTS: Record<
+  string,
+  number
+> = {
   "Once daily": 1,
   "Twice daily": 2,
   "Three times daily": 3,
 };
 
-const INTERVAL_SCHEDULE_HOURS: Record<string, number> = {
+const INTERVAL_SCHEDULE_HOURS: Record<
+  string,
+  number
+> = {
   "Every 4 hours": 4,
   "Every 6 hours": 6,
   "Every 8 hours": 8,
 };
 
-const DEFAULT_FIXED_TIMES: Record<number, string[]> = {
+const DEFAULT_FIXED_TIMES: Record<
+  number,
+  string[]
+> = {
   1: ["8:00 AM"],
   2: ["8:00 AM", "8:00 PM"],
-  3: ["8:00 AM", "2:00 PM", "8:00 PM"],
+  3: [
+    "8:00 AM",
+    "2:00 PM",
+    "8:00 PM",
+  ],
 };
 
-const getToday = () =>
-  new Date().toISOString().split("T")[0];
+const CHAMBERS = [1, 2, 3, 4];
 
-const MedicineModal: React.FC<MedicineModalProps> = ({
+function getToday(): string {
+  const parts = new Intl.DateTimeFormat(
+    "en-CA",
+    {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }
+  ).formatToParts(new Date());
+
+  const get = (type: string) =>
+    parts.find(
+      (part) => part.type === type
+    )?.value ?? "";
+
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function parseDosageValue(
+  raw: string
+): string {
+  return raw.replace(/\D/g, "");
+}
+
+function timeStringToMinutes(
+  value: string
+): number {
+  const match =
+    /^(1[0-2]|[1-9]):([0-5]\d)\s*(AM|PM)$/i.exec(
+      value.trim()
+    );
+
+  if (!match) {
+    return -1;
+  }
+
+  const hour12 = Number(match[1]);
+  const minute = Number(match[2]);
+  const ampm = match[3].toUpperCase();
+
+  let hour24 = hour12 % 12;
+
+  if (ampm === "PM") {
+    hour24 += 12;
+  }
+
+  return hour24 * 60 + minute;
+}
+
+function minutesToTimeString(
+  minutes: number
+): string {
+  const normalized =
+    ((minutes % 1440) + 1440) % 1440;
+
+  const hour24 =
+    Math.floor(normalized / 60);
+
+  const minute = normalized % 60;
+
+  const ampm =
+    hour24 >= 12 ? "PM" : "AM";
+
+  const hour12 =
+    hour24 % 12 === 0
+      ? 12
+      : hour24 % 12;
+
+  return `${hour12}:${String(
+    minute
+  ).padStart(2, "0")} ${ampm}`;
+}
+
+function getNextAvailableTime(
+  existing: string[]
+): string {
+  const used = new Set(
+    existing.map(timeStringToMinutes)
+  );
+
+  for (
+    let minutes = 8 * 60;
+    minutes < 1440;
+    minutes += 30
+  ) {
+    if (!used.has(minutes)) {
+      return minutesToTimeString(
+        minutes
+      );
+    }
+  }
+
+  for (
+    let minutes = 0;
+    minutes < 8 * 60;
+    minutes += 30
+  ) {
+    if (!used.has(minutes)) {
+      return minutesToTimeString(
+        minutes
+      );
+    }
+  }
+
+  return "8:00 AM";
+}
+
+function buildIntervalTimes(
+  startTime: string,
+  intervalHours: number
+): string[] {
+  const start =
+    timeStringToMinutes(startTime);
+
+  const base =
+    start >= 0 ? start : 480;
+
+  const count =
+    24 / intervalHours;
+
+  return Array.from(
+    { length: count },
+    (_, index) =>
+      minutesToTimeString(
+        base +
+          index *
+            intervalHours *
+            60
+      )
+  );
+}
+
+function createScheduleRow(
+  id: string,
+  time: string,
+  chamberIds: number[] = []
+): ScheduleRow {
+  return {
+    id,
+    time,
+    chamberIds: [...chamberIds],
+  };
+}
+
+function findAssignment(
+  assignments:
+    | MedicineChamberAssignment[]
+    | undefined,
+  time: string
+): number[] {
+  const minutes =
+    timeStringToMinutes(time);
+
+  const assignment =
+    assignments?.find(
+      (item) =>
+        timeStringToMinutes(
+          item.scheduledTime
+        ) === minutes
+    );
+
+  return assignment
+    ? [...assignment.chamberIds]
+    : [];
+}
+
+function getRowsForFrequency(
+  frequency: string,
+  previous: ScheduleRow[],
+  nextId: () => string
+): ScheduleRow[] {
+  const fixedCount =
+    FIXED_SCHEDULE_COUNTS[frequency];
+
+  if (fixedCount) {
+    const rows = previous
+      .slice(0, fixedCount)
+      .map((row) => ({
+        ...row,
+        chamberIds: [
+          ...row.chamberIds,
+        ],
+      }));
+
+    const defaults =
+      DEFAULT_FIXED_TIMES[fixedCount];
+
+    while (
+      rows.length < fixedCount
+    ) {
+      const index = rows.length;
+
+      const preferred =
+        defaults[index];
+
+      const used = rows.map(
+        (row) => row.time
+      );
+
+      const time =
+        preferred &&
+        !used.some(
+          (item) =>
+            timeStringToMinutes(item) ===
+            timeStringToMinutes(
+              preferred
+            )
+        )
+          ? preferred
+          : getNextAvailableTime(
+              used
+            );
+
+      rows.push(
+        createScheduleRow(
+          nextId(),
+          time
+        )
+      );
+    }
+
+    return rows;
+  }
+
+  const intervalHours =
+    INTERVAL_SCHEDULE_HOURS[
+      frequency
+    ];
+
+  if (intervalHours) {
+    const seed =
+      previous[0]?.time ??
+      "8:00 AM";
+
+    const times =
+      buildIntervalTimes(
+        seed,
+        intervalHours
+      );
+
+    return times.map(
+      (time, index) => {
+        const oldRow =
+          previous[index];
+
+        return createScheduleRow(
+          oldRow?.id ??
+            nextId(),
+          time,
+          oldRow?.chamberIds ??
+            []
+        );
+      }
+    );
+  }
+
+  if (previous.length > 0) {
+    return previous;
+  }
+
+  return [
+    createScheduleRow(
+      nextId(),
+      "8:00 AM"
+    ),
+  ];
+}
+
+const MedicineModal: React.FC<
+  MedicineModalProps
+> = ({
   isOpen,
   onClose,
   onSave,
   initialData,
 }) => {
-  const [name, setName] = useState("");
-  const [dosage, setDosage] = useState("");
-  const [frequency, setFrequency] = useState("Once daily");
-  const [scheduledTimes, setScheduledTimes] = useState<string[]>([
-    "8:00 AM",
+  const [name, setName] =
+    useState("");
+
+  const [dosage, setDosage] =
+    useState("");
+
+  const [
+    frequency,
+    setFrequency,
+  ] = useState(
+    "Once daily"
+  );
+
+  const [
+    scheduleRows,
+    setScheduleRows,
+  ] = useState<ScheduleRow[]>([
+    createScheduleRow(
+      "schedule-0",
+      "8:00 AM"
+    ),
   ]);
-  const [pillsPerDose, setPillsPerDose] = useState(1);
-  const [startDate, setStartDate] = useState(getToday());
-  const [endDate, setEndDate] = useState("");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [mounted, setMounted] = useState(false);
+
+  const [
+    pillsPerDose,
+    setPillsPerDose,
+  ] = useState(1);
+
+  const [
+    startDate,
+    setStartDate,
+  ] = useState(getToday());
+
+  const [
+    endDate,
+    setEndDate,
+  ] = useState("");
+
+  const [
+    notes,
+    setNotes,
+  ] = useState("");
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  const [
+    mounted,
+    setMounted,
+  ] = useState(false);
+
+  const [
+    nextRowNumber,
+    setNextRowNumber,
+  ] = useState(1);
+
+  const today = getToday();
 
   useEffect(() => {
     setMounted(true);
@@ -85,11 +441,15 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       return;
     }
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow =
+        previousOverflow;
     };
   }, [isOpen]);
 
@@ -98,201 +458,33 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       return;
     }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) {
+    const handleKeyDown = (
+      event: KeyboardEvent
+    ) => {
+      if (
+        event.key === "Escape" &&
+        !saving
+      ) {
         onClose();
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, onClose, saving]);
-
-  const today = getToday();
-
-  const parseDosageValue = (raw: string) =>
-    raw.replace(/\D/g, "");
-
-  const parseTime = (timeStr: string) => {
-    const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(
-      timeStr.trim()
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
     );
 
-    if (!match) {
-      return {
-        hour12: 8,
-        minute: 0,
-        ampm: "AM" as const,
-      };
-    }
-
-    const hour12 = Number(match[1]);
-    const minute = Number(match[2]);
-    const ampm = match[3].toUpperCase() as "AM" | "PM";
-
-    if (
-      hour12 < 1 ||
-      hour12 > 12 ||
-      minute < 0 ||
-      minute > 59
-    ) {
-      return {
-        hour12: 8,
-        minute: 0,
-        ampm: "AM" as const,
-      };
-    }
-
-    return {
-      hour12,
-      minute,
-      ampm,
-    };
-  };
-
-  const timeStringToMinutes = (timeStr: string) => {
-    const { hour12, minute, ampm } = parseTime(timeStr);
-
-    let hour24 = hour12 % 12;
-
-    if (ampm === "PM") {
-      hour24 += 12;
-    }
-
-    return hour24 * 60 + minute;
-  };
-
-  const minutesToTimeString = (minutes: number) => {
-    const normalized = ((minutes % 1440) + 1440) % 1440;
-    const hour24 = Math.floor(normalized / 60);
-    const minute = normalized % 60;
-    const ampm = hour24 >= 12 ? "PM" : "AM";
-    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-
-    return `${hour12}:${minute
-      .toString()
-      .padStart(2, "0")} ${ampm}`;
-  };
-
-  const normalizeTimes = (times: string[]) => {
-    const seen = new Set<number>();
-
-    return times
-      .map((time) => time.trim())
-      .filter((time) => time.length > 0)
-      .map((time) => ({
-        original: time,
-        minutes: timeStringToMinutes(time),
-      }))
-      .filter(({ minutes }) => Number.isFinite(minutes))
-      .filter(({ minutes }) => {
-        if (seen.has(minutes)) {
-          return false;
-        }
-
-        seen.add(minutes);
-        return true;
-      })
-      .sort((a, b) => a.minutes - b.minutes)
-      .map(({ minutes }) => minutesToTimeString(minutes));
-  };
-
-  const buildIntervalTimes = (
-    startTime: string,
-    intervalHours: number
-  ) => {
-    const baseMinutes = timeStringToMinutes(startTime);
-    const count = 24 / intervalHours;
-    const times: string[] = [];
-
-    for (let i = 0; i < count; i += 1) {
-      times.push(
-        minutesToTimeString(
-          baseMinutes + i * intervalHours * 60
-        )
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
       );
-    }
-
-    return times;
-  };
-
-  const getScheduledTimesForFrequency = (
-    selectedFrequency: string,
-    currentTimes: string[]
-  ) => {
-    const normalized = normalizeTimes(currentTimes);
-    const fixedCount = FIXED_SCHEDULE_COUNTS[selectedFrequency];
-
-    if (fixedCount) {
-      const result = normalized.slice(0, fixedCount);
-
-      while (result.length < fixedCount) {
-        const defaults = DEFAULT_FIXED_TIMES[fixedCount];
-        const nextDefault = defaults[result.length];
-
-        if (nextDefault) {
-          result.push(nextDefault);
-        } else {
-          result.push(getNextAvailableTime(result));
-        }
-      }
-
-      return result;
-    }
-
-    const intervalHours =
-      INTERVAL_SCHEDULE_HOURS[selectedFrequency];
-
-    if (intervalHours) {
-      const seed =
-        normalized.length > 0 ? normalized[0] : "8:00 AM";
-
-      return buildIntervalTimes(seed, intervalHours);
-    }
-
-    if (normalized.length > 0) {
-      return normalized;
-    }
-
-    return ["8:00 AM"];
-  };
-
-  const canAddTime = (selectedFrequency: string) =>
-    selectedFrequency === "As needed" ||
-    selectedFrequency === "Weekly";
-
-  const canRemoveTime = (selectedFrequency: string) =>
-    selectedFrequency === "As needed" ||
-    selectedFrequency === "Weekly";
-
-  const isIntervalFrequency = (selectedFrequency: string) =>
-    INTERVAL_SCHEDULE_HOURS[selectedFrequency] !== undefined;
-
-  const isFixedFrequency = (selectedFrequency: string) =>
-    FIXED_SCHEDULE_COUNTS[selectedFrequency] !== undefined;
-
-  const scheduleHelpText = (() => {
-    if (isFixedFrequency(frequency)) {
-      const count = FIXED_SCHEDULE_COUNTS[frequency];
-
-      return `Select ${count} time${
-        count === 1 ? "" : "s"
-      } for this schedule.`;
-    }
-
-    if (isIntervalFrequency(frequency)) {
-      return `Choose the first time and reminders will be generated every ${INTERVAL_SCHEDULE_HOURS[frequency]} hours.`;
-    }
-
-    if (frequency === "As needed") {
-      return "Add as many times as needed for this medicine.";
-    }
-
-    return "Choose one or more reminder times for this medicine.";
-  })();
+    };
+  }, [
+    isOpen,
+    onClose,
+    saving,
+  ]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -300,25 +492,81 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
     }
 
     if (initialData) {
-      setName(initialData.name ?? "");
-      setDosage(parseDosageValue(initialData.dosage ?? ""));
-      setFrequency(initialData.frequency ?? "Once daily");
-
-      setScheduledTimes(
-        initialData.scheduledTimes?.length > 0
-          ? initialData.scheduledTimes
-          : ["8:00 AM"]
+      setName(
+        initialData.name ?? ""
       );
 
-      setStartDate(initialData.startDate || today);
-      setEndDate(initialData.endDate || "");
-      setNotes(initialData.notes || "");
-      setPillsPerDose(initialData.pillsPerDose ?? 1);
+      setDosage(
+        parseDosageValue(
+          initialData.dosage ?? ""
+        )
+      );
+
+      setFrequency(
+        initialData.frequency ??
+          "Once daily"
+      );
+
+      const times =
+        initialData.scheduledTimes
+          ?.length
+          ? initialData.scheduledTimes
+          : ["8:00 AM"];
+
+      setScheduleRows(
+        times.map(
+          (time, index) =>
+            createScheduleRow(
+              `initial-${index}`,
+              time,
+              findAssignment(
+                initialData.chamberAssignments,
+                time
+              )
+            )
+        )
+      );
+
+      setNextRowNumber(
+        times.length
+      );
+
+      setStartDate(
+        initialData.startDate ||
+          today
+      );
+
+      setEndDate(
+        initialData.endDate ||
+          ""
+      );
+
+      setNotes(
+        initialData.notes ||
+          ""
+      );
+
+      setPillsPerDose(
+        initialData.pillsPerDose ??
+          1
+      );
     } else {
       setName("");
       setDosage("");
-      setFrequency("Once daily");
-      setScheduledTimes(["8:00 AM"]);
+
+      setFrequency(
+        "Once daily"
+      );
+
+      setScheduleRows([
+        createScheduleRow(
+          "new-0",
+          "8:00 AM"
+        ),
+      ]);
+
+      setNextRowNumber(1);
+
       setStartDate(today);
       setEndDate("");
       setNotes("");
@@ -327,191 +575,492 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
 
     setError("");
     setSaving(false);
-  }, [initialData, isOpen, today]);
+  }, [
+    initialData,
+    isOpen,
+    today,
+  ]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+  const isIntervalFrequency =
+    INTERVAL_SCHEDULE_HOURS[
+      frequency
+    ] !== undefined;
 
-    setScheduledTimes((previous) =>
-      getScheduledTimesForFrequency(frequency, previous)
+  const canAddTime =
+    frequency ===
+      "As needed" ||
+    frequency ===
+      "Weekly";
+
+  const scheduleHelpText =
+    FIXED_SCHEDULE_COUNTS[
+      frequency
+    ]
+      ? `Select ${
+          FIXED_SCHEDULE_COUNTS[
+            frequency
+          ]
+        } scheduled time(s).`
+      : isIntervalFrequency
+        ? `Choose the first time. The remaining times follow every ${
+            INTERVAL_SCHEDULE_HOURS[
+              frequency
+            ]
+          } hours.`
+        : "Choose one or more scheduled times.";
+
+  const changeFrequency = (
+    value: string
+  ) => {
+    setFrequency(value);
+
+    let counter =
+      nextRowNumber;
+
+    const generateId = () =>
+      `schedule-${counter++}`;
+
+    setScheduleRows(
+      (previous) =>
+        getRowsForFrequency(
+          value,
+          previous,
+          generateId
+        )
     );
-  }, [frequency, isOpen]);
 
-  const getNextAvailableTime = (existing: string[]) => {
-    const used = new Set(
-      existing.map((time) => timeStringToMinutes(time))
-    );
-
-    for (
-      let minutes = 8 * 60;
-      minutes < 24 * 60;
-      minutes += 30
-    ) {
-      if (!used.has(minutes)) {
-        return minutesToTimeString(minutes);
-      }
-    }
-
-    for (
-      let minutes = 0;
-      minutes < 8 * 60;
-      minutes += 30
-    ) {
-      if (!used.has(minutes)) {
-        return minutesToTimeString(minutes);
-      }
-    }
-
-    return "8:00 AM";
-  };
-
-  const addTime = () => {
-    setScheduledTimes((previous) =>
-      normalizeTimes([
-        ...previous,
-        getNextAvailableTime(previous),
-      ])
-    );
-  };
-
-  const removeTime = (indexToRemove: number) => {
-    setScheduledTimes((previous) =>
-      previous.filter((_, index) => index !== indexToRemove)
-    );
+    setNextRowNumber(counter);
+    setError("");
   };
 
   const updateTime = (
-    indexToUpdate: number,
+    rowId: string,
     value: string
   ) => {
-    if (
-      isIntervalFrequency(frequency) &&
-      indexToUpdate === 0
-    ) {
-      setScheduledTimes(
-        buildIntervalTimes(
-          value,
-          INTERVAL_SCHEDULE_HOURS[frequency]
-        )
-      );
+    setScheduleRows(
+      (previous) => {
+        if (
+          isIntervalFrequency &&
+          previous[0]?.id ===
+            rowId
+        ) {
+          const intervalHours =
+            INTERVAL_SCHEDULE_HOURS[
+              frequency
+            ];
+
+          const times =
+            buildIntervalTimes(
+              value,
+              intervalHours
+            );
+
+          return previous.map(
+            (row, index) => ({
+              ...row,
+              time:
+                times[index] ??
+                row.time,
+            })
+          );
+        }
+
+        return previous.map(
+          (row) =>
+            row.id === rowId
+              ? {
+                  ...row,
+                  time: value,
+                }
+              : row
+        );
+      }
+    );
+
+    /*
+     * Chamber IDs are intentionally
+     * preserved when the time changes.
+     */
+    setError("");
+  };
+
+  const addTime = () => {
+    if (!canAddTime) {
       return;
     }
 
-    setScheduledTimes((previous) => {
-      const updated = previous.map((time, index) =>
-        index === indexToUpdate ? value : time
-      );
+    const id =
+      `schedule-${nextRowNumber}`;
 
-      const nextTimes = normalizeTimes(updated);
+    setNextRowNumber(
+      (previous) =>
+        previous + 1
+    );
 
-      if (isFixedFrequency(frequency)) {
-        return getScheduledTimesForFrequency(
-          frequency,
-          nextTimes
+    setScheduleRows(
+      (previous) => [
+        ...previous,
+        createScheduleRow(
+          id,
+          getNextAvailableTime(
+            previous.map(
+              (row) => row.time
+            )
+          )
+        ),
+      ]
+    );
+  };
+
+  const removeTime = (
+    rowId: string
+  ) => {
+    setScheduleRows(
+      (previous) =>
+        previous.length > 1
+          ? previous.filter(
+              (row) =>
+                row.id !== rowId
+            )
+          : previous
+    );
+  };
+
+  const toggleChamber = (
+    rowId: string,
+    chamberId: number
+  ) => {
+    setScheduleRows(
+      (previous) =>
+        previous.map(
+          (row) => {
+            if (
+              row.id !== rowId
+            ) {
+              return row;
+            }
+
+            const selected =
+              row.chamberIds.includes(
+                chamberId
+              );
+
+            return {
+              ...row,
+              chamberIds: selected
+                ? row.chamberIds.filter(
+                    (id) =>
+                      id !== chamberId
+                  )
+                : [
+                    ...row.chamberIds,
+                    chamberId,
+                  ].sort(
+                    (a, b) =>
+                      a - b
+                  ),
+            };
+          }
+        )
+    );
+
+    setError("");
+  };
+
+  const getChamberConflict = (
+    rows: ScheduleRow[]
+  ): string | null => {
+    const chamberTimes =
+      new Map<number, number>();
+
+    for (const row of rows) {
+      const minutes =
+        timeStringToMinutes(
+          row.time
+        );
+
+      for (
+        const chamberId of
+        row.chamberIds
+      ) {
+        const existingTime =
+          chamberTimes.get(
+            chamberId
+          );
+
+        if (
+          existingTime !==
+            undefined &&
+          existingTime !==
+            minutes
+        ) {
+          return (
+            `Chamber ${chamberId} is selected ` +
+            "for different scheduled times. " +
+            "Choose another chamber."
+          );
+        }
+
+        chamberTimes.set(
+          chamberId,
+          minutes
         );
       }
+    }
 
-      return nextTimes;
-    });
+    return null;
   };
 
   const handleSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
+    event: React.FormEvent<
+      HTMLFormElement
+    >
   ) => {
     event.preventDefault();
     setError("");
 
-    const trimmedName = name.trim();
-    const trimmedDosage = dosage.trim();
+    const trimmedName =
+      name.trim();
+
+    const trimmedDosage =
+      dosage.trim();
 
     if (!trimmedName) {
-      setError("Medicine name is required.");
+      setError(
+        "Medicine name is required."
+      );
       return;
     }
 
     if (
       !trimmedDosage ||
-      !/^\d+$/.test(trimmedDosage) ||
-      Number(trimmedDosage) < 1
+      !/^\d+$/.test(
+        trimmedDosage
+      ) ||
+      Number(
+        trimmedDosage
+      ) < 1
     ) {
       setError(
-        "Dosage is required and must be a number greater than 0."
+        "Dosage must be a number greater than 0."
       );
       return;
     }
 
     if (!startDate) {
-      setError("Start date is required.");
-      return;
-    }
-
-    if (startDate < today) {
-      setError("Start date cannot be in the past.");
-      return;
-    }
-
-    if (endDate && endDate < startDate) {
-      setError("End date cannot be before start date.");
-      return;
-    }
-
-    const normalizedScheduledTimes =
-      normalizeTimes(scheduledTimes);
-
-    if (normalizedScheduledTimes.length === 0) {
-      setError("At least one scheduled time is required.");
-      return;
-    }
-
-    const requiredCount = FIXED_SCHEDULE_COUNTS[frequency];
-
-    if (
-      requiredCount &&
-      normalizedScheduledTimes.length !== requiredCount
-    ) {
       setError(
-        `This frequency requires exactly ${requiredCount} scheduled time${
-          requiredCount === 1 ? "" : "s"
-        }.`
+        "Start date is required."
       );
       return;
     }
 
     if (
-      !Number.isInteger(pillsPerDose) ||
+      !initialData &&
+      startDate < today
+    ) {
+      setError(
+        "Start date cannot be in the past."
+      );
+      return;
+    }
+
+    if (
+      endDate &&
+      endDate < startDate
+    ) {
+      setError(
+        "End date cannot be before start date."
+      );
+      return;
+    }
+
+    if (
+      !Number.isInteger(
+        pillsPerDose
+      ) ||
       pillsPerDose < 1 ||
       pillsPerDose > 4
     ) {
       setError(
-        "Pills per scheduled dose must be a whole number from 1 to 4."
+        "Pills per scheduled dose must be from 1 to 4."
       );
       return;
     }
+
+    if (
+      scheduleRows.length ===
+      0
+    ) {
+      setError(
+        "At least one scheduled time is required."
+      );
+      return;
+    }
+
+    const usedTimes =
+      new Set<number>();
+
+    for (
+      const row of
+      scheduleRows
+    ) {
+      const minutes =
+        timeStringToMinutes(
+          row.time
+        );
+
+      if (
+        minutes < 0
+      ) {
+        setError(
+          "Please enter valid scheduled times."
+        );
+        return;
+      }
+
+      if (
+        usedTimes.has(
+          minutes
+        )
+      ) {
+        setError(
+          "Duplicate scheduled times are not allowed."
+        );
+        return;
+      }
+
+      usedTimes.add(
+        minutes
+      );
+
+      if (
+        row.chamberIds.length ===
+        0
+      ) {
+        setError(
+          `Select at least one chamber for ${row.time}.`
+        );
+        return;
+      }
+    }
+
+    const requiredCount =
+      FIXED_SCHEDULE_COUNTS[
+        frequency
+      ];
+
+    if (
+      requiredCount &&
+      scheduleRows.length !==
+        requiredCount
+    ) {
+      setError(
+        `This frequency requires exactly ${requiredCount} scheduled times.`
+      );
+      return;
+    }
+
+    const conflict =
+      getChamberConflict(
+        scheduleRows
+      );
+
+    if (conflict) {
+      setError(
+        conflict
+      );
+      return;
+    }
+
+    const sortedRows = [
+      ...scheduleRows,
+    ].sort(
+      (a, b) =>
+        timeStringToMinutes(
+          a.time
+        ) -
+        timeStringToMinutes(
+          b.time
+        )
+    );
+
+    const scheduledTimes =
+      sortedRows.map(
+        (row) =>
+          minutesToTimeString(
+            timeStringToMinutes(
+              row.time
+            )
+          )
+      );
+
+    const chamberAssignments:
+      MedicineChamberAssignment[] =
+        sortedRows.map(
+          (row) => ({
+            scheduledTime:
+              minutesToTimeString(
+                timeStringToMinutes(
+                  row.time
+                )
+              ),
+
+            chamberIds: [
+              ...row.chamberIds,
+            ].sort(
+              (a, b) =>
+                a - b
+            ),
+          })
+        );
 
     setSaving(true);
 
     try {
       await onSave({
         name: trimmedName,
-        dosage: `${trimmedDosage}mg`,
+
+        dosage:
+          `${trimmedDosage}mg`,
+
         frequency,
-        scheduledTimes: normalizedScheduledTimes,
-        startDate,
-        endDate: endDate || undefined,
-        notes: notes.trim(),
+
+        scheduledTimes,
+
         pillsPerDose,
+
+        chamberAssignments,
+
+        startDate,
+
+        endDate:
+          endDate ||
+          undefined,
+
+        notes:
+          notes.trim(),
+
         windowBeforeMinutes:
-          initialData?.windowBeforeMinutes ?? 30,
+          initialData
+            ?.windowBeforeMinutes ??
+          30,
+
         windowAfterMinutes:
-          initialData?.windowAfterMinutes ?? 90,
+          initialData
+            ?.windowAfterMinutes ??
+          90,
+
         lateAfterMinutes:
-          initialData?.lateAfterMinutes ?? 30,
+          initialData
+            ?.lateAfterMinutes ??
+          30,
       });
-    } catch (caughtError: unknown) {
+    } catch (
+      caughtError: unknown
+    ) {
       setError(
-        caughtError instanceof Error
+        caughtError instanceof
+          Error
           ? caughtError.message
           : "Failed to save. Please try again."
       );
@@ -520,9 +1069,18 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
     }
   };
 
-  if (!isOpen || !mounted) {
+  if (
+    !isOpen ||
+    !mounted
+  ) {
     return null;
   }
+
+  const inputClass =
+    "h-11 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-base shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:h-9 sm:text-sm";
+
+  const labelClass =
+    "mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300";
 
   return createPortal(
     <div
@@ -547,14 +1105,16 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
             id="medicine-modal-title"
             className="min-w-0 truncate text-lg font-bold text-gray-900 dark:text-white sm:text-xl"
           >
-            {initialData ? "Edit Medicine" : "Add New Medicine"}
+            {initialData
+              ? "Edit Medicine"
+              : "Add New Medicine"}
           </h2>
 
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rx-press shrink-0 rounded-lg p-2 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-700"
+            className="rx-press shrink-0 rounded-lg p-2 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
             aria-label="Close medicine form"
           >
             <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -564,7 +1124,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         <form
           id="medicine-form"
           onSubmit={handleSubmit}
-          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-6 sm:space-y-5 sm:px-6 sm:py-6"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-6 sm:space-y-5 sm:px-6"
         >
           {error && (
             <div
@@ -578,31 +1138,39 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
           <div>
             <label
               htmlFor="medicine-name"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Medicine Name{" "}
-              <span className="text-red-500">*</span>
+              <span className="text-red-500">
+                *
+              </span>
             </label>
 
             <input
               id="medicine-name"
               type="text"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) =>
+                setName(
+                  event.target.value
+                )
+              }
               placeholder="e.g. Aspirin"
               disabled={saving}
               autoComplete="off"
-              className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={inputClass}
             />
           </div>
 
           <div>
             <label
               htmlFor="medicine-dosage"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Dosage{" "}
-              <span className="text-red-500">*</span>
+              <span className="text-red-500">
+                *
+              </span>
             </label>
 
             <div className="relative">
@@ -610,18 +1178,19 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
                 id="medicine-dosage"
                 type="number"
                 inputMode="numeric"
-                pattern="[0-9]*"
                 min="1"
                 step="1"
                 value={dosage}
                 onChange={(event) =>
                   setDosage(
-                    parseDosageValue(event.target.value)
+                    parseDosageValue(
+                      event.target.value
+                    )
                   )
                 }
                 placeholder="100"
                 disabled={saving}
-                className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 pr-14 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                className={`${inputClass} pr-14`}
               />
 
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 dark:text-gray-400">
@@ -633,10 +1202,12 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
           <div>
             <label
               htmlFor="medicine-start-date"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Start Date{" "}
-              <span className="text-red-500">*</span>
+              <span className="text-red-500">
+                *
+              </span>
             </label>
 
             <input
@@ -644,22 +1215,28 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="date"
               value={startDate}
               onChange={(event) =>
-                setStartDate(event.target.value)
+                setStartDate(
+                  event.target.value
+                )
               }
-              min={today}
+              min={
+                initialData
+                  ? undefined
+                  : today
+              }
               disabled={saving}
-              className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={inputClass}
             />
 
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Reminders will begin from this date.
+              Reminders begin from this date.
             </p>
           </div>
 
           <div>
             <label
               htmlFor="medicine-end-date"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               End Date{" "}
               <span className="text-xs font-normal text-gray-400">
@@ -672,22 +1249,24 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               type="date"
               value={endDate}
               onChange={(event) =>
-                setEndDate(event.target.value)
+                setEndDate(
+                  event.target.value
+                )
               }
-              min={startDate || today}
+              min={startDate}
               disabled={saving}
-              className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={inputClass}
             />
 
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Leave blank if the medicine has no end date.
+              Leave blank if there is no end date.
             </p>
           </div>
 
           <div>
             <label
               htmlFor="medicine-frequency"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Frequency
             </label>
@@ -696,26 +1275,35 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               id="medicine-frequency"
               value={frequency}
               onChange={(event) =>
-                setFrequency(event.target.value)
+                changeFrequency(
+                  event.target.value
+                )
               }
               disabled={saving}
-              className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={inputClass}
             >
-              {FREQUENCY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
+              {FREQUENCY_OPTIONS.map(
+                (option) => (
+                  <option
+                    key={option}
+                    value={option}
+                  >
+                    {option}
+                  </option>
+                )
+              )}
             </select>
           </div>
 
           <div>
             <label
               htmlFor="medicine-pills-per-dose"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Pills per scheduled dose{" "}
-              <span className="text-red-500">*</span>
+              <span className="text-red-500">
+                *
+              </span>
             </label>
 
             <input
@@ -726,83 +1314,165 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               step="1"
               value={pillsPerDose}
               onChange={(event) => {
-                const value = event.target.value;
+                const value =
+                  event.target.value;
 
                 setPillsPerDose(
-                  value === "" ? 0 : Number(value)
+                  value === ""
+                    ? 0
+                    : Number(value)
                 );
               }}
               disabled={saving}
-              className="h-11 min-w-0 max-w-full w-full rounded-md border border-input bg-transparent px-2.5 py-1 text-base sm:h-9 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className={inputClass}
             />
 
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Each pill uses one chamber. The daily loading plan
-              assigns the chambers automatically.
+              Multiple pills may share one chamber
+              when they are scheduled together and
+              physically fit in the dispenser.
             </p>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Scheduled Times{" "}
-              <span className="text-red-500">*</span>
+            <label className={labelClass}>
+              Scheduled Times and Chambers{" "}
+              <span className="text-red-500">
+                *
+              </span>
             </label>
 
-            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
               {scheduleHelpText}
+              {" "}
+              Select the physical chamber for
+              each scheduled dose.
             </p>
 
-            <div className="space-y-3 sm:space-y-2">
-              {scheduledTimes.map((time, index) => (
-                <div
-                  key={index}
-                  className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap"
-                >
-                  <TimePicker
-                    value={time}
-                    onChange={(value) =>
-                      updateTime(index, value)
-                    }
-                    disabled={
-                      saving ||
-                      (isIntervalFrequency(frequency) &&
-                        index !== 0)
-                    }
-                  />
+            <div className="space-y-3">
+              {scheduleRows.map(
+                (row, index) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        Dose {index + 1}
+                      </span>
 
-                  {canRemoveTime(frequency) &&
-                    scheduledTimes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeTime(index)}
-                        className="rx-press shrink-0 rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/20"
-                        disabled={saving}
-                        aria-label={`Remove ${time}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                </div>
-              ))}
+                      {canAddTime &&
+                        scheduleRows.length >
+                          1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removeTime(
+                                row.id
+                              )
+                            }
+                            disabled={saving}
+                            className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+                            aria-label={`Remove dose ${index + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                    </div>
+
+                    <TimePicker
+                      value={row.time}
+                      onChange={(value) =>
+                        updateTime(
+                          row.id,
+                          value
+                        )
+                      }
+                      disabled={
+                        saving ||
+                        (isIntervalFrequency &&
+                          index !== 0)
+                      }
+                    />
+
+                    <p className="mb-2 mt-3 text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Select Chamber(s)
+                    </p>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {CHAMBERS.map(
+                        (chamberId) => {
+                          const selected =
+                            row.chamberIds.includes(
+                              chamberId
+                            );
+
+                          return (
+                            <button
+                              key={chamberId}
+                              type="button"
+                              onClick={() =>
+                                toggleChamber(
+                                  row.id,
+                                  chamberId
+                                )
+                              }
+                              disabled={saving}
+                              aria-pressed={
+                                selected
+                              }
+                              className={`rounded-lg border px-2 py-2.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                                selected
+                                  ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                                  : "border-gray-300 bg-white text-gray-700 hover:border-blue-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                              }`}
+                            >
+                              C{chamberId}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      {row.chamberIds.length
+                        ? `Selected: ${row.chamberIds
+                            .map(
+                              (id) =>
+                                `Chamber ${id}`
+                            )
+                            .join(", ")}`
+                        : "No chamber selected"}
+                    </p>
+                  </div>
+                )
+              )}
             </div>
 
-            {canAddTime(frequency) && (
+            {canAddTime && (
               <button
                 type="button"
                 onClick={addTime}
                 disabled={saving}
-                className="mt-2 flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300"
+                className="mt-3 flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 dark:text-blue-400"
               >
                 <Plus className="h-4 w-4" />
                 Add another time
               </button>
             )}
+
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              A chamber may be shared by medicines
+              scheduled at the same time. It cannot
+              be reused at a different time during
+              the same daily loading cycle.
+            </p>
           </div>
 
           <div>
             <label
               htmlFor="medicine-notes"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className={labelClass}
             >
               Notes (optional)
             </label>
@@ -811,12 +1481,14 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
               id="medicine-notes"
               value={notes}
               onChange={(event) =>
-                setNotes(event.target.value)
+                setNotes(
+                  event.target.value
+                )
               }
               placeholder="e.g. Take with food"
               disabled={saving}
               rows={2}
-              className="min-h-24 sm:min-h-0 min-w-0 w-full resize-y rounded-md border border-input bg-transparent px-2.5 py-2.5 text-base sm:py-1.5 sm:text-sm shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              className="min-h-24 w-full min-w-0 resize-y rounded-md border border-input bg-transparent px-2.5 py-2.5 text-base shadow-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
             />
           </div>
         </form>
@@ -826,7 +1498,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rx-press w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 sm:flex-1"
+            className="rx-press w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 sm:flex-1"
           >
             Cancel
           </button>
@@ -838,7 +1510,9 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
             loadingText="Saving…"
             className="h-11 w-full sm:h-9 sm:flex-1"
           >
-            {initialData ? "Save Changes" : "Add Medicine"}
+            {initialData
+              ? "Save Changes"
+              : "Add Medicine"}
           </Button>
         </div>
       </div>

@@ -1,29 +1,47 @@
-// app/api/medicines/[id]/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
-import mongoose from 'mongoose';
+import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 
-import { connectDB } from '@/lib/mongodb';
-import Medicine from '@/models/Medicine';
-import MedicationLog from '@/models/MedicationLog';
+import { connectDB } from "@/lib/mongodb";
+import Medicine from "@/models/Medicine";
+import MedicationLog from "@/models/MedicationLog";
 
 import {
   synchronizeMedicineLogs,
-} from '@/lib/medicationVerification';
+} from "@/lib/medicationVerification";
 
 import {
   getTokenFromRequest,
   verifyToken,
-} from '@/lib/auth';
+} from "@/lib/auth";
 
 import type {
   ApiResponse,
-} from '@/lib/interfaces/data/Api';
+} from "@/lib/interfaces/data/Api";
+
+import type {
+  IMedicineChamberAssignment,
+} from "@/models/Medicine";
 
 import {
   getMedicationDateKey,
   isValidMedicationDateKey,
-} from '@/lib/medicationTime';
+  parseMedicationTimeToMinutes,
+} from "@/lib/medicationTime";
+
+const VALID_FREQUENCIES = [
+  "Once daily",
+  "Twice daily",
+  "Three times daily",
+  "Every 4 hours",
+  "Every 6 hours",
+  "Every 8 hours",
+  "Weekly",
+  "As needed",
+];
+
+const TIME_REGEX =
+  /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
 
 async function getAuthUser(request: NextRequest) {
   const token = getTokenFromRequest(request);
@@ -35,146 +53,48 @@ async function getAuthUser(request: NextRequest) {
   return verifyToken(token);
 }
 
-export async function GET(
-  request: NextRequest,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
-) {
-  try {
-    const user = await getAuthUser(request);
-
-    if (!user) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'Unauthorized',
-        },
-        { status: 401 },
-      );
-    }
-
-    const { id } = await params;
-
-    if (!mongoose.isValidObjectId(id)) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'Invalid medicine ID',
-        },
-        { status: 400 },
-      );
-    }
-
-    await connectDB();
-
-    const medicine = await Medicine.findOne({
-      _id: id,
-      userId: user.userId,
-    });
-
-    if (!medicine) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: 'Medicine not found',
-        },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json<ApiResponse>({
-      success: true,
-      data: medicine,
-    });
-  } catch (error) {
-    console.error(
-      '[GET /api/medicines/[id]] Error:',
-      error,
-    );
-
-    return NextResponse.json<ApiResponse>(
-      {
-        success: false,
-        error: 'Internal server error',
-      },
-      { status: 500 },
-    );
-  }
-}
-
-const VALID_FREQUENCIES = [
-  'Once daily',
-  'Twice daily',
-  'Three times daily',
-  'Every 4 hours',
-  'Every 6 hours',
-  'Every 8 hours',
-  'Weekly',
-  'As needed',
-];
-
-const TIME_REGEX =
-  /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
-
-function isValidDate(dateString: string): boolean {
-  return isValidMedicationDateKey(dateString);
-}
-
-function isValidTime(timeString: string): boolean {
-  return TIME_REGEX.test(timeString.trim());
+function isValidTime(value: string): boolean {
+  return TIME_REGEX.test(value.trim());
 }
 
 function sanitizeMedicineName(
-  raw: unknown,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (typeof raw !== "string") {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const value = raw.trim();
 
   if (
-    trimmed.length === 0 ||
-    trimmed.length > 100
+    value.length === 0 ||
+    value.length > 100 ||
+    !/[a-zA-Z0-9]/.test(value)
   ) {
     return null;
   }
 
-  if (!/[a-zA-Z0-9]/.test(trimmed)) {
-    return null;
-  }
-
-  if (/^[^a-zA-Z0-9]+$/.test(trimmed)) {
-    return null;
-  }
-
-  return trimmed;
+  return value;
 }
 
 function sanitizeDosage(
-  raw: unknown,
+  raw: unknown
 ): string | null {
-  if (typeof raw !== 'string') {
+  if (typeof raw !== "string") {
     return null;
   }
 
-  const trimmed = raw.trim();
+  const value = raw.trim();
 
   if (
-    trimmed.length === 0 ||
-    trimmed.length > 50
+    value.length === 0 ||
+    value.length > 50 ||
+    !/[a-zA-Z0-9]/.test(value)
   ) {
     return null;
   }
 
-  if (!/[a-zA-Z0-9]/.test(trimmed)) {
-    return null;
-  }
-
-  return trimmed;
+  return value;
 }
 
 interface ValidationResult {
@@ -182,17 +102,33 @@ interface ValidationResult {
   error?: string;
 }
 
+interface MedicineUpdatePayload {
+  name: string;
+  dosage: string;
+  frequency: string;
+  scheduledTimes: string[];
+  pillsPerDose: number;
+  chamberAssignments: IMedicineChamberAssignment[];
+  windowBeforeMinutes: number;
+  windowAfterMinutes: number;
+  lateAfterMinutes: number;
+  notes: string;
+  startDate: string;
+  endDate: string | null;
+}
+
 function validateMedicinePayload(
-  body: Record<string, unknown>,
+  body: Record<string, unknown>
 ): ValidationResult {
   const {
     name,
     dosage,
     frequency,
     scheduledTimes,
+    pillsPerDose,
+    chamberAssignments,
     startDate,
     endDate,
-    pillsPerDose,
     windowBeforeMinutes,
     windowAfterMinutes,
     lateAfterMinutes,
@@ -202,7 +138,7 @@ function validateMedicinePayload(
     return {
       valid: false,
       error:
-        'Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.',
+        "Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.",
     };
   }
 
@@ -210,154 +146,220 @@ function validateMedicinePayload(
     return {
       valid: false,
       error:
-        'Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.',
+        "Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.",
     };
   }
 
   if (
-    !frequency ||
-    typeof frequency !== 'string'
+    typeof frequency !== "string" ||
+    !VALID_FREQUENCIES.includes(frequency)
   ) {
     return {
       valid: false,
-      error: 'Frequency is required.',
-    };
-  }
-
-  if (!VALID_FREQUENCIES.includes(frequency)) {
-    return {
-      valid: false,
       error:
-        `Frequency must be one of: ${VALID_FREQUENCIES.join(', ')}.`,
+        `Frequency must be one of: ${VALID_FREQUENCIES.join(", ")}.`,
     };
   }
 
   if (
     !Array.isArray(scheduledTimes) ||
-    scheduledTimes.length === 0
+    scheduledTimes.length === 0 ||
+    scheduledTimes.length > 24
   ) {
     return {
       valid: false,
       error:
-        'At least one scheduled time is required.',
+        "Provide between 1 and 24 scheduled times.",
     };
   }
 
-  if (scheduledTimes.length > 24) {
-    return {
-      valid: false,
-      error:
-        'A maximum of 24 scheduled times is allowed.',
-    };
-  }
+  const scheduledMinutes = new Set<number>();
 
   for (const time of scheduledTimes) {
     if (
-      typeof time !== 'string' ||
+      typeof time !== "string" ||
       !isValidTime(time)
     ) {
       return {
         valid: false,
         error:
-          `Invalid scheduled time "${String(time)}". Expected format: "H:MM AM" or "H:MM PM".`,
+          `Invalid scheduled time "${String(time)}".`,
       };
     }
-  }
 
-  const normalizedTimes =
-    scheduledTimes as string[];
+    const minutes =
+      parseMedicationTimeToMinutes(time);
 
-  const uniqueTimes = new Set(
-    normalizedTimes.map((time) =>
-      time.trim().toUpperCase(),
-    ),
-  );
-
-  if (
-    uniqueTimes.size !== normalizedTimes.length
-  ) {
-    return {
-      valid: false,
-      error:
-        'Duplicate scheduled times are not allowed.',
-    };
-  }
-
-  if (
-    startDate !== undefined &&
-    startDate !== null &&
-    startDate !== ''
-  ) {
     if (
-      typeof startDate !== 'string' ||
-      !isValidDate(startDate)
+      minutes < 0 ||
+      scheduledMinutes.has(minutes)
     ) {
       return {
         valid: false,
         error:
-          'Start date must be a valid date in YYYY-MM-DD format.',
+          "Duplicate or invalid scheduled times are not allowed.",
       };
     }
+
+    scheduledMinutes.add(minutes);
+  }
+
+  const start =
+    typeof startDate === "string" && startDate
+      ? startDate
+      : getMedicationDateKey();
+
+  if (!isValidMedicationDateKey(start)) {
+    return {
+      valid: false,
+      error:
+        "Start date must be a valid YYYY-MM-DD date.",
+    };
   }
 
   if (
     endDate !== undefined &&
     endDate !== null &&
-    endDate !== ''
+    endDate !== ""
   ) {
     if (
-      typeof endDate !== 'string' ||
-      !isValidDate(endDate)
+      typeof endDate !== "string" ||
+      !isValidMedicationDateKey(endDate) ||
+      endDate < start
     ) {
       return {
         valid: false,
         error:
-          'End date must be a valid date in YYYY-MM-DD format.',
-      };
-    }
-
-    const scheduleStart =
-      typeof startDate === 'string' && startDate
-        ? startDate
-        : getMedicationDateKey();
-
-    if (endDate && endDate < scheduleStart) {
-      return {
-        valid: false,
-        error:
-          'End date cannot be before start date.',
+          "End date must be valid and cannot be before the start date.",
       };
     }
   }
 
-  const normalizedPillsPerDose =
-    pillsPerDose == null
-      ? 1
-      : Number(pillsPerDose);
+  const quantity =
+    pillsPerDose == null ? 1 : Number(pillsPerDose);
 
   if (
-    !Number.isInteger(normalizedPillsPerDose) ||
-    normalizedPillsPerDose < 1 ||
-    normalizedPillsPerDose > 4
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 4
   ) {
     return {
       valid: false,
       error:
-        'Pills per scheduled dose must be a whole number from 1 to 4.',
+        "Pills per scheduled dose must be a whole number from 1 to 4.",
     };
   }
 
-  for (
-    const [field, value] of Object.entries({
-      windowBeforeMinutes,
-      windowAfterMinutes,
-      lateAfterMinutes,
-    })
+  if (
+    !Array.isArray(chamberAssignments) ||
+    chamberAssignments.length !==
+      scheduledTimes.length
   ) {
+    return {
+      valid: false,
+      error:
+        "Each scheduled time must have a chamber assignment.",
+    };
+  }
+
+  const assignedMinutes = new Set<number>();
+  const chamberTimes = new Map<number, number>();
+
+  for (const rawAssignment of chamberAssignments) {
+    if (
+      typeof rawAssignment !== "object" ||
+      rawAssignment === null
+    ) {
+      return {
+        valid: false,
+        error: "Invalid chamber assignment.",
+      };
+    }
+
+    const assignment = rawAssignment as Record<
+      string,
+      unknown
+    >;
+
+    if (
+      typeof assignment.scheduledTime !== "string" ||
+      !isValidTime(assignment.scheduledTime)
+    ) {
+      return {
+        valid: false,
+        error:
+          "Every chamber assignment needs a valid scheduled time.",
+      };
+    }
+
+    const minutes =
+      parseMedicationTimeToMinutes(
+        assignment.scheduledTime
+      );
+
+    if (
+      !scheduledMinutes.has(minutes) ||
+      assignedMinutes.has(minutes)
+    ) {
+      return {
+        valid: false,
+        error:
+          "Chamber assignments must match the medicine's scheduled times exactly.",
+      };
+    }
+
+    assignedMinutes.add(minutes);
+
+    const chamberIds = assignment.chamberIds;
+
+    if (
+      !Array.isArray(chamberIds) ||
+      chamberIds.length === 0 ||
+      chamberIds.length > 4 ||
+      new Set(chamberIds).size !== chamberIds.length ||
+      chamberIds.some(
+        (id) =>
+          typeof id !== "number" ||
+          !Number.isInteger(id) ||
+          id < 1 ||
+          id > 4
+      )
+    ) {
+      return {
+        valid: false,
+        error:
+          "Select one or more unique chambers numbered 1 to 4.",
+      };
+    }
+
+    for (const chamberId of chamberIds as number[]) {
+      const previousTime =
+        chamberTimes.get(chamberId);
+
+      if (
+        previousTime !== undefined &&
+        previousTime !== minutes
+      ) {
+        return {
+          valid: false,
+          error:
+            `Chamber ${chamberId} cannot be assigned to different dispensing times.`,
+        };
+      }
+
+      chamberTimes.set(chamberId, minutes);
+    }
+  }
+
+  for (const [field, value] of Object.entries({
+    windowBeforeMinutes,
+    windowAfterMinutes,
+    lateAfterMinutes,
+  })) {
     if (
       value !== undefined &&
       value !== null &&
-      value !== ''
+      value !== ""
     ) {
       const minutes = Number(value);
 
@@ -375,29 +377,175 @@ function validateMedicinePayload(
     }
   }
 
-  if (
-    lateAfterMinutes !== undefined &&
-    windowAfterMinutes !== undefined &&
-    Number(lateAfterMinutes) >
-      Number(windowAfterMinutes)
-  ) {
+  const after =
+    windowAfterMinutes == null
+      ? 90
+      : Number(windowAfterMinutes);
+
+  const late =
+    lateAfterMinutes == null
+      ? 30
+      : Number(lateAfterMinutes);
+
+  if (late > after) {
     return {
       valid: false,
       error:
-        'Late threshold cannot be longer than the after-window.',
+        "Late threshold cannot be longer than the after-window.",
     };
   }
 
   return { valid: true };
 }
 
-export async function PUT(
+function normalizePayload(
+  body: Record<string, unknown>
+): MedicineUpdatePayload {
+  return {
+    name: (body.name as string).trim(),
+    dosage: (body.dosage as string).trim(),
+    frequency: body.frequency as string,
+
+    scheduledTimes: (
+      body.scheduledTimes as string[]
+    ).map((time) => time.trim()),
+
+    pillsPerDose:
+      body.pillsPerDose == null
+        ? 1
+        : Number(body.pillsPerDose),
+
+    chamberAssignments: (
+      body.chamberAssignments as
+        IMedicineChamberAssignment[]
+    ).map((assignment) => ({
+      scheduledTime:
+        assignment.scheduledTime.trim(),
+
+      chamberIds: [
+        ...assignment.chamberIds,
+      ].sort((a, b) => a - b),
+    })),
+
+    windowBeforeMinutes:
+      body.windowBeforeMinutes == null
+        ? 30
+        : Number(body.windowBeforeMinutes),
+
+    windowAfterMinutes:
+      body.windowAfterMinutes == null
+        ? 90
+        : Number(body.windowAfterMinutes),
+
+    lateAfterMinutes:
+      body.lateAfterMinutes == null
+        ? 30
+        : Number(body.lateAfterMinutes),
+
+    notes:
+      typeof body.notes === "string"
+        ? body.notes.trim().slice(0, 500)
+        : "",
+
+    startDate:
+      typeof body.startDate === "string" &&
+      body.startDate.trim()
+        ? body.startDate.trim()
+        : getMedicationDateKey(),
+
+    endDate:
+      typeof body.endDate === "string" &&
+      body.endDate.trim()
+        ? body.endDate.trim()
+        : null,
+  };
+}
+
+/**
+ * Check for conflicting chamber assignments in
+ * other active medicines belonging to the patient.
+ *
+ * Medicines scheduled at the same time may share
+ * a chamber. Different dispensing times cannot
+ * share one physical chamber on the same day.
+ */
+async function findChamberConflict(
+  userId: string,
+  currentMedicineId: string,
+  payload: MedicineUpdatePayload,
+  session: mongoose.ClientSession
+): Promise<string | null> {
+  const otherMedicines = await Medicine.find({
+    userId,
+    isActive: true,
+    _id: { $ne: currentMedicineId },
+  })
+    .select(
+      "name startDate endDate chamberAssignments"
+    )
+    .session(session)
+    .lean();
+
+  for (const other of otherMedicines) {
+    const otherStart =
+      other.startDate || "0000-01-01";
+
+    const otherEnd =
+      other.endDate || "9999-12-31";
+
+    const currentEnd =
+      payload.endDate || "9999-12-31";
+
+    const datesOverlap =
+      payload.startDate <= otherEnd &&
+      otherStart <= currentEnd;
+
+    if (!datesOverlap) {
+      continue;
+    }
+
+    for (const incoming of payload.chamberAssignments) {
+      const incomingMinutes =
+        parseMedicationTimeToMinutes(
+          incoming.scheduledTime
+        );
+
+      for (const existing of other.chamberAssignments ?? []) {
+        const existingMinutes =
+          parseMedicationTimeToMinutes(
+            existing.scheduledTime
+          );
+
+        const sharedChambers =
+          incoming.chamberIds.filter((id) =>
+            existing.chamberIds.includes(id)
+          );
+
+        if (
+          sharedChambers.length > 0 &&
+          incomingMinutes !== existingMinutes
+        ) {
+          return (
+            `Chamber ${sharedChambers.join(", ")} is already ` +
+            `assigned to ${other.name} at ` +
+            `${existing.scheduledTime}. ` +
+            "Choose a different chamber or use the same dispensing time."
+          );
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function GET(
   request: NextRequest,
   {
     params,
   }: {
     params: Promise<{ id: string }>;
-  },
+  }
 ) {
   try {
     const user = await getAuthUser(request);
@@ -406,9 +554,9 @@ export async function PUT(
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error: "Unauthorized",
         },
-        { status: 401 },
+        { status: 401 }
       );
     }
 
@@ -418,9 +566,79 @@ export async function PUT(
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid medicine ID',
+          error: "Invalid medicine ID",
         },
-        { status: 400 },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const medicine = await Medicine.findOne({
+      _id: id,
+      userId: user.userId,
+    });
+
+    if (!medicine) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "Medicine not found",
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: medicine,
+    });
+  } catch (error) {
+    console.error(
+      "[GET /api/medicines/[id]] Error:",
+      error
+    );
+
+    return NextResponse.json<ApiResponse>(
+      {
+        success: false,
+        error: "Internal server error",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  try {
+    const user = await getAuthUser(request);
+
+    if (!user) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "Invalid medicine ID",
+        },
+        { status: 400 }
       );
     }
 
@@ -429,23 +647,22 @@ export async function PUT(
     let body: Record<string, unknown>;
 
     try {
-      body =
-        (await request.json()) as Record<
-          string,
-          unknown
-        >;
+      body = (await request.json()) as Record<
+        string,
+        unknown
+      >;
     } catch (parseError) {
       console.error(
-        '[PUT /api/medicines/[id]] JSON parse error:',
-        parseError,
+        "[PUT /api/medicines/[id]] JSON parse error:",
+        parseError
       );
 
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid JSON body.',
+          error: "Invalid JSON body.",
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -458,66 +675,50 @@ export async function PUT(
           success: false,
           error: validation.error,
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
-    const name = body.name as string;
-    const dosage = body.dosage as string;
-    const frequency = body.frequency as string;
-
-    const scheduledTimes =
-      body.scheduledTimes as string[];
-
-    const notes =
-      typeof body.notes === 'string'
-        ? body.notes
-        : undefined;
-
-    const startDate =
-      typeof body.startDate === 'string'
-        ? body.startDate
-        : undefined;
-
-    const endDate =
-      typeof body.endDate === 'string'
-        ? body.endDate
-        : undefined;
-
-    const pillsPerDose =
-      body.pillsPerDose == null
-        ? 1
-        : Number(body.pillsPerDose);
-
-    const windowBeforeMinutes =
-      body.windowBeforeMinutes == null
-        ? 30
-        : Number(body.windowBeforeMinutes);
-
-    const windowAfterMinutes =
-      body.windowAfterMinutes == null
-        ? 90
-        : Number(body.windowAfterMinutes);
-
-    const lateAfterMinutes =
-      body.lateAfterMinutes == null
-        ? 30
-        : Number(body.lateAfterMinutes);
-
-    const normalizedTimes =
-      scheduledTimes.map((time) => time.trim());
+    const payload = normalizePayload(body);
 
     /*
-     * Update the existing medicine and its planned dose logs
-     * together. If synchronization fails, the transaction
-     * rolls back the medicine update too.
+     * Update the existing medicine instead of
+     * creating another medicine document.
      *
-     * No chamberId is accepted here. The daily Rx Box plan
-     * assigns chambers.
+     * Keep the medicine update and medication-log
+     * synchronization in one transaction.
      */
-    const medicine =
+    const result =
       await mongoose.connection.transaction(
         async (session) => {
+          const existingMedicine =
+            await Medicine.findOne({
+              _id: id,
+              userId: user.userId,
+            }).session(session);
+
+          if (!existingMedicine) {
+            return {
+              medicine: null,
+              conflict: null as string | null,
+            };
+          }
+
+          const conflict =
+            await findChamberConflict(
+              user.userId,
+              id,
+              payload,
+              session
+            );
+
+          if (conflict) {
+            return {
+              medicine: null,
+              conflict,
+            };
+          }
+
           const updated =
             await Medicine.findOneAndUpdate(
               {
@@ -525,108 +726,134 @@ export async function PUT(
                 userId: user.userId,
               },
               {
-                name: name.trim(),
-                dosage: dosage.trim(),
-                frequency,
-                scheduledTimes: normalizedTimes,
-                pillsPerDose,
-                windowBeforeMinutes,
-                windowAfterMinutes,
-                lateAfterMinutes,
+                $set: {
+                  name: payload.name,
+                  dosage: payload.dosage,
+                  frequency: payload.frequency,
 
-                startDate:
-                  startDate && startDate.trim()
-                    ? startDate.trim()
-                    : undefined,
+                  scheduledTimes:
+                    payload.scheduledTimes,
 
-                endDate:
-                  endDate && endDate.trim()
-                    ? endDate.trim()
-                    : null,
+                  pillsPerDose:
+                    payload.pillsPerDose,
 
-                notes:
-                  typeof notes === 'string'
-                    ? notes.trim().slice(0, 500)
-                    : '',
+                  chamberAssignments:
+                    payload.chamberAssignments,
 
-                updatedAt: new Date(),
+                  windowBeforeMinutes:
+                    payload.windowBeforeMinutes,
+
+                  windowAfterMinutes:
+                    payload.windowAfterMinutes,
+
+                  lateAfterMinutes:
+                    payload.lateAfterMinutes,
+
+                  startDate:
+                    payload.startDate,
+
+                  endDate:
+                    payload.endDate,
+
+                  notes: payload.notes,
+
+                  updatedAt: new Date(),
+                },
               },
               {
                 new: true,
                 runValidators: true,
                 upsert: false,
                 session,
-              },
+              }
             );
 
           if (!updated) {
-            return null;
+            return {
+              medicine: null,
+              conflict: null as string | null,
+            };
           }
 
-          const today =
-            getMedicationDateKey();
+          /*
+           * Preserve the existing synchronization
+           * process to prevent schedule duplication.
+           *
+           * This updates the medicine's planned logs
+           * rather than adding duplicate medicines.
+           */
+          const today = getMedicationDateKey();
 
           const futureDates =
             await MedicationLog.distinct(
-              'scheduledDate',
+              "scheduledDate",
               {
                 userId: user.userId,
                 medicineId: id,
+
                 scheduledDate: {
                   $gte: today,
                 },
-              },
+              }
             ).session(session);
 
-          for (
-            const date of new Set([
-              today,
-              ...futureDates,
-            ])
-          ) {
+          const dates = new Set<string>([
+            today,
+            ...(futureDates as string[]),
+          ]);
+
+          for (const date of dates) {
             await synchronizeMedicineLogs(
               updated,
               date,
-              session,
+              session
             );
           }
 
-          return updated;
-        },
+          return {
+            medicine: updated,
+            conflict: null as string | null,
+          };
+        }
       );
 
-    if (!medicine) {
-      console.warn(
-        `[PUT /api/medicines/[id]] Medicine not found: ${id} for user ${user.userId}`,
-      );
-
+    if (result.conflict) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Medicine not found',
+          error: result.conflict,
         },
-        { status: 404 },
+        { status: 409 }
+      );
+    }
+
+    if (!result.medicine) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: "Medicine not found",
+        },
+        { status: 404 }
       );
     }
 
     return NextResponse.json<ApiResponse>({
       success: true,
-      data: medicine,
-      message:
-        'Medicine updated successfully',
+      data: result.medicine,
+      message: "Medicine updated successfully",
     });
   } catch (error) {
     console.error(
-      '[PUT /api/medicines/[id]] Unhandled error:',
-      error,
+      "[PUT /api/medicines/[id]] Error:",
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error: "Internal server error",
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
@@ -637,7 +864,7 @@ export async function DELETE(
     params,
   }: {
     params: Promise<{ id: string }>;
-  },
+  }
 ) {
   try {
     const user = await getAuthUser(request);
@@ -646,9 +873,9 @@ export async function DELETE(
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Unauthorized',
+          error: "Unauthorized",
         },
-        { status: 401 },
+        { status: 401 }
       );
     }
 
@@ -658,16 +885,16 @@ export async function DELETE(
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Invalid medicine ID',
+          error: "Invalid medicine ID",
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     await connectDB();
 
     /*
-     * Soft delete preserves previous medication history.
+     * Soft delete preserves medication history.
      */
     const medicine =
       await Medicine.findOneAndUpdate(
@@ -676,62 +903,64 @@ export async function DELETE(
           userId: user.userId,
         },
         {
-          isActive: false,
-          updatedAt: new Date(),
+          $set: {
+            isActive: false,
+            updatedAt: new Date(),
+          },
         },
-        { new: true },
+        {
+          new: true,
+        }
       );
 
     if (!medicine) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error: 'Medicine not found',
+          error: "Medicine not found",
         },
-        { status: 404 },
+        { status: 404 }
       );
     }
 
-    const todayString =
-      getMedicationDateKey();
+    const today = getMedicationDateKey();
 
     /*
-     * Remove only unresolved current/future schedules.
-     * Historical and finalized adherence records remain.
+     * Delete only unresolved schedules from
+     * today onward.
+     *
+     * Finalized and historical medication
+     * activities remain in the database.
      */
     await MedicationLog.deleteMany({
       userId: user.userId,
       medicineId: medicine._id,
 
       scheduledDate: {
-        $gte: todayString,
+        $gte: today,
       },
 
       status: {
-        $in: [
-          'pending',
-          'reminder',
-        ],
+        $in: ["pending", "reminder"],
       },
     });
 
     return NextResponse.json<ApiResponse>({
       success: true,
-      message:
-        'Medicine deleted successfully',
+      message: "Medicine deleted successfully",
     });
   } catch (error) {
     console.error(
-      '[DELETE /api/medicines/[id]] Error:',
-      error,
+      "[DELETE /api/medicines/[id]] Error:",
+      error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: 'Internal server error',
+        error: "Internal server error",
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

@@ -1,98 +1,147 @@
-// lib/rxBoxDailyPlan.ts
-import MedicationLog from '@/models/MedicationLog';
-import Medicine from '@/models/Medicine';
+
+import MedicationLog from "@/models/MedicationLog";
+import Medicine from "@/models/Medicine";
 
 import {
   ensureMedicationLogsForDate,
-} from '@/lib/medicationVerification';
+} from "@/lib/medicationVerification";
 
 import {
   getMedicationDateKey,
   parseMedicationTimeToMinutes,
   resolveMedicationTimeZone,
-} from '@/lib/medicationTime';
+} from "@/lib/medicationTime";
 
 import {
   buildRxBoxDailyPlan,
   type RxBoxDailyPlan,
   type RxBoxDoseInput,
-} from '@/lib/rxBoxPlanCore';
+} from "@/lib/rxBoxPlanCore";
 
-export * from '@/lib/rxBoxPlanCore';
+export * from "@/lib/rxBoxPlanCore";
 
 const FINAL_LOG_STATUSES = new Set([
-  'taken',
-  'late',
-  'missed',
-  'incorrect_chamber',
+  "taken",
+  "late",
+  "missed",
+  "incorrect_chamber",
 ]);
 
-function getLogPriority(
-  status: string
-): number {
-  if (
-    FINAL_LOG_STATUSES.has(
-      status
-    )
-  ) {
+const DEBUG_RX_BOX =
+  process.env.NODE_ENV === "development";
+
+function getLogPriority(status: string): number {
+  if (FINAL_LOG_STATUSES.has(status)) {
     return 3;
   }
 
-  if (
-    status === 'dispensed'
-  ) {
+  if (status === "dispensed") {
     return 2;
   }
 
-  if (
-    status === 'reminder'
-  ) {
+  if (status === "reminder") {
     return 1;
   }
 
   return 0;
 }
 
-/**
- * Chooses one medication log when legacy duplicate records
- * exist for the same medicine, date, and scheduled time.
- *
- * Finalized records are preferred so an already completed
- * dose cannot become pending again. If both records have the
- * same status priority, the lower ObjectId is used to keep the
- * result deterministic.
- */
 function shouldReplaceDose(
   existing: RxBoxDoseInput,
   candidate: RxBoxDoseInput
 ): boolean {
-  const existingPriority =
-    getLogPriority(
-      existing.logStatus
-    );
+  const existingPriority = getLogPriority(
+    existing.logStatus
+  );
 
-  const candidatePriority =
-    getLogPriority(
-      candidate.logStatus
-    );
+  const candidatePriority = getLogPriority(
+    candidate.logStatus
+  );
 
-  if (
-    candidatePriority !==
-    existingPriority
-  ) {
-    return (
-      candidatePriority >
-      existingPriority
-    );
+  if (candidatePriority !== existingPriority) {
+    return candidatePriority > existingPriority;
   }
 
   return (
-    candidate.logId.localeCompare(
-      existing.logId
-    ) < 0
+    candidate.logId.localeCompare(existing.logId) < 0
   );
 }
 
+/**
+ * Read manually assigned chambers for one
+ * scheduled medication occurrence.
+ *
+ * Never automatically assign another chamber.
+ */
+function getAssignedChambers(
+  assignments:
+    | Array<{
+        scheduledTime: string;
+        chamberIds: number[];
+      }>
+    | undefined,
+  scheduledTime: string
+): number[] {
+  const scheduledMinutes =
+    parseMedicationTimeToMinutes(scheduledTime);
+
+  if (scheduledMinutes < 0) {
+    return [];
+  }
+
+  const assignment = (assignments ?? []).find(
+    (item) =>
+      parseMedicationTimeToMinutes(
+        item.scheduledTime
+      ) === scheduledMinutes
+  );
+
+  if (!assignment) {
+    return [];
+  }
+
+  return [
+    ...new Set(assignment.chamberIds ?? []),
+  ]
+    .filter(
+      (id) =>
+        Number.isInteger(id) &&
+        id >= 1 &&
+        id <= 4
+    )
+    .sort((a, b) => a - b);
+}
+
+function sameChambers(
+  first: number[],
+  second: number[]
+): boolean {
+  const a = [...new Set(first)].sort(
+    (x, y) => x - y
+  );
+
+  const b = [...new Set(second)].sort(
+    (x, y) => x - y
+  );
+
+  return (
+    a.length === b.length &&
+    a.every((value, index) => value === b[index])
+  );
+}
+
+/**
+ * Build today's Rx Box hardware plan.
+ *
+ * Preserves:
+ * - Manual chamber assignments
+ * - Multiple pills per chamber
+ * - Same-time medication grouping
+ * - Four-chamber capacity
+ * - Medication log deduplication
+ * - Existing taken/missed statuses
+ * - ESP32 schedule response format
+ */
 export async function getRxBoxDailyPlan(
   userId: string,
   deviceId: string,
@@ -102,104 +151,67 @@ export async function getRxBoxDailyPlan(
     timezone?: string;
   } = {}
 ): Promise<RxBoxDailyPlan> {
-  const timezone =
-    resolveMedicationTimeZone(
-      options.timezone
-    );
+  const timezone = resolveMedicationTimeZone(
+    options.timezone
+  );
 
   const date =
     options.date ??
     getMedicationDateKey(
-      options.now ??
-        new Date(),
+      options.now ?? new Date(),
       timezone
     );
 
   /*
-   * Make sure logs for the medicine's current schedule
-   * exist before the loading plan is generated.
+   * Ensure today's medication logs exist.
    */
   await ensureMedicationLogsForDate(
     userId,
     date
   );
 
-  const medicines =
-    await Medicine.find({
-      userId,
-      isActive: true,
-
-      startDate: {
-        $lte: date,
-      },
-
-      $or: [
-        {
-          endDate: null,
-        },
-        {
-          endDate: '',
-        },
-        {
-          endDate: {
-            $gte: date,
-          },
-        },
-      ],
-    })
-      /*
-       * scheduledTimes is required here so logs left behind
-       * by previous schedule edits can be excluded.
-       */
-      .select(
-        '_id name dosage scheduledTimes pillsPerDose createdAt'
-      )
-      .lean();
-
-  const medicineById =
-    new Map(
-      medicines.map(
-        (medicine) => [
-          medicine._id.toString(),
-          medicine,
-        ]
-      )
-    );
-
   /*
-   * Store the current valid schedule minutes for each
-   * medicine. Comparing by minute also handles harmless
-   * formatting differences such as letter casing.
+   * Load active medicines and their
+   * manually saved chamber assignments.
    */
+  const medicines = await Medicine.find({
+    userId,
+    isActive: true,
+    startDate: {
+      $lte: date,
+    },
+    $or: [
+      { endDate: null },
+      { endDate: "" },
+      { endDate: { $gte: date } },
+    ],
+  })
+    .select(
+      "_id name dosage scheduledTimes " +
+      "pillsPerDose chamberAssignments createdAt"
+    )
+    .lean();
+
+  const medicineById = new Map(
+    medicines.map((medicine) => [
+      medicine._id.toString(),
+      medicine,
+    ])
+  );
+
   const scheduledMinutesByMedicineId =
-    new Map<
-      string,
-      Set<number>
-    >();
+    new Map<string, Set<number>>();
 
-  for (
-    const medicine of
-    medicines
-  ) {
-    const medicineId =
-      medicine._id.toString();
+  for (const medicine of medicines) {
+    const medicineId = medicine._id.toString();
 
-    const validMinutes =
-      new Set(
-        (
-          medicine.scheduledTimes ??
-          []
+    const validMinutes = new Set(
+      (medicine.scheduledTimes ?? [])
+        .map((time) =>
+          parseMedicationTimeToMinutes(time)
         )
-          .map((time) =>
-            parseMedicationTimeToMinutes(
-              time
-            )
-          )
-          .filter(
-            (minutes) =>
-              minutes >= 0
-          )
-      );
+        .filter((minutes) => minutes >= 0)
+    );
 
     scheduledMinutesByMedicineId.set(
       medicineId,
@@ -207,48 +219,36 @@ export async function getRxBoxDailyPlan(
     );
   }
 
-  const logs =
-    await MedicationLog.find({
-      userId,
-      scheduledDate: date,
-
-      medicineId: {
-        $in: medicines.map(
-          (medicine) =>
-            medicine._id
-        ),
-      },
-
-      countsTowardAdherence: {
-        $ne: false,
-      },
-    }).lean();
-
   /*
-   * One entry represents one currently scheduled occurrence:
-   *
-   * medicineId + scheduled minute
-   *
-   * pillsPerDose is expanded into separate chambers later by
-   * buildRxBoxDailyPlan(). It must not be represented by
-   * duplicate MedicationLog documents.
+   * Load today's adherence records.
    */
+  const logs = await MedicationLog.find({
+    userId,
+    scheduledDate: date,
+    medicineId: {
+      $in: medicines.map(
+        (medicine) => medicine._id
+      ),
+    },
+    countsTowardAdherence: {
+      $ne: false,
+    },
+  }).lean();
+
   const doseByOccurrence =
-    new Map<
-      string,
-      RxBoxDoseInput
-    >();
+    new Map<string, RxBoxDoseInput>();
+
+  let invalidTimeLogs = 0;
+  let outdatedScheduleLogs = 0;
+  let duplicateOccurrenceLogs = 0;
 
   for (const log of logs) {
     const medicineId =
-      log.medicineId
-        ?.toString() ??
-      '';
+      log.medicineId?.toString() ?? "";
 
-    const medicine =
-      medicineById.get(
-        medicineId
-      );
+    const medicine = medicineById.get(
+      medicineId
+    );
 
     if (!medicine) {
       continue;
@@ -259,9 +259,8 @@ export async function getRxBoxDailyPlan(
         log.scheduledTime
       );
 
-    if (
-      scheduledMinutes < 0
-    ) {
+    if (scheduledMinutes < 0) {
+      invalidTimeLogs++;
       continue;
     }
 
@@ -271,65 +270,51 @@ export async function getRxBoxDailyPlan(
       );
 
     /*
-     * This is the main stale-log fix.
-     *
-     * If the medicine was changed from 8:00 AM to 9:00 AM,
-     * the old 8:00 AM log is no longer part of the current
-     * schedule and must not receive a chamber.
+     * Ignore old scheduled times left behind
+     * after medicine schedule edits.
      */
     if (
       !currentScheduleMinutes?.has(
         scheduledMinutes
       )
     ) {
+      outdatedScheduleLogs++;
       continue;
     }
 
-    const candidate:
-      RxBoxDoseInput = {
-        logId:
-          log._id.toString(),
+    const assignedChambers =
+      getAssignedChambers(
+        medicine.chamberAssignments,
+        log.scheduledTime
+      );
 
-        medicineId,
-
-        /*
-         * Use the medicine's current details instead of
-         * stale name or dosage snapshots from an old log.
-         */
-        medicineName:
-          medicine.name,
-
-        dosage:
-          medicine.dosage,
-
-        scheduledTime:
-          log.scheduledTime,
-
-        pillsPerDose:
-          medicine.pillsPerDose ??
-          1,
-
-        medicineCreatedAt:
-          medicine.createdAt,
-
-        logStatus:
-          log.status,
-      };
+    const candidate: RxBoxDoseInput = {
+      logId: log._id.toString(),
+      medicineId,
+      medicineName: medicine.name,
+      dosage: medicine.dosage,
+      scheduledTime: log.scheduledTime,
+      pillsPerDose:
+        medicine.pillsPerDose ?? 1,
+      medicineCreatedAt: medicine.createdAt,
+      logStatus: log.status,
+      chamberIds: assignedChambers,
+    };
 
     const occurrenceKey =
       `${medicineId}:${scheduledMinutes}`;
 
-    const existing =
-      doseByOccurrence.get(
-        occurrenceKey
-      );
+    const existing = doseByOccurrence.get(
+      occurrenceKey
+    );
+
+    if (existing) {
+      duplicateOccurrenceLogs++;
+    }
 
     if (
       !existing ||
-      shouldReplaceDose(
-        existing,
-        candidate
-      )
+      shouldReplaceDose(existing, candidate)
     ) {
       doseByOccurrence.set(
         occurrenceKey,
@@ -338,83 +323,198 @@ export async function getRxBoxDailyPlan(
     }
   }
 
-  const doses =
-    Array.from(
-      doseByOccurrence.values()
+  const doses = Array.from(
+    doseByOccurrence.values()
+  );
+
+  /*
+   * Use the existing validated plan builder.
+   *
+   * Do not bypass assignment conflicts.
+   */
+  const plan = buildRxBoxDailyPlan(
+    doses,
+    {
+      deviceId,
+      date,
+      timezone,
+    }
+  );
+
+  /*
+   * Development-only diagnostics.
+   *
+   * No patient IDs, authentication keys,
+   * or database connection strings logged.
+   */
+  if (DEBUG_RX_BOX) {
+    console.log(
+      "\n========== RX BOX PLAN DEBUG =========="
     );
 
-  const plan =
-    buildRxBoxDailyPlan(
-      doses,
-      {
-        deviceId,
-        date,
-        timezone,
-      }
+    console.log("Date:", date);
+    console.log("Device:", deviceId);
+    console.log("Timezone:", timezone);
+
+    console.log(
+      "Active medicines:",
+      medicines.length
     );
 
+    console.log(
+      "Medication logs:",
+      logs.length
+    );
+
+    console.log(
+      "Valid scheduled occurrences:",
+      doses.length
+    );
+
+    console.log(
+      "Invalid-time logs:",
+      invalidTimeLogs
+    );
+
+    console.log(
+      "Outdated schedule logs:",
+      outdatedScheduleLogs
+    );
+
+    console.log(
+      "Duplicate occurrence logs:",
+      duplicateOccurrenceLogs
+    );
+
+    console.log(
+      "Saved medicine assignments:",
+      medicines.map((medicine) => ({
+        medicine: medicine.name,
+        scheduledTimes:
+          medicine.scheduledTimes ?? [],
+        chamberAssignments:
+          medicine.chamberAssignments ?? [],
+      }))
+    );
+
+    console.log(
+      "Resolved dose assignments:",
+      doses.map((dose) => ({
+        medicine: dose.medicineName,
+        time: dose.scheduledTime,
+        chambers: dose.chamberIds,
+        pills: dose.pillsPerDose,
+        status: dose.logStatus,
+      }))
+    );
+
+    console.log(
+      "Hardware enabled:",
+      plan.hardwareDispensingEnabled
+    );
+
+    console.log(
+      "Capacity:",
+      plan.capacity
+    );
+
+    console.log(
+      "Plan message:",
+      plan.message
+    );
+
+    console.log(
+      "Dispensing groups:",
+      plan.groups.map((group) => ({
+        time: group.scheduledTime,
+        chambers: group.chamberIds,
+        status: group.status,
+      }))
+    );
+
+    console.log(
+      "========== END RX BOX DEBUG ==========\n"
+    );
+  }
+
+  /*
+   * Map each selected medication log
+   * to its expected physical chambers.
+   */
   const chambersByLogId =
-    new Map<
-      string,
-      number[]
-    >();
+    new Map<string, number[]>();
 
-  if (
-    !plan.capacity.exceeded
-  ) {
-    for (
-      const item of
-      plan.loadingPlan
-    ) {
-      const chambers =
-        chambersByLogId.get(
-          item.logId
-        ) ?? [];
+  if (plan.hardwareDispensingEnabled) {
+    for (const item of plan.loadingPlan) {
+      const existing =
+        chambersByLogId.get(item.logId) ?? [];
 
-      chambers.push(
-        item.chamberId
-      );
+      if (!existing.includes(item.chamberId)) {
+        existing.push(item.chamberId);
+      }
 
       chambersByLogId.set(
         item.logId,
-        chambers
+        existing
       );
     }
   }
 
   /*
-   * Update all today's logs.
+   * Update only records whose expected
+   * chamber assignments actually changed.
    *
-   * Stale logs that are no longer in the current medicine
-   * schedule receive no expected chambers, while valid logs
-   * receive their newly ordered chamber assignments.
+   * Preserve medication statuses and
+   * adherence outcomes.
    */
-  if (logs.length > 0) {
-    await MedicationLog.bulkWrite(
-      logs.map((log) => {
-        const expectedChamberIds =
-          chambersByLogId.get(
-            log._id.toString()
-          ) ?? [];
+  const updates = logs.flatMap((log) => {
+    const expectedChamberIds = [
+      ...new Set(
+        chambersByLogId.get(
+          log._id.toString()
+        ) ?? []
+      ),
+    ].sort((a, b) => a - b);
 
-        return {
-          updateOne: {
-            filter: {
-              _id: log._id,
-            },
+    const existingChamberIds =
+      log.expectedChamberIds ?? [];
 
-            update: {
-              $set: {
-                expectedChamberId:
-                  expectedChamberIds[0] ??
-                  null,
+    const expectedChamberId =
+      expectedChamberIds[0] ?? null;
 
-                expectedChamberIds,
-              },
+    const existingChamberId =
+      log.expectedChamberId ?? null;
+
+    if (
+      sameChambers(
+        existingChamberIds,
+        expectedChamberIds
+      ) &&
+      existingChamberId === expectedChamberId
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        updateOne: {
+          filter: {
+            _id: log._id,
+          },
+          update: {
+            $set: {
+              expectedChamberId,
+              expectedChamberIds,
             },
           },
-        };
-      }),
+        },
+      },
+    ];
+  });
+
+  if (updates.length > 0) {
+    await MedicationLog.bulkWrite(
+      updates,
       {
         ordered: false,
       }

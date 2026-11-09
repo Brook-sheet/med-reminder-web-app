@@ -1,20 +1,18 @@
-// lib/rxBoxPlanCore.ts
-import {
-  createHash,
-} from 'node:crypto';
+
+import { createHash } from "node:crypto";
 
 import {
   parseMedicationTimeToMinutes,
   resolveMedicationTimeZone,
-} from './medicationTime';
+} from "./medicationTime";
 
 export const RX_BOX_CAPACITY = 4;
 
 export type RxBoxGroupStatus =
-  | 'pending'
-  | 'dispensed'
-  | 'taken'
-  | 'missed';
+  | "pending"
+  | "dispensed"
+  | "taken"
+  | "missed";
 
 export interface RxBoxDoseInput {
   logId: string;
@@ -25,6 +23,12 @@ export interface RxBoxDoseInput {
   pillsPerDose: number;
   medicineCreatedAt: Date | string;
   logStatus: string;
+
+  /**
+   * Manually selected chambers for this
+   * particular scheduled dose.
+   */
+  chamberIds?: number[];
 }
 
 export interface RxBoxLoadingItem {
@@ -74,55 +78,52 @@ function stableId(
   prefix: string,
   value: string
 ): string {
-  return `${prefix}_${
-    createHash('sha256')
-      .update(value)
-      .digest('hex')
-      .slice(0, 24)
-  }`;
+  return `${prefix}_${createHash("sha256")
+    .update(value)
+    .digest("hex")
+    .slice(0, 24)}`;
 }
 
 function groupStatus(
   statuses: string[]
 ): RxBoxGroupStatus {
   if (
+    statuses.length > 0 &&
     statuses.every(
       (status) =>
-        status === 'taken' ||
-        status === 'late'
+        status === "taken" ||
+        status === "late"
     )
   ) {
-    return 'taken';
+    return "taken";
   }
-
-  if (
-    statuses.every(
-      (status) =>
-        status === 'missed'
-    )
-  ) {
-    return 'missed';
-  }
-
-  const unresolved =
-    new Set([
-      'pending',
-      'reminder',
-    ]);
 
   if (
     statuses.length > 0 &&
     statuses.every(
-      (status) =>
-        !unresolved.has(status)
+      (status) => status === "missed"
     )
   ) {
-    return statuses.includes('missed')
-      ? 'missed'
-      : 'dispensed';
+    return "missed";
   }
 
-  return 'pending';
+  const unresolved = new Set([
+    "pending",
+    "reminder",
+  ]);
+
+  if (
+    statuses.length > 0 &&
+    statuses.every(
+      (status) => !unresolved.has(status)
+    )
+  ) {
+    return statuses.includes("missed")
+      ? "missed"
+      : "dispensed";
+  }
+
+  return "pending";
 }
 
 export function isValidRxBoxChamberId(
@@ -138,9 +139,7 @@ export function isValidRxBoxChamberId(
 export function uniqueRxBoxLogIds(
   logIds: string[]
 ): string[] {
-  return Array.from(
-    new Set(logIds)
-  );
+  return Array.from(new Set(logIds));
 }
 
 export function rxBoxEventIdentity(
@@ -158,242 +157,300 @@ export function buildRxBoxDailyPlan(
     timezone?: string;
   }
 ): RxBoxDailyPlan {
-  const timezone =
-    resolveMedicationTimeZone(
-      options.timezone
-    );
+  const timezone = resolveMedicationTimeZone(
+    options.timezone
+  );
 
-  const sortedDoses =
-    [...doses].sort(
-      (first, second) => {
-        const timeDifference =
-          parseMedicationTimeToMinutes(
-            first.scheduledTime
-          ) -
-          parseMedicationTimeToMinutes(
-            second.scheduledTime
-          );
-
-        if (timeDifference !== 0) {
-          return timeDifference;
-        }
-
-        const creationDifference =
-          new Date(
-            first.medicineCreatedAt
-          ).getTime() -
-          new Date(
-            second.medicineCreatedAt
-          ).getTime();
-
-        if (creationDifference !== 0) {
-          return creationDifference;
-        }
-
-        const medicineDifference =
-          first.medicineId.localeCompare(
-            second.medicineId
-          );
-
-        return (
-          medicineDifference ||
-          first.logId.localeCompare(
-            second.logId
-          )
+  const sortedDoses = [...doses].sort(
+    (first, second) => {
+      const timeDifference =
+        parseMedicationTimeToMinutes(
+          first.scheduledTime
+        ) -
+        parseMedicationTimeToMinutes(
+          second.scheduledTime
         );
+
+      if (timeDifference !== 0) {
+        return timeDifference;
       }
-    );
 
-  const proposedLoadingItems:
-    RxBoxLoadingItem[] = [];
+      const creationDifference =
+        new Date(
+          first.medicineCreatedAt
+        ).getTime() -
+        new Date(
+          second.medicineCreatedAt
+        ).getTime();
 
-  for (const dose of sortedDoses) {
-    const pillsPerDose =
-      Math.min(
-        RX_BOX_CAPACITY,
-        Math.max(
-          1,
-          dose.pillsPerDose
+      if (creationDifference !== 0) {
+        return creationDifference;
+      }
+
+      return (
+        first.medicineId.localeCompare(
+          second.medicineId
+        ) ||
+        first.logId.localeCompare(
+          second.logId
         )
       );
-
-    for (
-      let pillUnit = 1;
-      pillUnit <= pillsPerDose;
-      pillUnit += 1
-    ) {
-      proposedLoadingItems.push({
-        chamberId:
-          proposedLoadingItems.length + 1,
-
-        medicineId:
-          dose.medicineId,
-
-        logId:
-          dose.logId,
-
-        medicineName:
-          dose.medicineName,
-
-        dosage:
-          dose.dosage,
-
-        pillUnit,
-
-        pillsPerDose,
-
-        scheduledTime:
-          dose.scheduledTime,
-      });
     }
+  );
+
+  const proposedLoadingItems: RxBoxLoadingItem[] =
+    [];
+
+  const chamberTimeMap = new Map<
+    number,
+    number
+  >();
+
+  const errors: string[] = [];
+
+  for (const dose of sortedDoses) {
+    const scheduledMinutes =
+      parseMedicationTimeToMinutes(
+        dose.scheduledTime
+      );
+
+    const pillsPerDose = dose.pillsPerDose;
+
+    const chamberIds = [
+      ...new Set(dose.chamberIds ?? []),
+    ].sort((a, b) => a - b);
+
+    if (scheduledMinutes < 0) {
+      errors.push(
+        `Invalid scheduled time for ${dose.medicineName}.`
+      );
+      continue;
+    }
+
+    if (
+      !Number.isInteger(pillsPerDose) ||
+      pillsPerDose < 1 ||
+      pillsPerDose > 4
+    ) {
+      errors.push(
+        `Invalid pill quantity for ${dose.medicineName}.`
+      );
+      continue;
+    }
+
+    if (
+      chamberIds.length === 0 ||
+      chamberIds.length > RX_BOX_CAPACITY ||
+      chamberIds.some(
+        (id) => !isValidRxBoxChamberId(id)
+      )
+    ) {
+      errors.push(
+        `${dose.medicineName} at ${dose.scheduledTime} needs a valid chamber assignment.`
+      );
+      continue;
+    }
+
+    /*
+     * Each chamber may only be opened at one
+     * scheduled time during a daily loading cycle.
+     *
+     * Multiple medicines at the same time may
+     * share the chamber.
+     */
+    for (const chamberId of chamberIds) {
+      const existingTime =
+        chamberTimeMap.get(chamberId);
+
+      if (
+        existingTime !== undefined &&
+        existingTime !== scheduledMinutes
+      ) {
+        errors.push(
+          `Chamber ${chamberId} is assigned to different scheduled times.`
+        );
+      } else {
+        chamberTimeMap.set(
+          chamberId,
+          scheduledMinutes
+        );
+      }
+    }
+
+    /*
+     * Multiple pills may be loaded into
+     * a single selected chamber.
+     *
+     * A loading item represents one medicine
+     * assigned to one physical chamber.
+     *
+     * pillUnit is retained for compatibility
+     * with the existing loading-plan interface.
+     */
+    chamberIds.forEach((chamberId, index) => {
+      proposedLoadingItems.push({
+        chamberId,
+        medicineId: dose.medicineId,
+        logId: dose.logId,
+        medicineName: dose.medicineName,
+        dosage: dose.dosage,
+        pillUnit: index + 1,
+        pillsPerDose,
+        scheduledTime: dose.scheduledTime,
+      });
+    });
   }
 
-  const planSeed =
-    proposedLoadingItems
-      .map(
-        (item) =>
-          `${item.logId}:${item.pillUnit}:${item.scheduledTime}`
-      )
-      .join('|');
+  /*
+   * Count unique physical chambers,
+   * not the number of tablets or medicines.
+   */
+  const usedChambers = new Set(
+    proposedLoadingItems.map(
+      (item) => item.chamberId
+    )
+  );
 
-  const planId =
-    stableId(
-      'plan',
-      `${options.deviceId}:${options.date}:${planSeed}`
-    );
+  const requiredChambers = usedChambers.size;
 
   const exceeded =
-    proposedLoadingItems.length >
-    RX_BOX_CAPACITY;
+    requiredChambers > RX_BOX_CAPACITY ||
+    errors.length > 0;
 
-  // Never give hardware a partial plan.
-  const loadingPlan =
-    exceeded
-      ? []
-      : proposedLoadingItems;
+  /*
+   * Include manual assignments in the plan ID
+   * so changes can be detected.
+   */
+  const planSeed = sortedDoses
+    .map((dose) => {
+      const chambers = [
+        ...new Set(dose.chamberIds ?? []),
+      ].sort((a, b) => a - b);
 
-  const doseByLogId =
-    new Map(
-      sortedDoses.map(
-        (dose) => [
-          dose.logId,
-          dose,
-        ]
-      )
-    );
+      return [
+        dose.logId,
+        dose.scheduledTime,
+        dose.pillsPerDose,
+        chambers.join(","),
+      ].join(":");
+    })
+    .join("|");
 
-  const grouped =
-    new Map<
-      string,
-      RxBoxLoadingItem[]
-    >();
+  const planId = stableId(
+    "plan",
+    `${options.deviceId}:${options.date}:${planSeed}`
+  );
+
+  /*
+   * Never send a partial or conflicting
+   * dispensing plan to the hardware.
+   */
+  const loadingPlan = exceeded
+    ? []
+    : proposedLoadingItems;
+
+  const doseByLogId = new Map(
+    sortedDoses.map((dose) => [
+      dose.logId,
+      dose,
+    ])
+  );
+
+  /*
+   * Group all medicines scheduled at the
+   * same minute into one dispensing event.
+   */
+  const grouped = new Map<
+    number,
+    RxBoxLoadingItem[]
+  >();
 
   for (const item of loadingPlan) {
-    const existing =
-      grouped.get(
+    const minutes =
+      parseMedicationTimeToMinutes(
         item.scheduledTime
-      ) ?? [];
+      );
+
+    const existing =
+      grouped.get(minutes) ?? [];
 
     existing.push(item);
 
-    grouped.set(
-      item.scheduledTime,
-      existing
-    );
+    grouped.set(minutes, existing);
   }
 
-  const groups =
-    Array.from(
-      grouped.entries()
-    ).map(
-      ([
-        scheduledTime,
-        items,
-      ]) => {
-        const minutes =
-          parseMedicationTimeToMinutes(
-            scheduledTime
-          );
-
-        const logIds =
-          uniqueRxBoxLogIds(
+  const groups: RxBoxAlarmGroup[] =
+    Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([minutes, items]) => {
+        const chamberIds = [
+          ...new Set(
             items.map(
-              (item) => item.logId
+              (item) => item.chamberId
             )
-          );
+          ),
+        ].sort((a, b) => a - b);
 
-        const statuses =
-          logIds.map(
-            (logId) =>
-              doseByLogId.get(
-                logId
-              )?.logStatus ??
-              'pending'
-          );
+        const logIds = uniqueRxBoxLogIds(
+          items.map(
+            (item) => item.logId
+          )
+        );
+
+        const statuses = logIds.map(
+          (logId) =>
+            doseByLogId.get(logId)
+              ?.logStatus ?? "pending"
+        );
+
+        const scheduledTime =
+          items[0].scheduledTime;
+
+        const groupSeed = [
+          planId,
+          String(minutes),
+          chamberIds.join(","),
+          [...logIds].sort().join(","),
+        ].join(":");
 
         return {
-          groupId:
-            stableId(
-              'group',
-              `${planId}:${scheduledTime}:${
-                items
-                  .map(
-                    (item) =>
-                      `${item.logId}:${item.pillUnit}`
-                  )
-                  .join('|')
-              }`
-            ),
+          groupId: stableId(
+            "group",
+            groupSeed
+          ),
 
-          hour:
-            Math.floor(
-              minutes / 60
-            ),
+          hour: Math.floor(minutes / 60),
 
-          minute:
-            minutes % 60,
+          minute: minutes % 60,
 
           scheduledTime,
 
-          chamberIds:
-            items.map(
-              (item) =>
-                item.chamberId
-            ),
+          chamberIds,
 
           logIds,
 
-          status:
-            groupStatus(
-              statuses
-            ),
+          status: groupStatus(statuses),
         };
-      }
-    );
+      });
+
+  const errorMessage = [
+    ...new Set(errors),
+  ].join(" ");
 
   return {
     success: true,
     apiVersion: 1,
-    deviceId:
-      options.deviceId,
-    date:
-      options.date,
+    deviceId: options.deviceId,
+    date: options.date,
     timezone,
     planId,
 
-    hardwareDispensingEnabled:
-      !exceeded,
+    hardwareDispensingEnabled: !exceeded,
 
     capacity: {
-      used:
-        proposedLoadingItems.length,
-
-      required:
-        proposedLoadingItems.length,
-
-      maximum:
-        RX_BOX_CAPACITY,
-
+      used: requiredChambers,
+      required: requiredChambers,
+      maximum: RX_BOX_CAPACITY,
       exceeded,
     },
 
@@ -401,14 +458,11 @@ export function buildRxBoxDailyPlan(
 
     proposedLoadingItems,
 
-    groups:
-      exceeded
-        ? []
-        : groups,
+    groups: exceeded ? [] : groups,
 
-    message:
-      exceeded
-        ? `Today's schedule requires ${proposedLoadingItems.length} chambers, but the Rx Box has only ${RX_BOX_CAPACITY}. Hardware dispensing is disabled until the schedule is corrected.`
-        : 'Refill the Rx Box daily using this exact order.',
+    message: exceeded
+      ? errorMessage ||
+        "Invalid chamber configuration. Hardware dispensing is disabled."
+      : "Load the medicines into their manually assigned chambers. Multiple pills scheduled together may share one chamber if they fit and dispense safely.",
   };
 }

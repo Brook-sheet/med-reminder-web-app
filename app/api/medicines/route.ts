@@ -1,41 +1,49 @@
-// app/api/medicines/route.ts
+
 import {
   NextRequest,
   NextResponse,
-} from 'next/server';
+} from "next/server";
 
-import {
-  connectDB,
-} from '@/lib/mongodb';
-
-import Medicine from '@/models/Medicine';
-import MedicationLog from '@/models/MedicationLog';
+import { connectDB } from "@/lib/mongodb";
+import Medicine from "@/models/Medicine";
+import MedicationLog from "@/models/MedicationLog";
 
 import {
   getTokenFromRequest,
   verifyToken,
-} from '@/lib/auth';
+} from "@/lib/auth";
 
 import type {
   ApiResponse,
-} from '@/lib/interfaces/data/Api';
+} from "@/lib/interfaces/data/Api";
 
 import type {
   IMedicineDocument,
-} from '@/models/Medicine';
+  IMedicineChamberAssignment,
+} from "@/models/Medicine";
 
 import {
   getMedicationDateKey,
   isValidMedicationDateKey,
-} from '@/lib/medicationTime';
+  parseMedicationTimeToMinutes,
+} from "@/lib/medicationTime";
 
-async function getAuthUser(
-  request: NextRequest
-) {
-  const token =
-    getTokenFromRequest(
-      request
-    );
+const VALID_FREQUENCIES = [
+  "Once daily",
+  "Twice daily",
+  "Three times daily",
+  "Every 4 hours",
+  "Every 6 hours",
+  "Every 8 hours",
+  "Weekly",
+  "As needed",
+];
+
+const TIME_REGEX =
+  /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
+
+async function getAuthUser(request: NextRequest) {
+  const token = getTokenFromRequest(request);
 
   if (!token) {
     return null;
@@ -44,107 +52,68 @@ async function getAuthUser(
   return verifyToken(token);
 }
 
-const VALID_FREQUENCIES = [
-  'Once daily',
-  'Twice daily',
-  'Three times daily',
-  'Every 4 hours',
-  'Every 6 hours',
-  'Every 8 hours',
-  'Weekly',
-  'As needed',
-];
-
-const TIME_REGEX =
-  /^(1[0-2]|[1-9]):[0-5][0-9]\s(AM|PM)$/i;
-
-function isValidDate(
-  dateString: string
-): boolean {
-  return isValidMedicationDateKey(
-    dateString
-  );
-}
-
-function isValidTime(
-  timeString: string
-): boolean {
-  return TIME_REGEX.test(
-    timeString.trim()
-  );
+function isValidTime(value: string): boolean {
+  return TIME_REGEX.test(value.trim());
 }
 
 function sanitizeMedicineName(
   raw: unknown
 ): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  const value = raw.trim();
+
   if (
-    typeof raw !== 'string'
+    value.length === 0 ||
+    value.length > 100 ||
+    !/[a-zA-Z0-9]/.test(value)
   ) {
     return null;
   }
 
-  const trimmed =
-    raw.trim();
-
-  if (
-    trimmed.length === 0 ||
-    trimmed.length > 100
-  ) {
-    return null;
-  }
-
-  if (
-    !/[a-zA-Z0-9]/.test(
-      trimmed
-    )
-  ) {
-    return null;
-  }
-
-  if (
-    /^[^a-zA-Z0-9]+$/.test(
-      trimmed
-    )
-  ) {
-    return null;
-  }
-
-  return trimmed;
+  return value;
 }
 
 function sanitizeDosage(
   raw: unknown
 ): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  const value = raw.trim();
+
   if (
-    typeof raw !== 'string'
+    value.length === 0 ||
+    value.length > 50 ||
+    !/[a-zA-Z0-9]/.test(value)
   ) {
     return null;
   }
 
-  const trimmed =
-    raw.trim();
-
-  if (
-    trimmed.length === 0 ||
-    trimmed.length > 50
-  ) {
-    return null;
-  }
-
-  if (
-    !/[a-zA-Z0-9]/.test(
-      trimmed
-    )
-  ) {
-    return null;
-  }
-
-  return trimmed;
+  return value;
 }
 
 interface ValidationResult {
   valid: boolean;
   error?: string;
+}
+
+interface MedicinePayload {
+  name: string;
+  dosage: string;
+  frequency: string;
+  scheduledTimes: string[];
+  pillsPerDose: number;
+  chamberAssignments: IMedicineChamberAssignment[];
+  windowBeforeMinutes: number;
+  windowAfterMinutes: number;
+  lateAfterMinutes: number;
+  notes: string;
+  startDate: string;
+  endDate: string | null;
 }
 
 function validateMedicinePayload(
@@ -155,250 +124,251 @@ function validateMedicinePayload(
     dosage,
     frequency,
     scheduledTimes,
+    pillsPerDose,
+    chamberAssignments,
     startDate,
     endDate,
-    pillsPerDose,
     windowBeforeMinutes,
     windowAfterMinutes,
     lateAfterMinutes,
   } = body;
 
-  const cleanName =
-    sanitizeMedicineName(
-      name
-    );
-
-  if (!cleanName) {
+  if (!sanitizeMedicineName(name)) {
     return {
       valid: false,
-
       error:
-        'Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.',
+        "Medicine name is required, must be 1–100 characters, and must contain at least one letter or digit.",
     };
   }
 
-  const cleanDosage =
-    sanitizeDosage(
-      dosage
-    );
-
-  if (!cleanDosage) {
+  if (!sanitizeDosage(dosage)) {
     return {
       valid: false,
-
       error:
-        'Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.',
+        "Dosage is required, must be 1–50 characters, and must contain at least one letter or digit.",
     };
   }
 
   if (
-    !frequency ||
-    typeof frequency !==
-      'string'
+    typeof frequency !== "string" ||
+    !VALID_FREQUENCIES.includes(frequency)
   ) {
     return {
       valid: false,
       error:
-        'Frequency is required.',
+        `Frequency must be one of: ${VALID_FREQUENCIES.join(", ")}.`,
     };
   }
 
   if (
-    !VALID_FREQUENCIES.includes(
-      frequency
-    )
+    !Array.isArray(scheduledTimes) ||
+    scheduledTimes.length === 0 ||
+    scheduledTimes.length > 24
   ) {
     return {
       valid: false,
-
       error:
-        `Frequency must be one of: ${VALID_FREQUENCIES.join(', ')}.`,
+        "Provide between 1 and 24 scheduled times.",
     };
   }
 
-  if (
-    !Array.isArray(
-      scheduledTimes
-    ) ||
-    scheduledTimes.length ===
-      0
-  ) {
-    return {
-      valid: false,
+  const scheduleMinutes = new Set<number>();
 
-      error:
-        'At least one scheduled time is required.',
-    };
-  }
-
-  if (
-    scheduledTimes.length >
-      24
-  ) {
-    return {
-      valid: false,
-
-      error:
-        'A maximum of 24 scheduled times is allowed.',
-    };
-  }
-
-  for (
-    const time of
-    scheduledTimes
-  ) {
+  for (const time of scheduledTimes) {
     if (
-      typeof time !==
-        'string' ||
+      typeof time !== "string" ||
       !isValidTime(time)
     ) {
       return {
         valid: false,
-
         error:
-          `Invalid scheduled time "${String(time)}". Expected format: "H:MM AM" or "H:MM PM".`,
+          `Invalid scheduled time "${String(time)}".`,
       };
     }
-  }
 
-  const normalizedScheduledTimes =
-    scheduledTimes as string[];
+    const minutes =
+      parseMedicationTimeToMinutes(time);
 
-  const uniqueTimes =
-    new Set(
-      normalizedScheduledTimes.map(
-        (time) =>
-          time
-            .trim()
-            .toUpperCase()
-      )
-    );
-
-  if (
-    uniqueTimes.size !==
-      scheduledTimes.length
-  ) {
-    return {
-      valid: false,
-
-      error:
-        'Duplicate scheduled times are not allowed.',
-    };
-  }
-
-  if (
-    startDate !== undefined &&
-    startDate !== null &&
-    startDate !== ''
-  ) {
     if (
-      typeof startDate !==
-        'string' ||
-      !isValidDate(
-        startDate
-      )
+      minutes < 0 ||
+      scheduleMinutes.has(minutes)
     ) {
       return {
         valid: false,
-
         error:
-          'Start date must be a valid date in YYYY-MM-DD format.',
+          "Duplicate or invalid scheduled times are not allowed.",
       };
     }
+
+    scheduleMinutes.add(minutes);
+  }
+
+  const start =
+    typeof startDate === "string" && startDate
+      ? startDate
+      : getMedicationDateKey();
+
+  if (!isValidMedicationDateKey(start)) {
+    return {
+      valid: false,
+      error:
+        "Start date must be a valid YYYY-MM-DD date.",
+    };
   }
 
   if (
     endDate !== undefined &&
     endDate !== null &&
-    endDate !== ''
+    endDate !== ""
   ) {
     if (
-      typeof endDate !==
-        'string' ||
-      !isValidDate(
-        endDate
+      typeof endDate !== "string" ||
+      !isValidMedicationDateKey(endDate) ||
+      endDate < start
+    ) {
+      return {
+        valid: false,
+        error:
+          "End date must be valid and cannot be before the start date.",
+      };
+    }
+  }
+
+  const quantity =
+    pillsPerDose == null ? 1 : Number(pillsPerDose);
+
+  if (
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 4
+  ) {
+    return {
+      valid: false,
+      error:
+        "Pills per scheduled dose must be a whole number from 1 to 4.",
+    };
+  }
+
+  if (
+    !Array.isArray(chamberAssignments) ||
+    chamberAssignments.length !==
+      scheduledTimes.length
+  ) {
+    return {
+      valid: false,
+      error:
+        "Each scheduled time must have a chamber assignment.",
+    };
+  }
+
+  const assignedMinutes = new Set<number>();
+  const chamberTimes = new Map<number, number>();
+
+  for (const rawAssignment of chamberAssignments) {
+    if (
+      typeof rawAssignment !== "object" ||
+      rawAssignment === null
+    ) {
+      return {
+        valid: false,
+        error: "Invalid chamber assignment.",
+      };
+    }
+
+    const assignment = rawAssignment as Record<
+      string,
+      unknown
+    >;
+
+    if (
+      typeof assignment.scheduledTime !== "string" ||
+      !isValidTime(assignment.scheduledTime)
+    ) {
+      return {
+        valid: false,
+        error:
+          "Every chamber assignment needs a valid scheduled time.",
+      };
+    }
+
+    const minutes =
+      parseMedicationTimeToMinutes(
+        assignment.scheduledTime
+      );
+
+    if (
+      !scheduleMinutes.has(minutes) ||
+      assignedMinutes.has(minutes)
+    ) {
+      return {
+        valid: false,
+        error:
+          "Chamber assignments must match the medicine's scheduled times exactly.",
+      };
+    }
+
+    assignedMinutes.add(minutes);
+
+    const chamberIds = assignment.chamberIds;
+
+    if (
+      !Array.isArray(chamberIds) ||
+      chamberIds.length === 0 ||
+      chamberIds.length > 4 ||
+      new Set(chamberIds).size !== chamberIds.length ||
+      chamberIds.some(
+        (id) =>
+          typeof id !== "number" ||
+          !Number.isInteger(id) ||
+          id < 1 ||
+          id > 4
       )
     ) {
       return {
         valid: false,
-
         error:
-          'End date must be a valid date in YYYY-MM-DD format.',
+          "Select one or more unique chambers numbered 1 to 4.",
       };
     }
 
-    const normalizedStartDate =
-      typeof startDate ===
-        'string' &&
-      startDate
-        ? startDate
-        : getMedicationDateKey();
+    for (const chamberId of chamberIds as number[]) {
+      const previousTime =
+        chamberTimes.get(chamberId);
 
-    if (
-      endDate <
-      normalizedStartDate
-    ) {
-      return {
-        valid: false,
+      if (
+        previousTime !== undefined &&
+        previousTime !== minutes
+      ) {
+        return {
+          valid: false,
+          error:
+            `Chamber ${chamberId} cannot be assigned to different dispensing times.`,
+        };
+      }
 
-        error:
-          'End date cannot be before start date.',
-      };
+      chamberTimes.set(chamberId, minutes);
     }
   }
 
-  const normalizedPillsPerDose =
-    pillsPerDose == null
-      ? 1
-      : Number(
-          pillsPerDose
-        );
-
-  if (
-    !Number.isInteger(
-      normalizedPillsPerDose
-    ) ||
-    normalizedPillsPerDose <
-      1 ||
-    normalizedPillsPerDose >
-      4
-  ) {
-    return {
-      valid: false,
-
-      error:
-        'Pills per scheduled dose must be a whole number from 1 to 4.',
-    };
-  }
-
-  for (
-    const [
-      field,
-      value,
-    ] of Object.entries({
-      windowBeforeMinutes,
-      windowAfterMinutes,
-      lateAfterMinutes,
-    })
-  ) {
+  for (const [field, value] of Object.entries({
+    windowBeforeMinutes,
+    windowAfterMinutes,
+    lateAfterMinutes,
+  })) {
     if (
       value !== undefined &&
       value !== null &&
-      value !== ''
+      value !== ""
     ) {
-      const minutes =
-        Number(value);
+      const minutes = Number(value);
 
       if (
-        !Number.isInteger(
-          minutes
-        ) ||
+        !Number.isInteger(minutes) ||
         minutes < 0 ||
         minutes > 720
       ) {
         return {
           valid: false,
-
           error:
             `${field} must be a whole number from 0 to 720.`,
         };
@@ -406,37 +376,167 @@ function validateMedicinePayload(
     }
   }
 
-  if (
-    lateAfterMinutes !==
-      undefined &&
-    windowAfterMinutes !==
-      undefined &&
-    Number(
-      lateAfterMinutes
-    ) >
-      Number(
-        windowAfterMinutes
-      )
-  ) {
+  const after =
+    windowAfterMinutes == null
+      ? 90
+      : Number(windowAfterMinutes);
+
+  const late =
+    lateAfterMinutes == null
+      ? 30
+      : Number(lateAfterMinutes);
+
+  if (late > after) {
     return {
       valid: false,
-
       error:
-        'Late threshold cannot be longer than the after-window.',
+        "Late threshold cannot be longer than the after-window.",
     };
   }
 
+  return { valid: true };
+}
+
+function normalizePayload(
+  body: Record<string, unknown>
+): MedicinePayload {
   return {
-    valid: true,
+    name: (body.name as string).trim(),
+    dosage: (body.dosage as string).trim(),
+    frequency: body.frequency as string,
+
+    scheduledTimes: (
+      body.scheduledTimes as string[]
+    ).map((time) => time.trim()),
+
+    pillsPerDose:
+      body.pillsPerDose == null
+        ? 1
+        : Number(body.pillsPerDose),
+
+    chamberAssignments: (
+      body.chamberAssignments as
+        IMedicineChamberAssignment[]
+    ).map((assignment) => ({
+      scheduledTime:
+        assignment.scheduledTime.trim(),
+
+      chamberIds: [
+        ...assignment.chamberIds,
+      ].sort((a, b) => a - b),
+    })),
+
+    windowBeforeMinutes:
+      body.windowBeforeMinutes == null
+        ? 30
+        : Number(body.windowBeforeMinutes),
+
+    windowAfterMinutes:
+      body.windowAfterMinutes == null
+        ? 90
+        : Number(body.windowAfterMinutes),
+
+    lateAfterMinutes:
+      body.lateAfterMinutes == null
+        ? 30
+        : Number(body.lateAfterMinutes),
+
+    notes:
+      typeof body.notes === "string"
+        ? body.notes.trim().slice(0, 500)
+        : "",
+
+    startDate:
+      typeof body.startDate === "string" &&
+      body.startDate.trim()
+        ? body.startDate.trim()
+        : getMedicationDateKey(),
+
+    endDate:
+      typeof body.endDate === "string" &&
+      body.endDate.trim()
+        ? body.endDate.trim()
+        : null,
   };
 }
 
 /**
- * Creates scheduled-dose logs for today when the newly
- * created medicine is active today.
+ * Check other active medicines belonging to the patient.
  *
- * pillsPerDose is intentionally not expanded here.
- * One scheduled dose remains one adherence log.
+ * Sharing a chamber is permitted only when the
+ * dispensing times are equal.
+ *
+ * Date ranges must overlap for a conflict to matter.
+ */
+async function findChamberConflict(
+  userId: string,
+  payload: MedicinePayload
+): Promise<string | null> {
+  const otherMedicines = await Medicine.find({
+    userId,
+    isActive: true,
+  })
+    .select(
+      "name startDate endDate chamberAssignments"
+    )
+    .lean();
+
+  for (const other of otherMedicines) {
+    const otherStart =
+      other.startDate || "0000-01-01";
+
+    const otherEnd =
+      other.endDate || "9999-12-31";
+
+    const currentEnd =
+      payload.endDate || "9999-12-31";
+
+    const datesOverlap =
+      payload.startDate <= otherEnd &&
+      otherStart <= currentEnd;
+
+    if (!datesOverlap) {
+      continue;
+    }
+
+    for (const incoming of payload.chamberAssignments) {
+      const incomingMinutes =
+        parseMedicationTimeToMinutes(
+          incoming.scheduledTime
+        );
+
+      for (const existing of other.chamberAssignments ?? []) {
+        const existingMinutes =
+          parseMedicationTimeToMinutes(
+            existing.scheduledTime
+          );
+
+        const sharedChambers =
+          incoming.chamberIds.filter((id) =>
+            existing.chamberIds.includes(id)
+          );
+
+        if (
+          sharedChambers.length > 0 &&
+          incomingMinutes !== existingMinutes
+        ) {
+          return (
+            `Chamber ${sharedChambers.join(", ")} is already ` +
+            `assigned to ${other.name} at ` +
+            `${existing.scheduledTime}. ` +
+            "Choose a different chamber or use the same dispensing time."
+          );
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * One medication log represents one scheduled
+ * dose, regardless of pill quantity.
  */
 async function createLogsFromStartDate(
   userId: string,
@@ -449,72 +549,50 @@ async function createLogsFromStartDate(
   windowBeforeMinutes: number,
   windowAfterMinutes: number,
   lateAfterMinutes: number
-) {
-  const today =
-    getMedicationDateKey();
+): Promise<void> {
+  const today = getMedicationDateKey();
 
   if (
     startDate > today ||
-    (
-      endDate &&
-      endDate < today
-    )
+    (endDate && endDate < today)
   ) {
     return;
   }
 
-  for (
-    const time of
-    scheduledTimes
-  ) {
-    const existing =
-      await MedicationLog.findOne({
-        userId,
-        medicineId,
-        scheduledDate:
-          today,
-        scheduledTime:
-          time,
-      });
+  for (const time of scheduledTimes) {
+    const existing = await MedicationLog.findOne({
+      userId,
+      medicineId,
+      scheduledDate: today,
+      scheduledTime: time,
+    });
 
-    if (!existing) {
-      await MedicationLog.create({
-        userId,
-        medicineId,
-        medicineName,
-        dosage,
-
-        scheduledDate:
-          today,
-
-        scheduledTime:
-          time,
-
-        status:
-          'pending',
-
-        source:
-          'auto',
-
-        eventType:
-          'SCHEDULED',
-
-        expectedChamberId:
-          null,
-
-        expectedChamberIds:
-          [],
-
-        windowBeforeMinutes,
-
-        windowAfterMinutes,
-
-        lateAfterMinutes,
-
-        countsTowardAdherence:
-          true,
-      });
+    if (existing) {
+      continue;
     }
+
+    await MedicationLog.create({
+      userId,
+      medicineId,
+      medicineName,
+      dosage,
+
+      scheduledDate: today,
+      scheduledTime: time,
+
+      status: "pending",
+      source: "auto",
+      eventType: "SCHEDULED",
+
+      expectedChamberId: null,
+      expectedChamberIds: [],
+
+      windowBeforeMinutes,
+      windowAfterMinutes,
+      lateAfterMinutes,
+
+      countsTowardAdherence: true,
+    });
   }
 }
 
@@ -522,37 +600,26 @@ export async function GET(
   request: NextRequest
 ) {
   try {
-    const user =
-      await getAuthUser(
-        request
-      );
+    const user = await getAuthUser(request);
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Unauthorized',
+          error: "Unauthorized",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
     await connectDB();
 
-    const medicines =
-      await Medicine.find({
-        userId:
-          user.userId,
-
-        isActive:
-          true,
-      }).sort({
-        createdAt:
-          -1,
-      });
+    const medicines = await Medicine.find({
+      userId: user.userId,
+      isActive: true,
+    }).sort({
+      createdAt: -1,
+    });
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -560,19 +627,16 @@ export async function GET(
     });
   } catch (error) {
     console.error(
-      '[GET /api/medicines]',
+      "[GET /api/medicines]",
       error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error:
-          'Internal server error',
+        error: "Internal server error",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
@@ -581,197 +645,84 @@ export async function POST(
   request: NextRequest
 ) {
   try {
-    const user =
-      await getAuthUser(
-        request
-      );
+    const user = await getAuthUser(request);
 
     if (!user) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Unauthorized',
+          error: "Unauthorized",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
     await connectDB();
 
-    let body:
-      Record<string, unknown>;
+    let body: Record<string, unknown>;
 
     try {
-      body =
-        (await request.json()) as
-          Record<
-            string,
-            unknown
-          >;
+      body = (await request.json()) as Record<
+        string,
+        unknown
+      >;
     } catch {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            'Invalid JSON body.',
+          error: "Invalid JSON body.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     const validation =
-      validateMedicinePayload(
-        body
-      );
+      validateMedicinePayload(body);
 
-    if (
-      !validation.valid
-    ) {
+    if (!validation.valid) {
       return NextResponse.json<ApiResponse>(
         {
           success: false,
-          error:
-            validation.error,
+          error: validation.error,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const name =
-      (
-        body.name as string
-      ).trim();
+    const payload = normalizePayload(body);
 
-    const dosage =
-      (
-        body.dosage as string
-      ).trim();
+    const conflict = await findChamberConflict(
+      user.userId,
+      payload
+    );
 
-    const frequency =
-      body.frequency as string;
-
-    const rawScheduledTimes =
-      body.scheduledTimes as
-        string[];
-
-    const scheduledTimes =
-      rawScheduledTimes.map(
-        (time) =>
-          time.trim()
+    if (conflict) {
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: conflict,
+        },
+        { status: 409 }
       );
+    }
 
-    const notes =
-      typeof body.notes ===
-        'string'
-        ? body.notes
-            .trim()
-            .slice(
-              0,
-              500
-            )
-        : '';
+    const medicine: IMedicineDocument =
+      await Medicine.create({
+        userId: user.userId,
 
-    const startDate =
-      typeof body.startDate ===
-        'string' &&
-      body.startDate.trim()
-        ? body.startDate.trim()
-        : getMedicationDateKey();
+        ...payload,
 
-    const endDate =
-      typeof body.endDate ===
-        'string' &&
-      body.endDate.trim()
-        ? body.endDate.trim()
-        : null;
-
-    const pillsPerDose =
-      body.pillsPerDose ==
-        null
-        ? 1
-        : Number(
-            body.pillsPerDose
-          );
-
-    const windowBeforeMinutes =
-      body.windowBeforeMinutes ==
-        null
-        ? 30
-        : Number(
-            body.windowBeforeMinutes
-          );
-
-    const windowAfterMinutes =
-      body.windowAfterMinutes ==
-        null
-        ? 90
-        : Number(
-            body.windowAfterMinutes
-          );
-
-    const lateAfterMinutes =
-      body.lateAfterMinutes ==
-        null
-        ? 30
-        : Number(
-            body.lateAfterMinutes
-          );
-
-    /*
-     * No chamberId is accepted or assigned here.
-     * The daily Rx Box plan owns chamber allocation.
-     */
-    const medicine:
-      IMedicineDocument =
-        await Medicine.create({
-          userId:
-            user.userId,
-
-          name,
-
-          dosage,
-
-          frequency,
-
-          scheduledTimes,
-
-          pillsPerDose,
-
-          windowBeforeMinutes,
-
-          windowAfterMinutes,
-
-          lateAfterMinutes,
-
-          startDate,
-
-          endDate,
-
-          notes,
-
-          isActive:
-            true,
-        });
-
-    const medicineScheduledTimes =
-      medicine.scheduledTimes as
-        string[];
+        isActive: true,
+      });
 
     await createLogsFromStartDate(
       user.userId,
       medicine._id.toString(),
       medicine.name,
       medicine.dosage,
-      medicineScheduledTimes,
-      startDate,
-      endDate,
+      medicine.scheduledTimes,
+      payload.startDate,
+      payload.endDate,
       medicine.windowBeforeMinutes,
       medicine.windowAfterMinutes,
       medicine.lateAfterMinutes
@@ -781,28 +732,22 @@ export async function POST(
       {
         success: true,
         data: medicine,
-        message:
-          'Medicine added successfully',
+        message: "Medicine added successfully",
       },
-      {
-        status: 201,
-      }
+      { status: 201 }
     );
   } catch (error) {
     console.error(
-      '[POST /api/medicines]',
+      "[POST /api/medicines]",
       error
     );
 
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error:
-          'Internal server error',
+        error: "Internal server error",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
