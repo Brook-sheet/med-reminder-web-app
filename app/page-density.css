@@ -1,0 +1,162 @@
+/* Shared screen spacing. Leave report printing and overlay positioning alone. */
+@media screen {
+  .rx-app {
+    --rx-content-width: 80rem;
+    --rx-section-gap: 1.25rem;
+    --rx-card-padding: 1.25rem;
+  }
+
+  .rx-main {
+    min-width: 0;
+  }
+
+  .rx-page > .rx-page-enter > :is(.min-h-screen, .min-h-full) {
+    min-height: 0;
+    padding: 0;
+  }
+
+  /* Align the first content container on Dashboard and both role views. */
+  .rx-page > .rx-page-enter > div > :is(.max-w-7xl, .max-w-6xl, .max-w-4xl) {
+    width: 100%;
+    max-width: var(--rx-content-width);
+    min-width: 0;
+    padding: 0;
+  }
+
+  .rx-page > .rx-page-enter > .rx-fade-in[aria-busy="true"] {
+    padding-inline: 0;
+  }
+
+  .rx-page .rx-page-enter :is(.mb-6, .mb-8):has(> h1) {
+    margin-bottom: var(--rx-section-gap);
+  }
+
+  .rx-page .rx-page-enter h1.text-3xl {
+    font-size: clamp(1.5rem, 1.2rem + 0.6vw, 1.875rem);
+    line-height: 1.25;
+  }
+
+  /* Give page sections the same padding without resizing nested controls. */
+  .rx-page .rx-page-enter > div > div > :is(section, div).bg-card:is(.p-5, .p-6, .p-8),
+  .rx-page .rx-page-enter > div > div > .space-y-4 > :is(section, div).bg-card:is(.p-5, .p-6),
+  .rx-page .rx-page-enter > div > div > .space-y-4 > .space-y-5 > section:is(.p-5, .p-6),
+  .rx-page .report-section {
+    padding: var(--rx-card-padding);
+  }
+
+  .rx-page .rx-page-enter > div > :is(.space-y-5, .space-y-7) > :not(:last-child),
+  .rx-page .rx-page-enter > div > div > .space-y-4 > .space-y-5 > :not(:last-child) {
+    margin-block-end: var(--rx-section-gap);
+  }
+
+  .rx-page .rx-page-enter > div > .max-w-7xl.flex.flex-col,
+  .rx-page :where(.rx-dashboard) .rx-summary {
+    gap: var(--rx-section-gap);
+  }
+
+  .rx-app > div > .relative.min-h-screen:has(> main.max-w-md) {
+    padding-block: 1.5rem;
+  }
+
+  .rx-app > div > .relative.min-h-screen > main.max-w-md
+    [data-slot="card-header"] {
+    gap: 0.5rem;
+    padding-top: 1.25rem;
+  }
+
+  .rx-app > div > .relative.min-h-screen > main.max-w-md
+    [data-slot="card-header"] > .mb-6 {
+    margin-bottom: 0.75rem;
+  }
+
+  .rx-app > div > .min-h-screen > .max-w-4xl > main > :is(.py-8, .space-y-8) {
+    padding: clamp(1rem, 3vw, 1.5rem);
+  }
+}
+
+@media screen and (min-width: 768px) {
+  .rx-page .rx-chats {
+    min-height: 18rem;
+    height: calc(100dvh - 3.5rem - env(safe-area-inset-bottom));
+    max-height: none;
+  }
+}
+
+@media screen and (min-width: 1024px) {
+  .rx-page .rx-page-enter [class~="lg:grid-rows-[minmax(28rem,auto)]"] {
+    grid-template-rows: minmax(20rem, auto);
+  }
+}
+
+@media screen and (min-width: 768px) and (max-width: 1023px) {
+  /* The fixed sidebar reduces the available tablet content width. */
+  .rx-page .rx-summary,
+  .rx-page .rx-page-enter > div > div > section .grid-cols-2.md\:grid-cols-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rx-page .rx-summary > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .rx-page .rx-chats .rx-chat-panes > :first-child {
+    width: 40%;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .rx-app {
+    --rx-section-gap: 1rem;
+    --rx-card-padding: 1rem;
+  }
+
+  .rx-page .rx-page-enter > div > div > .mb-6:has(> div > #sort) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .rx-page .rx-page-enter > div > div > .mb-6:has(> div > #sort) > * {
+    flex: 1 1 9rem;
+    min-width: 0;
+  }
+
+  .rx-page .rx-page-enter [aria-label="Medication alert list"] > :is(.p-8, .p-12) {
+    padding: 1.25rem;
+  }
+
+  /* Keep monitoring controls and timestamps readable on narrow screens. */
+  .rx-page .rx-page-enter > div > .max-w-4xl > .rounded-xl:has(> p.ml-auto) {
+    flex-wrap: wrap;
+  }
+
+  .rx-page .rx-page-enter > div > .max-w-4xl > .rounded-xl:has(> p.ml-auto) > p:first-of-type {
+    flex: 1 1 12rem;
+  }
+
+  .rx-page .rx-page-enter .report-actions :is(input, select) {
+    max-width: 100%;
+  }
+
+  .rx-page .rx-chats:not([data-conversation-open="true"]) {
+    min-height: 18rem;
+    height: calc(
+      100dvh - 156px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
+  }
+
+  html[data-rx-standalone="true"] .rx-page .rx-chats:not([data-conversation-open="true"]) {
+    height: calc(
+      100dvh - var(--rx-pwa-header-height, 56px) -
+      var(--rx-pwa-nav-height, 84px) - 32px
+    );
+  }
+
+  .rx-page .rx-chat-list-tools > :first-child {
+    padding-block: 0.5rem;
+  }
+
+  .rx-app > div > .relative.min-h-screen:has(> main.max-w-md) {
+    padding-block: 1rem;
+  }
+}

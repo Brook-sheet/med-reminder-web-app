@@ -7,6 +7,7 @@ import {
 
 import "./globals.css";
 import "./mobile.css";
+import "./page-density.css";
 import "./chat-bubbles.css";
 import "./mobile-pwa.css";
 
@@ -75,22 +76,17 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(() => {
-              const query = matchMedia('(display-mode: standalone)');
-              const update = () => {
-                const standalone = query.matches || navigator.standalone === true;
-                document.documentElement.dataset.rxStandalone = String(standalone);
-              };
-              update();
-              query.addEventListener('change', update);
-              window.addEventListener('pageshow', update);
-            })();`,
-          }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: `(() => {
+          const query = matchMedia('(display-mode: standalone)');
+          const update = () => {
+            const standalone = query.matches || navigator.standalone === true;
+            document.documentElement.dataset.rxStandalone = String(standalone);
+          };
+          update();
+          query.addEventListener('change', update);
+          window.addEventListener('pageshow', update);
+        })();` }} />
       </head>
-
       <body
         className={`rx-app ${geistSans.variable} ${geistMono.variable} antialiased`}
       >
