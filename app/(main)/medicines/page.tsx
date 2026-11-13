@@ -9,9 +9,13 @@ import {
 } from "react";
 
 import {
+  ArrowUpDown,
+  Check,
   AlertTriangle,
   Plus,
 } from "lucide-react";
+
+import { DropdownMenu } from "radix-ui";
 
 import MedicineCard from "@/components/dashboard/medicines/MedicineCard";
 import MedicineModal from "@/components/dashboard/medicines/MedicineModal";
@@ -724,58 +728,77 @@ const Medicines = () => {
           </p>
         </div>
 
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
           <button
             type="button"
             onClick={handleAdd}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 sm:w-auto dark:bg-blue-700 dark:hover:bg-blue-800"
+            className="flex min-h-11 max-w-full justify-self-start items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800"
           >
             <Plus className="h-5 w-5" />
             Add New Medicine
           </button>
 
-          <div className="ml-0 flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-            <label
-              htmlFor="sort"
-              className="hidden text-sm text-gray-600 sm:block dark:text-gray-300"
-            >
-              Sort:
-            </label>
-
-            <select
+          <div className="relative shrink-0">
+            <input
               id="sort"
-              value={
-                sortOption
-              }
-              onChange={(
-                event
-              ) =>
-                setSortOption(
-                  event.target
-                    .value as
-                    SortOption
-                )
-              }
-              className="w-full rounded-lg border border-border/60 bg-card px-3 py-2 text-sm sm:w-auto"
-            >
-              <option value="recent">
-                Recently Added
-              </option>
+              type="hidden"
+              value={sortOption}
+            />
 
-              <option value="oldest">
-                Oldest Added
-              </option>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label="Sort medicines"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                >
+                  <ArrowUpDown
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  />
+                  Sort
+                </button>
+              </DropdownMenu.Trigger>
 
-              <option value="az">
-                Alphabetical
-                (A–Z)
-              </option>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[110] w-56 max-w-[calc(100vw-24px)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-xl border border-border bg-card p-1 text-foreground shadow-xl"
+                >
+                  <DropdownMenu.RadioGroup
+                    value={sortOption}
+                    onValueChange={(value) =>
+                      setSortOption(value as SortOption)
+                    }
+                    aria-label="Sort medicines by"
+                  >
+                    {([
+                      ["recent", "Recently Added"],
+                      ["oldest", "Oldest Added"],
+                      ["az", "Alphabetical (A–Z)"],
+                      ["za", "Alphabetical (Z–A)"],
+                    ] as const).map(([value, label]) => (
+                      <DropdownMenu.RadioItem
+                        key={value}
+                        value={value}
+                        className="relative flex min-h-11 cursor-pointer select-none items-center rounded-lg py-2 pl-9 pr-3 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=checked]:font-semibold"
+                      >
+                        <DropdownMenu.ItemIndicator className="absolute left-3">
+                          <Check
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                        </DropdownMenu.ItemIndicator>
 
-              <option value="za">
-                Alphabetical
-                (Z–A)
-              </option>
-            </select>
+                        {label}
+                      </DropdownMenu.RadioItem>
+                    ))}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </div>
         </div>
 

@@ -118,48 +118,43 @@ const MedicineCard:
             : ""
         }`}
       >
-        <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-base font-bold text-white sm:h-12 sm:w-12 sm:text-lg ${avatarColor}`}
-            >
-              {firstLetter}
-            </div>
-
-            <div className="min-w-0 space-y-0.5">
-              <h3 className="truncate text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
-                {name}
-              </h3>
-
-              <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-                {dosage}
-              </p>
-            </div>
+        <header className="mb-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 sm:gap-x-3">
+          <div
+            className={`row-span-2 mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-base font-bold text-white sm:h-12 sm:w-12 sm:text-lg ${avatarColor}`}
+          >
+            {firstLetter}
           </div>
 
-          <div className="ml-0 flex shrink-0 gap-2 sm:ml-4">
+          <h3 className="flex min-h-11 min-w-0 items-center text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{name}</span>
+          </h3>
+
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={onEdit}
-              className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+              disabled={isDeleting}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-50 dark:hover:bg-gray-700"
               aria-label={`Edit ${name}`}
             >
-              <Edit2 className="h-5 w-5 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" />
+              <Edit2 className="h-5 w-5 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" aria-hidden="true" />
             </button>
 
             <button
               type="button"
               onClick={onDelete}
-              disabled={
-                isDeleting
-              }
-              className="rounded-lg p-2 transition-colors hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+              disabled={isDeleting}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 dark:hover:bg-red-900/20"
               aria-label={`Delete ${name}`}
             >
-              <Trash2 className="h-5 w-5 text-gray-600 hover:text-red-600 dark:text-gray-400" />
+              <Trash2 className="h-5 w-5 text-gray-600 hover:text-red-600 dark:text-gray-400" aria-hidden="true" />
             </button>
           </div>
-        </div>
+
+          <p className="col-start-2 col-end-4 min-w-0 text-sm text-gray-500 [overflow-wrap:anywhere] dark:text-gray-400">
+            {dosage}
+          </p>
+        </header>
 
         <div className="mb-3 h-px bg-gray-100 dark:bg-gray-700" />
 
