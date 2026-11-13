@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import MobilePwaNav from "@/components/pwa/MobilePwaNav";
 import PwaInstall from "@/components/pwa/PwaInstall";
 
 import { useChatNotifications } from "@/hooks/useChatNotifications";
@@ -185,6 +186,13 @@ const Navbar = ({ role }: NavbarProps) => {
 
   return (
     <div>
+      <MobilePwaNav
+        role={role}
+        items={items}
+        loggingOut={loggingOut}
+        onLogout={handleLogout}
+      />
+
       <header className="rx-mobile-topbar rx-brand-bar rx-brand-bar--edge fixed inset-x-0 top-0 z-30 flex items-center gap-3 border-b md:hidden print:hidden">
         <Link
           href={role === "family" ? "/monitor" : "/"}

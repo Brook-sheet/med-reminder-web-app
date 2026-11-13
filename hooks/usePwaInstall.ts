@@ -70,8 +70,6 @@ export function initializePwaInstall() {
       "(display-mode: standalone)"
     );
 
-  let installedHere = false;
-
   const update = () => {
     const appleStandalone = (
       navigator as Navigator & {
@@ -80,12 +78,9 @@ export function initializePwaInstall() {
     ).standalone;
 
     publish({
-      ready:
-        window.isSecureContext &&
-        "serviceWorker" in navigator,
+      ready: true,
 
       installed:
-        installedHere ||
         standalone.matches ||
         Boolean(appleStandalone),
 
@@ -120,15 +115,15 @@ export function initializePwaInstall() {
   };
 
   const installed = () => {
-    installedHere = true;
-
+    // An installation event does not change this browser window’s mode.
     delete window.rxBoxInstallPrompt;
 
     publish({
-      installed: true,
       prompt: null,
       busy: false,
     });
+
+    update();
   };
 
   window.addEventListener(
@@ -143,6 +138,11 @@ export function initializePwaInstall() {
 
   window.addEventListener(
     "focus",
+    update
+  );
+
+  window.addEventListener(
+    "pageshow",
     update
   );
 
@@ -169,6 +169,11 @@ export function initializePwaInstall() {
       update
     );
 
+    window.removeEventListener(
+      "pageshow",
+      update
+    );
+
     standalone.removeEventListener(
       "change",
       update
@@ -183,7 +188,7 @@ export async function requestPwaInstall(): Promise<
 > {
   const prompt = state.prompt;
 
-  if (!prompt || state.ios) {
+  if (!prompt) {
     return "instructions";
   }
 

@@ -157,7 +157,7 @@ export default function Home() {
     "All done for today!";
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="rx-dashboard min-h-screen bg-background p-6">
       <div className="mx-auto max-w-7xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -169,7 +169,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="rx-summary mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
           <StatCard
             title="Adherence Rate"
             value={

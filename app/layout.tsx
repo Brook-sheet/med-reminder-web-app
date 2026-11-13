@@ -8,6 +8,7 @@ import {
 import "./globals.css";
 import "./mobile.css";
 import "./chat-bubbles.css";
+import "./mobile-pwa.css";
 
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "next-themes";
@@ -73,6 +74,23 @@ export default function RootLayout({
       className={cn("font-sans", inter.variable)}
       suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              const query = matchMedia('(display-mode: standalone)');
+              const update = () => {
+                const standalone = query.matches || navigator.standalone === true;
+                document.documentElement.dataset.rxStandalone = String(standalone);
+              };
+              update();
+              query.addEventListener('change', update);
+              window.addEventListener('pageshow', update);
+            })();`,
+          }}
+        />
+      </head>
+
       <body
         className={`rx-app ${geistSans.variable} ${geistMono.variable} antialiased`}
       >

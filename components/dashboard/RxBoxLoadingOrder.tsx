@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -339,7 +338,7 @@ export default function RxBoxLoadingOrder() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-border/80">
+      <div className="rx-chamber-grid overflow-hidden rounded-2xl border border-border/80">
         {chamberGroups.map(
           (group) => {
             const hasMedicines =

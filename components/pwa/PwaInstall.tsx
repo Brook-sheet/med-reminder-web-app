@@ -470,6 +470,12 @@ export default function PwaInstall({
                 )}
 
                 <p>
+                  Already installed? Open Rx Box from your device’s home screen
+                  or app list. This browser may not offer another install prompt
+                  and cannot reliably open the installed app for you.
+                </p>
+
+                <p>
                   After installation,
                   open Settings in Rx Box
                   to enable device

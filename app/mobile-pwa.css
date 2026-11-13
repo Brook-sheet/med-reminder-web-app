@@ -1,0 +1,324 @@
+/* Runtime display mode is set before paint. No persisted installation flag. */
+.rx-pwa-nav,
+.rx-pwa-sheet:not([open]) {
+  display: none;
+}
+
+@media screen and (max-width: 767px) {
+  html[data-rx-standalone="true"] {
+    --rx-pwa-header-height: calc(56px + env(safe-area-inset-top));
+
+    /* Keep the original branded header; replace only its menu control. */
+    .rx-mobile-topbar {
+      height: auto;
+      min-height: calc(56px + env(safe-area-inset-top));
+      padding-right: calc(68px + env(safe-area-inset-right));
+    }
+
+    .rx-mobile-topbar > a {
+      min-height: 44px;
+    }
+
+    .rx-mobile-topbar > button,
+    .rx-shell > div:first-child > button,
+    .rx-shell > div:first-child > aside {
+      display: none;
+    }
+
+    .rx-main {
+      padding-bottom: calc(var(--rx-pwa-nav-height, 84px) + 16px);
+    }
+
+    .rx-page {
+      padding-top: calc(var(--rx-pwa-header-height) + 16px);
+    }
+
+    .rx-page-enter {
+      transform: none;
+      animation: none;
+    }
+
+    /* Reposition the same live bell and panel, without remounting them. */
+    .rx-notification-controls > .fixed {
+      top: calc(env(safe-area-inset-top) + 6px);
+      bottom: auto;
+      right: max(12px, env(safe-area-inset-right));
+    }
+
+    .rx-notification-controls > .fixed > button {
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
+    }
+
+    .rx-notification-controls > .fixed > .absolute {
+      top: 52px;
+      bottom: auto;
+      max-height: calc(
+        100dvh -
+        var(--rx-pwa-header-height) -
+        var(--rx-pwa-nav-height, 84px) -
+        24px
+      );
+    }
+
+    .rx-notification-controls button {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .rx-pwa-nav {
+      position: fixed;
+      z-index: 30;
+      inset: auto 0 0;
+      display: flex;
+      align-items: stretch;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      padding:
+        6px
+        max(6px, env(safe-area-inset-right))
+        max(6px, env(safe-area-inset-bottom))
+        max(6px, env(safe-area-inset-left));
+    }
+
+    .rx-pwa-nav > :is(a, button) {
+      flex: 1 1 0;
+      min-width: 44px;
+      min-height: 56px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 4px 2px;
+      border-radius: 14px;
+      font-size: 0.75rem;
+      line-height: 1.25;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .rx-pwa-icon {
+      position: relative;
+      display: inline-flex;
+      flex-shrink: 0;
+    }
+
+    .rx-pwa-nav .rx-pwa-icon {
+      padding: 4px 12px;
+      border-radius: 99px;
+    }
+
+    .rx-pwa-nav :is([aria-current="page"], [data-active="true"]) {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .rx-pwa-nav
+      :is([aria-current="page"], [data-active="true"])
+      .rx-pwa-icon {
+      background: color-mix(
+        in srgb,
+        var(--primary) 12%,
+        transparent
+      );
+    }
+
+    .rx-pwa-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      min-width: 16px;
+      padding: 1px 3px;
+      border-radius: 99px;
+      background: #ef4444;
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 14px;
+    }
+
+    .rx-pwa-nav :focus-visible,
+    .rx-pwa-sheet :focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
+    .rx-pwa-sheet[open] {
+      position: fixed;
+      inset: auto 0 0;
+      margin: 0;
+      width: 100%;
+      max-width: none;
+      max-height: calc(
+        100dvh - env(safe-area-inset-top) - 16px
+      );
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border: 1px solid var(--border);
+      border-radius: 26px 26px 0 0;
+      background: var(--card);
+      color: var(--foreground);
+      padding:
+        16px
+        max(16px, env(safe-area-inset-right))
+        max(20px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+    }
+
+    .rx-pwa-sheet::backdrop {
+      background: rgb(15 23 42 / 50%);
+    }
+
+    .rx-pwa-sheet-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .rx-pwa-sheet-heading h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .rx-pwa-sheet-heading button {
+      display: grid;
+      place-items: center;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 12px;
+    }
+
+    .rx-pwa-sheet nav {
+      display: grid;
+      gap: 10px;
+    }
+
+    .rx-pwa-sheet nav > :is(a, button) {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-height: 52px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      text-align: left;
+      font-weight: 600;
+    }
+
+    .rx-pwa-sheet [aria-current="page"] {
+      color: var(--primary);
+    }
+
+    .rx-pwa-sheet .rx-pwa-logout {
+      color: var(--destructive);
+      margin-top: 8px;
+    }
+
+    /* Layout-only rules: all original card/page color classes stay intact. */
+    .rx-dashboard {
+      min-height: 0;
+      padding: 0;
+    }
+
+    .rx-dashboard .rx-summary {
+      grid-template-columns: repeat(
+        auto-fit,
+        minmax(
+          min(100%, max(9rem, calc((100% - 12px) / 2))),
+          1fr
+        )
+      );
+      gap: 12px;
+    }
+
+    .rx-summary > :first-child {
+      grid-column: 1 / -1;
+    }
+
+    .rx-summary > div {
+      border-radius: 20px;
+      padding: 16px;
+    }
+
+    .rx-summary .text-3xl {
+      font-size: 1.75rem;
+      line-height: 1.2;
+    }
+
+    .rx-chamber-grid {
+      display: grid;
+      grid-template-columns: repeat(
+        auto-fit,
+        minmax(
+          min(100%, max(9rem, calc((100% - 10px) / 2))),
+          1fr
+        )
+      );
+      gap: 10px;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    .rx-chamber-grid > div {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      border: 1px solid color-mix(
+        in srgb,
+        var(--border) 70%,
+        transparent
+      );
+      border-radius: 14px;
+      padding: 12px;
+      gap: 8px;
+    }
+
+    .rx-chamber-grid > div:last-child {
+      border-bottom-width: 1px;
+    }
+
+    .rx-chamber-grid .w-40 {
+      max-width: 100%;
+    }
+
+    .rx-app button:not([role="switch"]) {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .rx-main a[class*="rounded"] {
+      min-height: 44px;
+    }
+
+    .rx-dashboard section:has(.rx-chamber-grid) > :first-child {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &[data-rx-keyboard] .rx-pwa-nav {
+      display: none;
+    }
+
+    .rx-shell:has(
+      .rx-chats[data-conversation-open="true"]
+    ) .rx-pwa-nav {
+      display: none;
+    }
+
+    body:has(.rx-modal) .rx-pwa-nav {
+      display: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-rx-standalone="true"]
+    :is(.rx-pwa-nav, .rx-pwa-sheet) {
+    animation: none;
+    transition: none;
+  }
+}
