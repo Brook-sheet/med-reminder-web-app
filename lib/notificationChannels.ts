@@ -40,20 +40,13 @@ export interface NotificationPayload {
 }
 
 export interface ChannelDeliveryResult {
-  status:
-    | "SENT"
-    | "SKIPPED"
-    | "FAILED";
-
+  status: "SENT" | "SKIPPED" | "FAILED";
   sentCount?: number;
   error?: string;
 }
 
 interface ExpoPushTicket {
-  status:
-    | "ok"
-    | "error";
-
+  status: "ok" | "error";
   id?: string;
   message?: string;
 
@@ -63,9 +56,7 @@ interface ExpoPushTicket {
 }
 
 interface ExpoPushResponse {
-  data?:
-    | ExpoPushTicket
-    | ExpoPushTicket[];
+  data?: ExpoPushTicket | ExpoPushTicket[];
 
   errors?: Array<{
     message?: string;
@@ -79,145 +70,50 @@ interface ExpoPushMessage {
   sound: "default";
   priority: "high";
   channelId: string;
-
-  data: Record<
-    string,
-    string
-  >;
+  data: Record<string, string>;
 }
 
-const EXPO_PUSH_ENDPOINT =
-  "https://exp.host/--/api/v2/push/send";
-
-const EXPO_PUSH_BATCH_SIZE =
-  100;
+const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
+const EXPO_PUSH_BATCH_SIZE = 100;
 
 function pushConfigured(): boolean {
   return Boolean(
-    process.env
-      .NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
-      process.env
-        .VAPID_PRIVATE_KEY
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
   );
 }
 
-function optionalString(
-  value:
-    | string
-    | undefined
-    | null
-): string {
-  return typeof value ===
-    "string"
-    ? value.trim()
-    : "";
+function optionalString(value: string | undefined | null): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function buildNotificationData(
   payload: NotificationPayload
 ): Record<string, string> {
   return {
-    type:
-      optionalString(
-        payload.type
-      ) ||
-      "notification",
-
-    screen:
-      optionalString(
-        payload.screen
-      ),
-
-    url:
-      optionalString(
-        payload.url
-      ) ||
-      "/",
-
-    severity:
-      optionalString(
-        payload.severity
-      ),
-
-    riskLevel:
-      optionalString(
-        payload.riskLevel
-      ),
-
-    alertId:
-      optionalString(
-        payload.alertId
-      ),
-
-    medicineId:
-      optionalString(
-        payload.medicineId
-      ),
-
-    medicineName:
-      optionalString(
-        payload.medicineName
-      ),
-
-    patientId:
-      optionalString(
-        payload.patientId
-      ),
-
-    conversationId:
-      optionalString(
-        payload.conversationId
-      ),
-
-    messageId:
-      optionalString(
-        payload.messageId
-      ),
-
-    requestId:
-      optionalString(
-        payload.requestId
-      ),
-
-    monitoringRequestId:
-      optionalString(
-        payload.monitoringRequestId
-      ),
-
-    chatRequestId:
-      optionalString(
-        payload.chatRequestId
-      ),
-
-    logId:
-      optionalString(
-        payload.logId
-      ),
-
-    timestamp:
-      new Date().toISOString(),
+    type: optionalString(payload.type) || "notification",
+    screen: optionalString(payload.screen),
+    url: optionalString(payload.url) || "/",
+    severity: optionalString(payload.severity),
+    riskLevel: optionalString(payload.riskLevel),
+    alertId: optionalString(payload.alertId),
+    medicineId: optionalString(payload.medicineId),
+    medicineName: optionalString(payload.medicineName),
+    patientId: optionalString(payload.patientId),
+    conversationId: optionalString(payload.conversationId),
+    messageId: optionalString(payload.messageId),
+    requestId: optionalString(payload.requestId),
+    monitoringRequestId: optionalString(payload.monitoringRequestId),
+    chatRequestId: optionalString(payload.chatRequestId),
+    logId: optionalString(payload.logId),
+    timestamp: new Date().toISOString(),
   };
 }
 
-function splitIntoBatches<T>(
-  items: T[],
-  batchSize: number
-): T[][] {
-  const batches: T[][] =
-    [];
+function splitIntoBatches<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
 
-  for (
-    let index = 0;
-    index < items.length;
-    index += batchSize
-  ) {
-    batches.push(
-      items.slice(
-        index,
-        index +
-          batchSize
-      )
-    );
+  for (let index = 0; index < items.length; index += batchSize) {
+    batches.push(items.slice(index, index + batchSize));
   }
 
   return batches;
@@ -225,161 +121,111 @@ function splitIntoBatches<T>(
 
 async function deliverWebPushToUser(
   userId: string,
-  payload: NotificationPayload
+  payload: NotificationPayload,
+  endpoint?: string
 ): Promise<ChannelDeliveryResult> {
   if (!pushConfigured()) {
     return {
       status: "SKIPPED",
       sentCount: 0,
-      error:
-        "Web Push is not configured.",
+      error: "Web Push is not configured.",
     };
   }
 
   try {
-    const subscriptions =
-      await PushSubscription.find({
-        userId,
-      }).lean();
+    const subscriptions = await PushSubscription.find({
+      userId,
+      ...(endpoint === undefined ? {} : { endpoint }),
+    }).lean();
 
-    if (
-      subscriptions.length ===
-      0
-    ) {
+    if (subscriptions.length === 0) {
       return {
         status: "SKIPPED",
         sentCount: 0,
-        error:
-          "No active browser push subscription.",
+        error: "No active browser push subscription.",
       };
     }
 
-    const webpush = (
-      await import(
-        "web-push"
-      )
-    ).default;
+    const webpush = (await import("web-push")).default;
 
     webpush.setVapidDetails(
-      process.env
-        .VAPID_SUBJECT ||
-        process.env
-          .VAPID_EMAIL ||
+      process.env.VAPID_SUBJECT ||
+        process.env.VAPID_EMAIL ||
         "mailto:admin@medreminder.app",
-
-      process.env
-        .NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
-
-      process.env
-        .VAPID_PRIVATE_KEY as string
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
+      process.env.VAPID_PRIVATE_KEY as string
     );
 
-    const results =
-      await Promise.allSettled(
-        subscriptions.map(
-          async (
-            subscription
-          ) => {
-            try {
-              await webpush.sendNotification(
-                {
-                  endpoint:
-                    subscription.endpoint,
+    const results = await Promise.allSettled(
+      subscriptions.map(async (subscription) => {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: subscription.endpoint,
+              keys: subscription.keys,
+            },
+            JSON.stringify({
+              ...payload,
+              data: buildNotificationData(payload),
+              timestamp: Date.now(),
+            })
+          );
 
-                  keys:
-                    subscription.keys,
-                },
+          return true;
+        } catch (error) {
+          const statusCode = (error as { statusCode?: number }).statusCode;
 
-                JSON.stringify({
-                  ...payload,
-
-                  data:
-                    buildNotificationData(
-                      payload
-                    ),
-
-                  timestamp:
-                    Date.now(),
-                })
-              );
-
-              return true;
-            } catch (error) {
-              const statusCode =
-                (
-                  error as {
-                    statusCode?: number;
-                  }
-                ).statusCode;
-
-              if (
-                statusCode ===
-                  404 ||
-                statusCode ===
-                  410
-              ) {
-                await PushSubscription.deleteOne(
-                  {
-                    _id:
-                      subscription._id,
-                  }
-                );
-              }
-
-              throw error;
-            }
+          if (statusCode === 404 || statusCode === 410) {
+            await PushSubscription.deleteOne({
+              _id: subscription._id,
+            });
           }
-        )
-      );
 
-    const sentCount =
-      results.filter(
-        (
-          result
-        ) =>
-          result.status ===
-          "fulfilled"
-      ).length;
+          throw error;
+        }
+      })
+    );
 
-    if (
-      sentCount === 0
-    ) {
+    const sentCount = results.filter(
+      (result) => result.status === "fulfilled"
+    ).length;
+
+    if (sentCount === 0) {
       return {
         status: "FAILED",
         sentCount: 0,
-        error:
-          "All Web Push deliveries failed.",
+        error: "All Web Push deliveries failed.",
       };
     }
 
-    const failedCount =
-      results.length -
-      sentCount;
+    const failedCount = results.length - sentCount;
 
     return {
       status: "SENT",
       sentCount,
-
       ...(failedCount > 0
         ? {
-            error:
-              `${failedCount} browser push delivery attempt(s) failed.`,
+            error: `${failedCount} browser push delivery attempt(s) failed.`,
           }
         : {}),
     };
   } catch (error) {
-    console.error(
-      "[Web Push] Delivery failed:",
-      error
-    );
+    console.error("[Web Push] Delivery failed:", error);
 
     return {
       status: "FAILED",
       sentCount: 0,
-      error:
-        "Web Push delivery failed.",
+      error: "Web Push delivery failed.",
     };
   }
+}
+
+export function sendWebPushToEndpoint(
+  userId: string,
+  endpoint: string,
+  payload: NotificationPayload
+): Promise<ChannelDeliveryResult> {
+  return deliverWebPushToUser(userId, payload, endpoint);
 }
 
 export async function sendExpoPushToUser(
@@ -387,270 +233,141 @@ export async function sendExpoPushToUser(
   payload: NotificationPayload
 ): Promise<ChannelDeliveryResult> {
   try {
-    const tokens =
-      await ExpoPushToken.find({
-        userId,
-      }).lean();
+    const tokens = await ExpoPushToken.find({
+      userId,
+    }).lean();
 
-    if (
-      tokens.length === 0
-    ) {
+    if (tokens.length === 0) {
       return {
         status: "SKIPPED",
         sentCount: 0,
-        error:
-          "No active Expo push token.",
+        error: "No active Expo push token.",
       };
     }
 
-    const notificationData =
-      buildNotificationData(
-        payload
-      );
+    const notificationData = buildNotificationData(payload);
 
-    const messages:
-      ExpoPushMessage[] =
-      tokens.map(
-        (
-          item
-        ) => ({
-          to: item.token,
+    const messages: ExpoPushMessage[] = tokens.map((item) => ({
+      to: item.token,
+      title: payload.title.trim().slice(0, 150),
+      body: payload.body.trim().slice(0, 1500),
+      sound: "default",
+      priority: "high",
+      channelId: "medication-alerts",
+      data: notificationData,
+    }));
 
-          title:
-            payload.title
-              .trim()
-              .slice(
-                0,
-                150
-              ),
+    const tokenBatches = splitIntoBatches(tokens, EXPO_PUSH_BATCH_SIZE);
+    const messageBatches = splitIntoBatches(messages, EXPO_PUSH_BATCH_SIZE);
 
-          body:
-            payload.body
-              .trim()
-              .slice(
-                0,
-                1500
-              ),
-
-          sound:
-            "default",
-
-          priority:
-            "high",
-
-          channelId:
-            "medication-alerts",
-
-          data:
-            notificationData,
-        })
-      );
-
-    const tokenBatches =
-      splitIntoBatches(
-        tokens,
-        EXPO_PUSH_BATCH_SIZE
-      );
-
-    const messageBatches =
-      splitIntoBatches(
-        messages,
-        EXPO_PUSH_BATCH_SIZE
-      );
-
-    const invalidTokens:
-      string[] = [];
-
-    const deliveryErrors:
-      string[] = [];
+    const invalidTokens: string[] = [];
+    const deliveryErrors: string[] = [];
 
     let sentCount = 0;
 
     for (
       let batchIndex = 0;
-      batchIndex <
-      messageBatches.length;
+      batchIndex < messageBatches.length;
       batchIndex += 1
     ) {
-      const messageBatch =
-        messageBatches[
-          batchIndex
-        ];
-
-      const tokenBatch =
-        tokenBatches[
-          batchIndex
-        ];
+      const messageBatch = messageBatches[batchIndex];
+      const tokenBatch = tokenBatches[batchIndex];
 
       try {
-        const response =
-          await fetch(
-            EXPO_PUSH_ENDPOINT,
-            {
-              method: "POST",
+        const response = await fetch(EXPO_PUSH_ENDPOINT, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            ...(process.env.EXPO_ACCESS_TOKEN
+              ? {
+                  Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
+                }
+              : {}),
+          },
+          body: JSON.stringify(messageBatch),
+        });
 
-              headers: {
-                Accept:
-                  "application/json",
-
-                "Content-Type":
-                  "application/json",
-
-                ...(process.env
-                  .EXPO_ACCESS_TOKEN
-                  ? {
-                      Authorization:
-                        `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
-                    }
-                  : {}),
-              },
-
-              body:
-                JSON.stringify(
-                  messageBatch
-                ),
-            }
-          );
-
-        const result = (
-          await response
-            .json()
-            .catch(
-              () => ({})
-            )
-        ) as ExpoPushResponse;
+        const result = (await response
+          .json()
+          .catch(() => ({}))) as ExpoPushResponse;
 
         if (!response.ok) {
           deliveryErrors.push(
-            result.errors?.[0]
-              ?.message ||
+            result.errors?.[0]?.message ||
               `Expo Push returned HTTP ${response.status}.`
           );
 
           continue;
         }
 
-        const tickets =
-          Array.isArray(
-            result.data
-          )
-            ? result.data
-            : result.data
-              ? [
-                  result.data,
-                ]
-              : [];
+        const tickets = Array.isArray(result.data)
+          ? result.data
+          : result.data
+            ? [result.data]
+            : [];
 
-        if (
-          tickets.length ===
-          0
-        ) {
-          deliveryErrors.push(
-            "Expo Push returned no delivery tickets."
-          );
-
+        if (tickets.length === 0) {
+          deliveryErrors.push("Expo Push returned no delivery tickets.");
           continue;
         }
 
-        tickets.forEach(
-          (
-            ticket,
-            ticketIndex
-          ) => {
-            if (
-              ticket.status ===
-              "ok"
-            ) {
-              sentCount += 1;
-              return;
-            }
-
-            const token =
-              tokenBatch[
-                ticketIndex
-              ]?.token;
-
-            if (
-              ticket.details
-                ?.error ===
-                "DeviceNotRegistered" &&
-              token
-            ) {
-              invalidTokens.push(
-                token
-              );
-            }
-
-            deliveryErrors.push(
-              ticket.message ||
-                ticket.details
-                  ?.error ||
-                "Expo Push rejected a notification."
-            );
+        tickets.forEach((ticket, ticketIndex) => {
+          if (ticket.status === "ok") {
+            sentCount += 1;
+            return;
           }
-        );
-      } catch (error) {
-        console.error(
-          "[Expo Push] Batch delivery failed:",
-          error
-        );
 
-        deliveryErrors.push(
-          "An Expo Push batch request failed."
-        );
+          const token = tokenBatch[ticketIndex]?.token;
+
+          if (ticket.details?.error === "DeviceNotRegistered" && token) {
+            invalidTokens.push(token);
+          }
+
+          deliveryErrors.push(
+            ticket.message ||
+              ticket.details?.error ||
+              "Expo Push rejected a notification."
+          );
+        });
+      } catch (error) {
+        console.error("[Expo Push] Batch delivery failed:", error);
+        deliveryErrors.push("An Expo Push batch request failed.");
       }
     }
 
-    if (
-      invalidTokens.length >
-      0
-    ) {
-      await ExpoPushToken.deleteMany(
-        {
-          token: {
-            $in:
-              invalidTokens,
-          },
-        }
-      );
+    if (invalidTokens.length > 0) {
+      await ExpoPushToken.deleteMany({
+        token: {
+          $in: invalidTokens,
+        },
+      });
     }
 
-    if (
-      sentCount === 0
-    ) {
+    if (sentCount === 0) {
       return {
         status: "FAILED",
         sentCount: 0,
-
-        error:
-          deliveryErrors[0] ||
-          "All Expo Push deliveries failed.",
+        error: deliveryErrors[0] || "All Expo Push deliveries failed.",
       };
     }
 
     return {
       status: "SENT",
       sentCount,
-
-      ...(deliveryErrors.length >
-      0
+      ...(deliveryErrors.length > 0
         ? {
-            error:
-              `${deliveryErrors.length} Expo Push delivery attempt(s) failed.`,
+            error: `${deliveryErrors.length} Expo Push delivery attempt(s) failed.`,
           }
         : {}),
     };
   } catch (error) {
-    console.error(
-      "[Expo Push] Delivery failed:",
-      error
-    );
+    console.error("[Expo Push] Delivery failed:", error);
 
     return {
       status: "FAILED",
       sentCount: 0,
-      error:
-        "Expo Push delivery failed.",
+      error: "Expo Push delivery failed.",
     };
   }
 }
@@ -666,109 +383,61 @@ export async function sendWebPushToUser(
   userId: string,
   payload: NotificationPayload
 ): Promise<ChannelDeliveryResult> {
-  const [
-    webResult,
-    expoResult,
-  ] =
-    await Promise.all([
-      deliverWebPushToUser(
-        userId,
-        payload
-      ),
+  const [webResult, expoResult] = await Promise.all([
+    deliverWebPushToUser(userId, payload),
+    sendExpoPushToUser(userId, payload),
+  ]);
 
-      sendExpoPushToUser(
-        userId,
-        payload
-      ),
-    ]);
+  const sentCount = (webResult.sentCount || 0) + (expoResult.sentCount || 0);
 
-  const sentCount =
-    (
-      webResult.sentCount ||
-      0
-    ) +
-    (
-      expoResult.sentCount ||
-      0
-    );
-
-  const errors = [
-    webResult.error,
-    expoResult.error,
-  ].filter(
-    (
-      error
-    ): error is string =>
-      Boolean(error)
+  const errors = [webResult.error, expoResult.error].filter(
+    (error): error is string => Boolean(error)
   );
 
   if (sentCount > 0) {
     return {
       status: "SENT",
       sentCount,
-
       ...(errors.length > 0
         ? {
-            error:
-              errors.join(
-                " "
-              ),
+            error: errors.join(" "),
           }
         : {}),
     };
   }
 
-  if (
-    webResult.status ===
-      "SKIPPED" &&
-    expoResult.status ===
-      "SKIPPED"
-  ) {
+  if (webResult.status === "SKIPPED" && expoResult.status === "SKIPPED") {
     return {
       status: "SKIPPED",
       sentCount: 0,
-      error:
-        errors.join(
-          " "
-        ),
+      error: errors.join(" "),
     };
   }
 
   return {
     status: "FAILED",
     sentCount: 0,
-
-    error:
-      errors.join(
-        " "
-      ) ||
-      "All notification delivery channels failed.",
+    error: errors.join(" ") || "All notification delivery channels failed.",
   };
 }
 
 function smsConfigured(): boolean {
   return Boolean(
-    process.env
-      .TWILIO_ACCOUNT_SID &&
-      process.env
-        .TWILIO_AUTH_TOKEN &&
-      process.env
-        .TWILIO_FROM_NUMBER
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_FROM_NUMBER
   );
 }
 
 export async function sendConfiguredSms(
-  phoneNumber:
-    | string
-    | undefined,
+  phoneNumber: string | undefined,
   message: string
 ): Promise<ChannelDeliveryResult> {
   if (!phoneNumber) {
     return {
       status: "SKIPPED",
       sentCount: 0,
-      error:
-        "No SMS phone number is configured.",
+      error: "No SMS phone number is configured.",
     };
   }
 
@@ -776,71 +445,42 @@ export async function sendConfiguredSms(
     return {
       status: "SKIPPED",
       sentCount: 0,
-      error:
-        "SMS provider is not configured.",
+      error: "SMS provider is not configured.",
     };
   }
 
   try {
-    const accountSid =
-      process.env
-        .TWILIO_ACCOUNT_SID as string;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID as string;
+    const authToken = process.env.TWILIO_AUTH_TOKEN as string;
+    const from = process.env.TWILIO_FROM_NUMBER as string;
 
-    const authToken =
-      process.env
-        .TWILIO_AUTH_TOKEN as string;
+    const form = new URLSearchParams({
+      To: phoneNumber,
+      From: from,
+      Body: message,
+    });
 
-    const from =
-      process.env
-        .TWILIO_FROM_NUMBER as string;
-
-    const form =
-      new URLSearchParams({
-        To:
-          phoneNumber,
-
-        From:
-          from,
-
-        Body:
-          message,
-      });
-
-    const response =
-      await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-        {
-          method:
-            "POST",
-
-          headers: {
-            Authorization:
-              `Basic ${Buffer.from(
-                `${accountSid}:${authToken}`
-              ).toString(
-                "base64"
-              )}`,
-
-            "Content-Type":
-              "application/x-www-form-urlencoded",
-          },
-
-          body:
-            form.toString(),
-        }
-      );
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(
+            `${accountSid}:${authToken}`
+          ).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: form.toString(),
+      }
+    );
 
     if (!response.ok) {
-      console.error(
-        "[SMS] Provider returned status:",
-        response.status
-      );
+      console.error("[SMS] Provider returned status:", response.status);
 
       return {
         status: "FAILED",
         sentCount: 0,
-        error:
-          `SMS provider returned HTTP ${response.status}.`,
+        error: `SMS provider returned HTTP ${response.status}.`,
       };
     }
 
@@ -849,16 +489,12 @@ export async function sendConfiguredSms(
       sentCount: 1,
     };
   } catch (error) {
-    console.error(
-      "[SMS] Delivery failed:",
-      error
-    );
+    console.error("[SMS] Delivery failed:", error);
 
     return {
       status: "FAILED",
       sentCount: 0,
-      error:
-        "SMS delivery failed.",
+      error: "SMS delivery failed.",
     };
   }
 }
