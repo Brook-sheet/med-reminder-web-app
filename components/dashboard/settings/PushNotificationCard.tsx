@@ -147,40 +147,42 @@ export default function PushNotificationCard() {
               : "Notifications are disabled on this device."}
           </p>
 
-          {push.permission !==
-            "denied" && (
-            <button
-              className={button}
-              disabled={push.loading}
-              onClick={() =>
-                void (
-                  push.subscribed
-                    ? push.unsubscribe()
-                    : push.subscribe()
-                )
-              }
-            >
-              {push.loading
-                ? "Updating…"
-                : push.subscribed
-                ? "Disable Device Notifications"
-                : "Enable Device Notifications"}
-            </button>
-          )}
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            {push.permission !==
+              "denied" && (
+              <button
+                className={button}
+                disabled={push.loading}
+                onClick={() =>
+                  void (
+                    push.subscribed
+                      ? push.unsubscribe()
+                      : push.subscribe()
+                  )
+                }
+              >
+                {push.loading
+                  ? "Updating…"
+                  : push.subscribed
+                  ? "Disable Device Notifications"
+                  : "Enable Device Notifications"}
+              </button>
+            )}
 
-          {push.subscribed && (
-            <button
-              className="ml-3 rounded-lg border border-border px-4 py-2 text-sm"
-              disabled={testing}
-              onClick={() =>
-                void testPush()
-              }
-            >
-              {testing
-                ? "Sending…"
-                : "Send Test Notification"}
-            </button>
-          )}
+            {push.subscribed && (
+              <button
+                className="rounded-lg border border-border px-4 py-2 text-sm"
+                disabled={testing}
+                onClick={() =>
+                  void testPush()
+                }
+              >
+                {testing
+                  ? "Sending…"
+                  : "Send Test Notification"}
+              </button>
+            )}
+          </div>
         </>
       )}
 
