@@ -208,18 +208,20 @@ export default function Home() {
           />
         </div>
 
-        <RxBoxLoadingOrder />
+        <div className="rx-today-panels contents xl:grid xl:grid-cols-2 xl:items-stretch xl:gap-x-8 xl:[&>*]:min-w-0">
+          <RxBoxLoadingOrder />
 
-        <div className="mb-6 rounded-[28px] border border-border/80 bg-card p-6 shadow-sm shadow-slate-900/10">
-          <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
-            Today&apos;s Schedule
-          </h2>
+          <div className="mb-6 rounded-[28px] border border-border/80 bg-card p-6 shadow-sm shadow-slate-900/10">
+            <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
+              Today&apos;s Schedule
+            </h2>
 
-          <ScheduleList
-            schedule={stats?.todaySchedule ?? []}
-            loading={loading}
-            onStatusChange={fetchDashboard}
-          />
+            <ScheduleList
+              schedule={stats?.todaySchedule ?? []}
+              loading={loading}
+              onStatusChange={fetchDashboard}
+            />
+          </div>
         </div>
 
         <div className="mb-6 rounded-[28px] border border-border/80 bg-card p-6 shadow-sm shadow-slate-900/10">

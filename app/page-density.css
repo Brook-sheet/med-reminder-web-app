@@ -40,6 +40,7 @@
   .rx-page .rx-page-enter > div > div > :is(section, div).bg-card:is(.p-5, .p-6, .p-8),
   .rx-page .rx-page-enter > div > div > .space-y-4 > :is(section, div).bg-card:is(.p-5, .p-6),
   .rx-page .rx-page-enter > div > div > .space-y-4 > .space-y-5 > section:is(.p-5, .p-6),
+  .rx-page .rx-today-panels > :is(section, div).bg-card,
   .rx-page .report-section {
     padding: var(--rx-card-padding);
   }
@@ -52,6 +53,107 @@
   .rx-page .rx-page-enter > div > .max-w-7xl.flex.flex-col,
   .rx-page :where(.rx-dashboard) .rx-summary {
     gap: var(--rx-section-gap);
+  }
+
+  /* Medicines: align the existing controls and keep card actions beside the name. */
+  .rx-page .rx-page-enter > div > div:has(> div > div > #sort) {
+    > .mb-8:has(> h1) {
+      margin-bottom: 0.75rem;
+    }
+
+    > div:has(> div > #sort) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: var(--rx-section-gap);
+
+      > button {
+        justify-self: start;
+        min-height: 44px;
+        width: auto;
+        max-width: 100%;
+        text-align: start;
+      }
+
+      > div {
+        position: relative;
+        width: auto;
+        margin-inline-start: 0;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--card);
+      }
+
+      > div:focus-within {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+
+      label[for="sort"] {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-height: 44px;
+        padding-inline: 0.75rem;
+        font-size: 0;
+        white-space: nowrap;
+      }
+
+      label[for="sort"]::before {
+        content: "";
+        width: 1rem;
+        height: 1rem;
+        background: currentColor;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 7 4-4 4 4M7 3v18m6-4 4 4 4-4m-4 4V3'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+
+      label[for="sort"]::after {
+        content: "Sort" / "";
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+
+      /* Keep the native select clickable, focusable, and labeled. */
+      #sort {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+    }
+
+    > .space-y-4 > .bg-card > div:has(> div > button[aria-label^="Edit "]) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 0.5rem;
+
+      h3,
+      h3 + p {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      h3 {
+        padding-block-start: 0.5rem;
+      }
+
+      > div:last-child {
+        margin-inline-start: 0;
+        gap: 0.125rem;
+      }
+
+      button {
+        display: grid;
+        width: 44px;
+        min-height: 44px;
+        place-items: center;
+      }
+    }
   }
 
   .rx-app > div > .relative.min-h-screen:has(> main.max-w-md) {
@@ -88,6 +190,20 @@
   }
 }
 
+@media screen and (min-width: 1280px) {
+  .rx-page .rx-today-panels > :is(section, div).bg-card {
+    padding: 1.5rem;
+  }
+
+  .rx-page .rx-today-panels > section > :first-child {
+    flex-wrap: wrap;
+  }
+
+  .rx-page .rx-today-panels .rx-chamber-grid {
+    overflow-wrap: anywhere;
+  }
+}
+
 @media screen and (min-width: 768px) and (max-width: 1023px) {
   /* The fixed sidebar reduces the available tablet content width. */
   .rx-page .rx-summary,
@@ -108,17 +224,6 @@
   .rx-app {
     --rx-section-gap: 1rem;
     --rx-card-padding: 1rem;
-  }
-
-  .rx-page .rx-page-enter > div > div > .mb-6:has(> div > #sort) {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .rx-page .rx-page-enter > div > div > .mb-6:has(> div > #sort) > * {
-    flex: 1 1 9rem;
-    min-width: 0;
   }
 
   .rx-page .rx-page-enter [aria-label="Medication alert list"] > :is(.p-8, .p-12) {
