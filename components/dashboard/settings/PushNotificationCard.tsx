@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useState,
 } from "react";
 
@@ -14,127 +13,20 @@ import {
   usePushNotifications,
 } from "@/hooks/usePushNotifications";
 
-import type {
-  InstallEvent,
-} from "@/components/pwa/PwaRegistration";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
 
 export default function PushNotificationCard() {
   const push =
     usePushNotifications();
 
-  const [prompt, setPrompt] =
-    useState<InstallEvent | null>(
-      null
-    );
-
-  const [installed, setInstalled] =
-    useState(false);
-
-  const [ios, setIos] =
-    useState(false);
+  const { ready, installed: standalone, ios, prompt, install } =
+    usePwaInstall();
 
   const [message, setMessage] =
     useState("");
 
   const [testing, setTesting] =
     useState(false);
-
-  useEffect(() => {
-    const standalone =
-      window.matchMedia(
-        "(display-mode: standalone)"
-      );
-
-    const update = () => {
-      const appleStandalone =
-        (
-          navigator as Navigator & {
-            standalone?: boolean;
-          }
-        ).standalone;
-
-      setInstalled(
-        standalone.matches ||
-          Boolean(appleStandalone)
-      );
-    };
-
-    update();
-
-    setPrompt(
-      window.rxBoxInstallPrompt ||
-        null
-    );
-
-    setIos(
-      /iPad|iPhone|iPod/.test(
-        navigator.userAgent
-      ) ||
-        (
-          navigator.platform ===
-            "MacIntel" &&
-          navigator.maxTouchPoints > 1
-        )
-    );
-
-    const capture = (
-      event: Event
-    ) => {
-      event.preventDefault();
-
-      setPrompt(
-        event as InstallEvent
-      );
-    };
-
-    const done = () => {
-      setPrompt(null);
-      setInstalled(true);
-    };
-
-    window.addEventListener(
-      "beforeinstallprompt",
-      capture
-    );
-
-    window.addEventListener(
-      "appinstalled",
-      done
-    );
-
-    standalone.addEventListener(
-      "change",
-      update
-    );
-
-    return () => {
-      window.removeEventListener(
-        "beforeinstallprompt",
-        capture
-      );
-
-      window.removeEventListener(
-        "appinstalled",
-        done
-      );
-
-      standalone.removeEventListener(
-        "change",
-        update
-      );
-    };
-  }, []);
-
-  async function install() {
-    if (!prompt) return;
-
-    await prompt.prompt();
-    await prompt.userChoice;
-
-    delete window.rxBoxInstallPrompt;
-
-    setPrompt(null);
-  }
 
   async function testPush() {
     setTesting(true);
@@ -181,18 +73,13 @@ export default function PushNotificationCard() {
 
   return (
     <section className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <Download size={20} />
-        Install Rx Box
-      </h2>
-
-      {installed ? (
-        <p className="text-sm">
-          Rx Box is running as an
-          installed app.
-        </p>
-      ) : (
+      {ready && !standalone && (
         <>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Download size={20} />
+            Install Rx Box
+          </h2>
+
           <p className="text-sm text-muted-foreground">
             Install Rx Box for quick
             access from your home screen
@@ -218,7 +105,11 @@ export default function PushNotificationCard() {
         </>
       )}
 
-      <h2 className="flex items-center gap-2 border-t border-border pt-4 text-lg font-semibold">
+      <h2
+        className={`flex items-center gap-2 text-lg font-semibold ${
+          ready && !standalone ? "border-t border-border pt-4" : ""
+        }`}
+      >
         <Bell size={20} />
         Device Notifications
       </h2>
@@ -232,7 +123,7 @@ export default function PushNotificationCard() {
         background.
       </p>
 
-      {ios && !installed ? (
+      {ios && !standalone ? (
         <p className="text-sm">
           On iPhone and iPad, add Rx Box
           to your Home Screen and open
