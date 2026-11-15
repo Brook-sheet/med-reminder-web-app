@@ -72,66 +72,86 @@ export async function sendDispensedNotifications({
   }).format(occurredAt);
 
   const medicineDetails = [...new Set(medications.map(
-    ({ medicineName, chamberIds }) => `${medicineName} (${formatChambers(chamberIds)})`
+    ({ medicineName, chamberIds }) =>
+      `${medicineName} (${formatChambers(chamberIds)})`
   ))];
+
   const medicines = new Intl.ListFormat('en-US').format(medicineDetails);
   const verb = medicineDetails.length === 1 ? 'was' : 'were';
+
   const eventTime = dispensedAt
     ? `on ${date} at ${time}`
     : `(reported on ${date} at ${time})`;
-  const message = `${medicines} ${verb} successfully dispensed for ${patientName} ${eventTime}.`;
 
-  const usedChambers = [...new Set(medications.flatMap(({ chamberIds }) => chamberIds))]
-    .sort((a, b) => a - b);
+  const message =
+    `${medicines} ${verb} successfully dispensed for ${patientName} ${eventTime}.`;
+
+  const usedChambers = [
+    ...new Set(medications.flatMap(({ chamberIds }) => chamberIds)),
+  ].sort((a, b) => a - b);
+
   const eventKey = `rx-box-dispensed:${patientId}:${groupId}`;
   const title = `Medication dispensed · ${formatChambers(usedChambers)}`;
 
-  const deliveries = await Promise.allSettled(familyMembers.flatMap((member) => {
-    const recipientId = member._id.toString();
-    const alertDelivery = Alert.create({
-      patientId,
-      monitorId: member._id,
-      eventKey,
-      eventType: 'MEDICATION_DISPENSED',
-      severity: 'INFO',
-      title,
-      message,
-      occurredAt,
-      metadata: { groupId, medications },
-    }).catch((error: unknown) => {
-      if (
-        typeof error !== 'object' ||
-        error === null ||
-        !('code' in error) ||
-        error.code !== 11000
-      ) {
-        throw error;
-      }
-    });
+  const deliveries = await Promise.allSettled(
+    familyMembers.flatMap((member) => {
+      const recipientId = member._id.toString();
 
-    const preferences = member.notificationPreferences;
-    const to = normalizePhilippineMobileNumber(preferences?.smsPhoneNumber);
-
-    if (preferences?.sms !== true || preferences.smsConsent !== true || !to) {
-      return [alertDelivery];
-    }
-
-    return [
-      alertDelivery,
-      claimAndSendSms({
-        dedupeKey: `${eventKey}:${recipientId}`,
+      const alertDelivery = Alert.create({
         patientId,
-        recipientId,
-        alertType: 'OTHER',
-        to,
-        message: `${message} Please remind them to take their medication now.`,
-      }),
-    ];
-  }));
+        monitorId: member._id,
+        eventKey,
+        eventType: 'MEDICATION_DISPENSED',
+        severity: 'INFO',
+        title,
+        message: `${message} You can remind them now!`,
+        occurredAt,
+        metadata: { groupId, medications },
+      }).catch((error: unknown) => {
+        if (
+          typeof error !== 'object' ||
+          error === null ||
+          !('code' in error) ||
+          error.code !== 11000
+        ) {
+          throw error;
+        }
+      });
+
+      const preferences = member.notificationPreferences;
+      const to = normalizePhilippineMobileNumber(
+        preferences?.smsPhoneNumber
+      );
+
+      if (
+        preferences?.sms !== true ||
+        preferences.smsConsent !== true ||
+        !to
+      ) {
+        return [alertDelivery];
+      }
+
+      return [
+        alertDelivery,
+        claimAndSendSms({
+          dedupeKey: `${eventKey}:${recipientId}`,
+          patientId,
+          recipientId,
+          alertType: 'OTHER',
+          to,
+          message:
+            `${message} Please remind them to take their medication now.`,
+        }),
+      ];
+    })
+  );
 
   for (const delivery of deliveries) {
     if (delivery.status === 'rejected') {
-      console.error('[Rx Box] Dispensed notification delivery error:', delivery.reason);
+      console.error(
+        '[Rx Box] Dispensed notification delivery error:',
+        delivery.reason
+      );
     }
   }
 }
