@@ -1,3 +1,4 @@
+import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import mongoose, {
   Schema,
@@ -72,17 +73,17 @@ const ChamberAssignmentSchema =
           validator: (ids: number[]) =>
             Array.isArray(ids) &&
             ids.length > 0 &&
-            ids.length <= 4 &&
+            ids.length <= RX_BOX_CAPACITY &&
             new Set(ids).size === ids.length &&
             ids.every(
               (id) =>
                 Number.isInteger(id) &&
                 id >= 1 &&
-                id <= 4
+                id <= RX_BOX_CAPACITY
             ),
 
           message:
-            "Each scheduled dose must have unique chamber IDs from 1 to 4.",
+            `Each scheduled dose must have unique chamber IDs from 1 to ${RX_BOX_CAPACITY}.`,
         },
       },
     },
@@ -163,7 +164,7 @@ const MedicineSchema =
       chamberId: {
         type: Number,
         min: 1,
-        max: 4,
+        max: RX_BOX_CAPACITY,
         default: null,
         index: true,
       },

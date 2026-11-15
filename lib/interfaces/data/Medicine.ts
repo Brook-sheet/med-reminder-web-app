@@ -17,7 +17,7 @@ export interface MedicineChamberAssignment {
   /**
    * Physical Rx Box chamber numbers.
    *
-   * Valid values: 1, 2, 3, 4
+   * Valid values: 1, 2, 3, 4, 5
    *
    * Example:
    * chamberIds: [1]

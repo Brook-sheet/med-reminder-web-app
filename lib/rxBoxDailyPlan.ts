@@ -1,3 +1,4 @@
+import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import MedicationLog from "@/models/MedicationLog";
 import Medicine from "@/models/Medicine";
@@ -107,7 +108,7 @@ function getAssignedChambers(
       (id) =>
         Number.isInteger(id) &&
         id >= 1 &&
-        id <= 4
+        id <= RX_BOX_CAPACITY
     )
     .sort((a, b) => a - b);
 }
@@ -137,7 +138,7 @@ function sameChambers(
  * - Manual chamber assignments
  * - Multiple pills per chamber
  * - Same-time medication grouping
- * - Four-chamber capacity
+ * - Five-chamber capacity
  * - Medication log deduplication
  * - Existing taken/missed statuses
  * - ESP32 schedule response format

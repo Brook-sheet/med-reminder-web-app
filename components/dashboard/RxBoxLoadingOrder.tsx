@@ -1,5 +1,6 @@
 "use client";
 
+import { RX_BOX_CHAMBER_IDS } from "@/lib/rxBoxConfig";
 import {
   useCallback,
   useEffect,
@@ -50,7 +51,7 @@ interface ChamberGroup {
   totalPills: number;
 }
 
-const CHAMBER_IDS = [1, 2, 3, 4];
+const CHAMBER_IDS = RX_BOX_CHAMBER_IDS;
 
 function getChamberGroups(
   items: LoadingItem[]

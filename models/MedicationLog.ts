@@ -1,3 +1,4 @@
+import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 import mongoose, {
   Schema,
   Document,
@@ -193,13 +194,13 @@ const MedicationLogSchema =
       expectedChamberId: {
         type: Number,
         min: 1,
-        max: 4,
+        max: RX_BOX_CAPACITY,
         default: null,
       },
       detectedChamberId: {
         type: Number,
         min: 1,
-        max: 4,
+        max: RX_BOX_CAPACITY,
         default: null,
       },
       expectedChamberIds: {
@@ -215,10 +216,10 @@ const MedicationLogSchema =
                   value
                 ) &&
                 value >= 1 &&
-                value <= 4
+                value <= RX_BOX_CAPACITY
             ),
           message:
-            "Every expected chamber must be 1, 2, 3, or 4.",
+            `Every expected chamber must be a whole number from 1 to ${RX_BOX_CAPACITY}.`,
         },
       },
       windowBeforeMinutes: {

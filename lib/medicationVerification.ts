@@ -1,3 +1,4 @@
+import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 // lib/medicationVerification.ts
 
 import mongoose from 'mongoose';
@@ -238,7 +239,7 @@ function isValidChamber(
     (
       Number.isInteger(chamberId) &&
       chamberId >= 1 &&
-      chamberId <= 4
+      chamberId <= RX_BOX_CAPACITY
     )
   );
 }
@@ -1442,7 +1443,7 @@ export async function processMedicationEvent(
     )
   ) {
     throw new Error(
-      'chamberId must be 1, 2, 3, or 4.',
+      `chamberId must be a whole number from 1 to ${RX_BOX_CAPACITY}.`,
     );
   }
 

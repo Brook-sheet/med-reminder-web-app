@@ -1,6 +1,7 @@
 
 "use client";
 
+import { RX_BOX_CHAMBER_IDS } from "@/lib/rxBoxConfig";
 import React, {
   useEffect,
   useState,
@@ -84,7 +85,7 @@ const DEFAULT_FIXED_TIMES: Record<
   ],
 };
 
-const CHAMBERS = [1, 2, 3, 4];
+const CHAMBERS = RX_BOX_CHAMBER_IDS;
 
 function getToday(): string {
   const parts = new Intl.DateTimeFormat(
@@ -1399,7 +1400,7 @@ const MedicineModal: React.FC<
                       Select Chamber(s)
                     </p>
 
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-5 gap-2">
                       {CHAMBERS.map(
                         (chamberId) => {
                           const selected =

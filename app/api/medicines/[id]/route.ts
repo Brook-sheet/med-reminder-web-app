@@ -1,3 +1,4 @@
+import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -315,20 +316,20 @@ function validateMedicinePayload(
     if (
       !Array.isArray(chamberIds) ||
       chamberIds.length === 0 ||
-      chamberIds.length > 4 ||
+      chamberIds.length > RX_BOX_CAPACITY ||
       new Set(chamberIds).size !== chamberIds.length ||
       chamberIds.some(
         (id) =>
           typeof id !== "number" ||
           !Number.isInteger(id) ||
           id < 1 ||
-          id > 4
+          id > RX_BOX_CAPACITY
       )
     ) {
       return {
         valid: false,
         error:
-          "Select one or more unique chambers numbered 1 to 4.",
+          `Select one or more unique chambers numbered 1 to ${RX_BOX_CAPACITY}.`,
       };
     }
 

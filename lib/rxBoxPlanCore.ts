@@ -6,7 +6,9 @@ import {
   resolveMedicationTimeZone,
 } from "./medicationTime";
 
-export const RX_BOX_CAPACITY = 4;
+import { RX_BOX_CAPACITY, isValidRxBoxChamberId } from "./rxBoxConfig";
+
+export { RX_BOX_CAPACITY, isValidRxBoxChamberId } from "./rxBoxConfig";
 
 export type RxBoxGroupStatus =
   | "pending"
@@ -124,16 +126,6 @@ function groupStatus(
   }
 
   return "pending";
-}
-
-export function isValidRxBoxChamberId(
-  value: number
-): boolean {
-  return (
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= RX_BOX_CAPACITY
-  );
 }
 
 export function uniqueRxBoxLogIds(

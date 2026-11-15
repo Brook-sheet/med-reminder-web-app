@@ -97,7 +97,7 @@ test(
 );
 
 test(
-  "keeps four physical chamber rows",
+  "keeps five physical chamber rows",
   () => {
     const plan = buildRxBoxDailyPlan(
       [
@@ -127,7 +127,8 @@ test(
       plan.loadingPlan
     );
 
-    assert.equal(rows.length, 4);
+    assert.equal(rows.length, 5);
+    assert.equal(rows[4], null);
     assert.equal(rows[3], null);
   }
 );
@@ -341,7 +342,7 @@ test(
           "1",
           "Metformin",
           "8:00 AM",
-          [5]
+          [6]
         ),
       ],
       OPTIONS
@@ -685,13 +686,13 @@ test(
 );
 
 test(
-  "only physical chamber IDs 1 to 4 are valid",
+  "only physical chamber IDs 1 to 5 are valid",
   () => {
     assert.deepEqual(
-      [1, 2, 3, 4].map(
+      [1, 2, 3, 4, 5].map(
         isValidRxBoxChamberId
       ),
-      [true, true, true, true]
+      [true, true, true, true, true]
     );
 
     assert.equal(
@@ -700,8 +701,56 @@ test(
     );
 
     assert.equal(
-      isValidRxBoxChamberId(5),
+      isValidRxBoxChamberId(6),
       false
     );
   }
 );
+
+test("supports all five chambers at separate scheduled times", () => {
+  const plan = buildRxBoxDailyPlan(
+    [1, 2, 3, 4, 5].map((id) => dose(String(id), `Medicine ${id}`, `${id + 6}:00 AM`, [id])),
+    OPTIONS
+  );
+  assert.equal(plan.hardwareDispensingEnabled, true);
+  assert.equal(plan.capacity.maximum, 5);
+  assert.equal(plan.capacity.used, 5);
+  assert.equal(plan.groups.length, 5);
+  assert.deepEqual(plan.loadingPlan.map((item) => item.chamberId), [1, 2, 3, 4, 5]);
+  assert.deepEqual(plan.groups[4].chamberIds, [5]);
+  assert.equal(buildFourChamberRows(plan.loadingPlan)[4]?.chamberId, 5);
+});
+
+test("supports a grouped pickup across all five chambers without duplicating logs", () => {
+  const plan = buildRxBoxDailyPlan([
+    dose("1", "Medicine A", "8:00 AM", [1, 2, 3, 4, 5]),
+    dose("2", "Medicine B", "8:00 AM", [5]),
+  ], OPTIONS);
+  assert.equal(plan.hardwareDispensingEnabled, true);
+  assert.equal(plan.groups.length, 1);
+  assert.deepEqual(plan.groups[0].chamberIds, [1, 2, 3, 4, 5]);
+  assert.equal(plan.groups[0].logIds.length, 2);
+  assert.equal(plan.capacity.used, 5);
+});
+
+test("rejects conflicting schedules for Chamber 5", () => {
+  const plan = buildRxBoxDailyPlan([
+    dose("1", "Medicine A", "8:00 AM", [5]),
+    dose("2", "Medicine B", "9:00 AM", [5]),
+  ], OPTIONS);
+  assert.equal(plan.hardwareDispensingEnabled, false);
+  assert.deepEqual(plan.groups, []);
+  assert.match(plan.message, /Chamber 5 is assigned to different scheduled times/);
+});
+
+test("rejects nonphysical chamber IDs without issuing a partial hardware plan", () => {
+  for (const invalid of [0, -1, 6, 1.5, NaN, Infinity]) {
+    assert.equal(isValidRxBoxChamberId(invalid), false);
+    const plan = buildRxBoxDailyPlan([
+      dose("1", "Medicine A", "8:00 AM", [5]),
+      dose("2", "Medicine B", "9:00 AM", [invalid]),
+    ], OPTIONS);
+    assert.equal(plan.hardwareDispensingEnabled, false);
+    assert.deepEqual(plan.groups, []);
+  }
+});
