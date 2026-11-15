@@ -4,14 +4,15 @@ import mongoose, {
   Schema,
 } from 'mongoose';
 
-export type AlertEventType =
-  | 'PREDICTED_ADHERENCE_RISK'
-  | 'MEDICATION_LATE'
-  | 'MEDICATION_MISSED'
-  | 'MEDICATION_VERIFIED'
-  | 'MEDICATION_EVENT_WARNING'
-  | 'CRITICAL_MEDICATION_EVENT'
-  | 'POSSIBLE_EXCESS_INTAKE';
+import type {
+  AlertEventType as StoredAlertEventType,
+} from '@/lib/interfaces/data/Alert';
+
+// The authenticated Rx Box route handles dispensing alerts separately.
+export type AlertEventType = Exclude<
+  StoredAlertEventType,
+  'MEDICATION_DISPENSED'
+>;
 
 export type AlertSeverity =
   | 'INFO'
@@ -49,7 +50,7 @@ export interface IAlertDocument
     | null;
 
   eventKey: string;
-  eventType: AlertEventType;
+  eventType: StoredAlertEventType;
   severity: AlertSeverity;
   title: string;
   message: string;
@@ -123,6 +124,7 @@ const AlertSchema =
           'PREDICTED_ADHERENCE_RISK',
           'MEDICATION_LATE',
           'MEDICATION_MISSED',
+          'MEDICATION_DISPENSED',
           'MEDICATION_VERIFIED',
           'MEDICATION_EVENT_WARNING',
           'CRITICAL_MEDICATION_EVENT',

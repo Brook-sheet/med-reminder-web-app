@@ -1,22 +1,30 @@
 import { resolveMedicationTimeZone } from '@/lib/medicationTime';
 import { claimAndSendSms } from '@/lib/sms/delivery';
 import { normalizePhilippineMobileNumber } from '@/lib/sms/phone';
+import Alert from '@/models/Alert';
 import MonitoringRequest from '@/models/MonitoringRequest';
 import User from '@/models/User';
 
-interface DispensedSmsInput {
+interface DispensedNotificationsInput {
   patientId: string;
   groupId: string;
-  medicineNames: string[];
-  dispensedAt: Date;
+  medications: { medicineName: string; chamberIds: number[] }[];
+  dispensedAt: Date | null;
+  receivedAt: Date;
 }
 
-export async function sendDispensedSms({
+function formatChambers(chamberIds: number[]): string {
+  const label = chamberIds.length === 1 ? 'Chamber' : 'Chambers';
+  return `${label} ${chamberIds.join(', ')}`;
+}
+
+export async function sendDispensedNotifications({
   patientId,
   groupId,
-  medicineNames,
+  medications,
   dispensedAt,
-}: DispensedSmsInput): Promise<void> {
+  receivedAt,
+}: DispensedNotificationsInput): Promise<void> {
   const patient = await User.findOne({
     _id: patientId,
     role: 'patient',
@@ -36,21 +44,24 @@ export async function sendDispensedSms({
     _id: { $in: relationships.map(({ familyId }) => familyId) },
     role: 'family',
     isDeleted: { $ne: true },
-    'notificationPreferences.sms': true,
-    'notificationPreferences.smsConsent': true,
-  }).select('notificationPreferences.smsPhoneNumber').lean();
+  }).select([
+    'notificationPreferences.sms',
+    'notificationPreferences.smsConsent',
+    'notificationPreferences.smsPhoneNumber',
+  ].join(' ')).lean();
 
   const patientName = [patient.firstName, patient.lastName]
     .filter(Boolean).join(' ').trim() || 'Patient';
 
   const timeZone = resolveMedicationTimeZone();
+  const occurredAt = dispensedAt ?? receivedAt;
 
   const date = new Intl.DateTimeFormat('en-US', {
     timeZone,
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(dispensedAt);
+  }).format(occurredAt);
 
   const time = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -58,36 +69,69 @@ export async function sendDispensedSms({
     minute: '2-digit',
     second: '2-digit',
     hour12: true,
-  }).format(dispensedAt);
+  }).format(occurredAt);
 
-  const medicines = new Intl.ListFormat('en-US').format(medicineNames);
-  const verb = medicineNames.length === 1 ? 'has' : 'have';
-  const message = `Reminder: ${medicines} ${verb} been successfully dispensed for ${patientName} on ${date} at ${time}. Please remind them to take their medication now.`;
+  const medicineDetails = [...new Set(medications.map(
+    ({ medicineName, chamberIds }) => `${medicineName} (${formatChambers(chamberIds)})`
+  ))];
+  const medicines = new Intl.ListFormat('en-US').format(medicineDetails);
+  const verb = medicineDetails.length === 1 ? 'was' : 'were';
+  const eventTime = dispensedAt
+    ? `on ${date} at ${time}`
+    : `(reported on ${date} at ${time})`;
+  const message = `${medicines} ${verb} successfully dispensed for ${patientName} ${eventTime}.`;
 
-  const deliveries = await Promise.allSettled(familyMembers.map(async (member) => {
-    const to = normalizePhilippineMobileNumber(
-      member.notificationPreferences?.smsPhoneNumber
-    );
+  const usedChambers = [...new Set(medications.flatMap(({ chamberIds }) => chamberIds))]
+    .sort((a, b) => a - b);
+  const eventKey = `rx-box-dispensed:${patientId}:${groupId}`;
+  const title = `Medication dispensed · ${formatChambers(usedChambers)}`;
 
-    if (!to) {
-      return;
+  const deliveries = await Promise.allSettled(familyMembers.flatMap((member) => {
+    const recipientId = member._id.toString();
+    const alertDelivery = Alert.create({
+      patientId,
+      monitorId: member._id,
+      eventKey,
+      eventType: 'MEDICATION_DISPENSED',
+      severity: 'INFO',
+      title,
+      message,
+      occurredAt,
+      metadata: { groupId, medications },
+    }).catch((error: unknown) => {
+      if (
+        typeof error !== 'object' ||
+        error === null ||
+        !('code' in error) ||
+        error.code !== 11000
+      ) {
+        throw error;
+      }
+    });
+
+    const preferences = member.notificationPreferences;
+    const to = normalizePhilippineMobileNumber(preferences?.smsPhoneNumber);
+
+    if (preferences?.sms !== true || preferences.smsConsent !== true || !to) {
+      return [alertDelivery];
     }
 
-    const recipientId = member._id.toString();
-
-    await claimAndSendSms({
-      dedupeKey: `rx-box-dispensed:${patientId}:${groupId}:${recipientId}`,
-      patientId,
-      recipientId,
-      alertType: 'OTHER',
-      to,
-      message,
-    });
+    return [
+      alertDelivery,
+      claimAndSendSms({
+        dedupeKey: `${eventKey}:${recipientId}`,
+        patientId,
+        recipientId,
+        alertType: 'OTHER',
+        to,
+        message: `${message} Please remind them to take their medication now.`,
+      }),
+    ];
   }));
 
   for (const delivery of deliveries) {
     if (delivery.status === 'rejected') {
-      console.error('[Rx Box] Dispensed SMS delivery error:', delivery.reason);
+      console.error('[Rx Box] Dispensed notification delivery error:', delivery.reason);
     }
   }
 }

@@ -15,8 +15,9 @@ import { resolveRxBoxDevice, RxBoxDeviceError } from '@/lib/rxBoxDevice';
 import {
   isValidRxBoxChamberId,
   uniqueRxBoxLogIds,
+  type RxBoxLoadingItem,
 } from '@/lib/rxBoxPlanCore';
-import { sendDispensedSms } from '@/lib/sms/dispensed';
+import { sendDispensedNotifications } from '@/lib/sms/dispensed';
 import SensorData from '@/models/SensorData';
 
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,11 @@ async function findExactPlanGroup(
   deviceId: string,
   planId: string,
   groupId: string
-): Promise<{ planDate: string; group: RxBoxAlarmGroup } | null> {
+): Promise<{
+  planDate: string;
+  group: RxBoxAlarmGroup;
+  loadingPlan: RxBoxLoadingItem[];
+} | null> {
   const timezone = resolveMedicationTimeZone();
   const today = getMedicationDateKey(new Date(), timezone);
 
@@ -113,7 +118,7 @@ async function findExactPlanGroup(
     );
 
     if (group) {
-      return { planDate: date, group };
+      return { planDate: date, group, loadingPlan: plan.loadingPlan };
     }
   }
 
@@ -370,26 +375,36 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    const dispensedAt =
-      status === 'dispensed' ? parseDispensedAt(body.dispensedAt) : null;
-
-    if (dispensedAt) {
-      const medicineNames = [...new Set(results
+    if (status === 'dispensed') {
+      const dispensedAt = parseDispensedAt(body.dispensedAt);
+      const medications = results
         .filter((log) => log.status === 'dispensed')
-        .map((log) => log.medicineName.trim())
-        .filter(Boolean))];
+        .map((log) => ({
+          medicineName: log.medicineName.trim(),
+          chamberIds: chamberIds
+            .filter((chamberId) =>
+              exact.loadingPlan.some((item) =>
+                item.logId === log.logId && item.chamberId === chamberId
+              )
+            )
+            .sort((a, b) => a - b),
+        }))
+        .filter(({ medicineName, chamberIds }) =>
+          medicineName && chamberIds.length > 0
+        );
 
-      if (medicineNames.length > 0) {
+      if (medications.length > 0) {
         after(async () => {
           try {
-            await sendDispensedSms({
+            await sendDispensedNotifications({
               patientId: device.userId,
               groupId,
-              medicineNames,
+              medications,
               dispensedAt,
+              receivedAt: timestamp,
             });
           } catch (error) {
-            console.error('[Rx Box] Dispensed SMS error:', error);
+            console.error('[Rx Box] Dispensed notification error:', error);
           }
         });
       }
