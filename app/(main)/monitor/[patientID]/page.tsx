@@ -1,5 +1,6 @@
 'use client';
 
+import PatientTodayMedicationSchedule from '@/components/monitor/TodayMedicationSchedule';
 import PredictionPanel from '@/components/dashboard/PredictionPanel';
 import type { PredictionResult } from '@/lib/prediction/adherencePrediction';
 
@@ -634,7 +635,7 @@ export default function MonitorDashboardPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             {[
               {
-                label: 'Verified',
+                label: 'Verified / Eligible',
                 value: `${reportSummary.today.verified} / ${reportSummary.today.scheduled}`,
                 color: 'text-green-600',
               },
@@ -675,6 +676,8 @@ export default function MonitorDashboardPage() {
               </div>
             ))}
           </div>
+
+          <PatientTodayMedicationSchedule patientId={patientID} />
         </section>
 
         <section className="space-y-5 rounded-[28px] border border-border/70 bg-card p-6 shadow-lg shadow-slate-900/5">

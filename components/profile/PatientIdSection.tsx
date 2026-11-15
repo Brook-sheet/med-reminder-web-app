@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 
 import MonitoringChatButton from "@/components/chats/MonitoringChatButton";
+import {
+  TodayMedicationSchedule,
+  useTodayMedicationSchedule,
+} from "@/components/monitor/TodayMedicationSchedule";
 import AccountIdInput from "@/components/ui/AccountIdInput";
 import { buildAccountIdentifier } from "@/lib/accountIdentifier";
 
@@ -84,6 +88,10 @@ export default function PatientIdSection() {
   const router = useRouter();
 
   const [requests, setRequests] = useState<FamilyRequest[]>([]);
+  const schedule = useTodayMedicationSchedule(
+    undefined,
+    requests.some((request) => request.status === "approved")
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [patientIdInput, setPatientIdInput] = useState("");
@@ -348,6 +356,14 @@ export default function PatientIdSection() {
                     </div>
                   )}
                 </div>
+
+                {request.status === "approved" && (
+                  <TodayMedicationSchedule
+                    patientId={request.patient.patientId}
+                    state={schedule}
+                    preview
+                  />
+                )}
               </article>
             );
           })
