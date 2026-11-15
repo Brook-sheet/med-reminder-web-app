@@ -8,12 +8,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   CheckCircle2,
   Clock3,
-  Copy,
   Eye,
-  IdCard,
   Loader2,
   ShieldOff,
   UserPlus,
@@ -22,11 +19,7 @@ import {
 
 import MonitoringChatButton from "@/components/chats/MonitoringChatButton";
 import AccountIdInput from "@/components/ui/AccountIdInput";
-import {
-  accountIdSuffix,
-  buildAccountIdentifier,
-} from "@/lib/accountIdentifier";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { buildAccountIdentifier } from "@/lib/accountIdentifier";
 
 type RequestStatus =
   | "pending"
@@ -90,10 +83,8 @@ const STATUS_UI = {
 export default function PatientIdSection() {
   const router = useRouter();
 
-  const [familyId, setFamilyId] = useState("");
   const [requests, setRequests] = useState<FamilyRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [patientIdInput, setPatientIdInput] = useState("");
   const [requesting, setRequesting] = useState(false);
@@ -109,35 +100,17 @@ export default function PatientIdSection() {
     }
 
     try {
-      const [idResponse, requestsResponse] = await Promise.all([
-        fetch("/api/family/my-id", {
-          cache: "no-store",
-        }),
-        fetch("/api/patient/monitor", {
-          cache: "no-store",
-        }),
-      ]);
+      const response = await fetch("/api/patient/monitor", {
+        cache: "no-store",
+      });
+      const result = await response.json();
 
-      const [idResult, requestsResult] = await Promise.all([
-        idResponse.json(),
-        requestsResponse.json(),
-      ]);
-
-      if (!idResponse.ok || !idResult.success) {
-        setError(
-          idResult.error || "Unable to load your Family ID."
-        );
+      if (!response.ok || !result.success) {
+        setError(result.error || "Unable to load patient connections.");
         return;
       }
 
-      setFamilyId(idResult.data.familyId);
-
-      setRequests(
-        requestsResponse.ok && requestsResult.success
-          ? requestsResult.data.requests ?? []
-          : []
-      );
-
+      setRequests(result.data.requests ?? []);
       setError("");
     } catch {
       setError("Network error. Please try again.");
@@ -171,25 +144,6 @@ export default function PatientIdSection() {
       );
     };
   }, [loadData]);
-
-  const copyFamilyId = async () => {
-    if (!familyId) {
-      return;
-    }
-
-    const successful = await copyTextToClipboard(
-      accountIdSuffix(familyId)
-    );
-
-    if (!successful) {
-      setError("Unable to copy your Family ID. Please try again.");
-      return;
-    }
-
-    setCopied(true);
-
-    window.setTimeout(() => setCopied(false), 2000);
-  };
 
   const requestMonitoringAccess = async (event: FormEvent) => {
     event.preventDefault();
@@ -251,55 +205,6 @@ export default function PatientIdSection() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
-        <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
-          <IdCard className="h-5 w-5" />
-
-          <h2 className="text-lg font-semibold">
-            Your Family ID
-          </h2>
-        </div>
-
-        {loading ? (
-          <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Generating your Family ID...
-          </div>
-        ) : familyId ? (
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <div className="min-w-0 flex-1 rounded-2xl border border-emerald-200 bg-white px-5 py-4 font-mono text-xl font-bold tracking-[0.18em] text-slate-900 dark:border-emerald-900 dark:bg-slate-950 dark:text-white">
-              {familyId}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void copyFamilyId()}
-              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
-              aria-label="Copy Family ID"
-            >
-              {copied ? (
-                <Check className="h-5 w-5" />
-              ) : (
-                <Copy className="h-5 w-5" />
-              )}
-
-              {copied ? "Copied!" : "Copy Family ID"}
-            </button>
-          </div>
-        ) : null}
-
-        <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-          Share this Family ID with the Patient. The Patient can invite
-          you from Chats. This ID is separate from every Patient ID.
-        </p>
-
-        {error && (
-          <p className="mt-3 text-sm text-rose-600">
-            {error}
-          </p>
-        )}
-      </section>
-
       <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-sm">
         <div className="flex items-center gap-2 text-slate-900 dark:text-white">
           <UserPlus className="h-5 w-5 text-blue-600" />
@@ -373,7 +278,13 @@ export default function PatientIdSection() {
           Patient Connections
         </h2>
 
-        {!loading && requests.length === 0 ? (
+        {error && (
+          <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
+            {error}
+          </p>
+        )}
+
+        {!loading && !error && requests.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-6 text-center">
             <p className="font-medium text-slate-700 dark:text-slate-200">
               No Patient connected

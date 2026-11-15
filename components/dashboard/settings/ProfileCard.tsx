@@ -13,6 +13,7 @@ import {
   User,
 } from "lucide-react";
 
+import FamilyIdSection from "@/components/profile/FamilyIdSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Toast from "@/components/ui/Toast";
@@ -524,6 +525,8 @@ const ProfileCard = () => {
               </p>
             </div>
           )}
+
+          {role === "family" && <FamilyIdSection />}
 
           {role === "patient" && (
             <div>
