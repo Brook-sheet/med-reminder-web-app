@@ -41,6 +41,7 @@ export interface RxBoxLoadingItem {
   medicineName: string;
   dosage: string;
   pillUnit: number;
+  pillsInChamber: number;
   pillsPerDose: number;
   scheduledTime: string;
 }
@@ -245,6 +246,13 @@ export function buildRxBoxDailyPlan(
       continue;
     }
 
+    if (chamberIds.length > pillsPerDose) {
+      errors.push(
+        `${dose.medicineName} at ${dose.scheduledTime} has more assigned chambers than pills.`
+      );
+      continue;
+    }
+
     /*
      * Each chamber may only be opened at one
      * scheduled time during a daily loading cycle.
@@ -277,16 +285,9 @@ export function buildRxBoxDailyPlan(
       }
     }
 
-    /*
-     * Multiple pills may be loaded into
-     * a single selected chamber.
-     *
-     * A loading item represents one medicine
-     * assigned to one physical chamber.
-     *
-     * pillUnit is retained for compatibility
-     * with the existing loading-plan interface.
-     */
+    // Split the dose evenly, giving any remainder to the lowest chamber IDs.
+    const pillsPerChamber = Math.floor(pillsPerDose / chamberIds.length);
+    const remainder = pillsPerDose % chamberIds.length;
     chamberIds.forEach((chamberId, index) => {
       proposedLoadingItems.push({
         chamberId,
@@ -295,6 +296,7 @@ export function buildRxBoxDailyPlan(
         medicineName: dose.medicineName,
         dosage: dose.dosage,
         pillUnit: index + 1,
+        pillsInChamber: pillsPerChamber + (index < remainder ? 1 : 0),
         pillsPerDose,
         scheduledTime: dose.scheduledTime,
       });

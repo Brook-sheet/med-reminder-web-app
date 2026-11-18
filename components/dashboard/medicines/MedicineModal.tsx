@@ -599,6 +599,11 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         setError(`Select at least one chamber for ${row.time}.`);
         return;
       }
+
+      if (row.chamberIds.length > pillsPerDose) {
+        setError(`Select at most ${pillsPerDose} chambers for ${row.time}.`);
+        return;
+      }
     }
 
     const requiredCount = FIXED_SCHEDULE_COUNTS[frequency];

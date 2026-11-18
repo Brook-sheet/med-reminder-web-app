@@ -334,6 +334,13 @@ function validateMedicinePayload(
       };
     }
 
+    if (chamberIds.length > quantity) {
+      return {
+        valid: false,
+        error: "A scheduled dose cannot use more chambers than pills.",
+      };
+    }
+
     for (const chamberId of chamberIds as number[]) {
       const previousTime =
         chamberTimes.get(chamberId);

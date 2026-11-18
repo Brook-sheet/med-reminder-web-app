@@ -21,7 +21,7 @@ interface LoadingItem {
   medicineName: string;
   dosage: string;
   pillUnit: number;
-  pillsPerDose: number;
+  pillsInChamber: number;
   scheduledTime: string;
 }
 
@@ -48,7 +48,6 @@ interface ChamberGroup {
   chamberId: number;
   items: LoadingItem[];
   scheduledTimes: string[];
-  totalPills: number;
 }
 
 const CHAMBER_IDS = RX_BOX_CHAMBER_IDS;
@@ -80,37 +79,10 @@ function getChamberGroups(
        * This prevents counting duplicate
        * loading entries as extra tablets.
        */
-      const uniqueDoses =
-        new Map<string, LoadingItem>();
-
-      for (const item of chamberItems) {
-        const key =
-          item.logId ??
-          `${item.medicineId ?? item.medicineName}:${item.scheduledTime}`;
-
-        if (!uniqueDoses.has(key)) {
-          uniqueDoses.set(
-            key,
-            item
-          );
-        }
-      }
-
-      const totalPills =
-        Array.from(
-          uniqueDoses.values()
-        ).reduce(
-          (sum, item) =>
-            sum +
-            item.pillsPerDose,
-          0
-        );
-
       return {
         chamberId,
         items: chamberItems,
         scheduledTimes,
-        totalPills,
       };
     }
   );
@@ -395,15 +367,13 @@ export default function RxBoxLoadingOrder() {
 
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {
-                                item.pillsPerDose
+                                item.pillsInChamber
                               }{" "}
-                              {item.pillsPerDose ===
+                              {item.pillsInChamber ===
                               1
                                 ? "pill"
                                 : "pills"}{" "}
-                              per
-                              scheduled
-                              dose
+                              in this chamber
                             </p>
                           </div>
                         )
