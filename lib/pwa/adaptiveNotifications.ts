@@ -1,3 +1,4 @@
+import { isReminderWindow } from "../reminderTiming";
 import {
   analyzeAdherence,
   type RawLog,
@@ -129,12 +130,8 @@ export async function queueAdaptiveNotifications(
     const userId =
       user._id.toString();
 
-    const recent = (
-      target: number
-    ) =>
-      now.getTime() >= target &&
-      now.getTime() - target <
-        120000;
+    const recent = (target: number, end = target + 5 * 60000) =>
+      isReminderWindow(now, target, end);
 
     for (const log of logs) {
       if (
@@ -156,13 +153,14 @@ export async function queueAdaptiveNotifications(
           zone
         );
 
-      if (!scheduled) continue;
+      if (!Number.isFinite(scheduled.getTime())) continue;
 
       const base = {
         medicineName:
           log.medicineName,
         logId:
           log._id.toString(),
+        scheduledFor: scheduled.toISOString(),
         url: "/",
         screen:
           "dashboard" as const,
@@ -178,7 +176,7 @@ export async function queueAdaptiveNotifications(
         )
       ) {
         await queuePwaEvent(
-          `adaptive-upcoming:${log._id}`,
+          `adaptive-upcoming:${log._id}:${scheduled.toISOString()}`,
           userId,
           {
             ...base,
@@ -206,12 +204,16 @@ export async function queueAdaptiveNotifications(
             config.followUpIntervalMinutes *
             60000;
 
-        if (!recent(target)) {
+        const end = Math.min(
+          target + config.followUpIntervalMinutes * 60000,
+          scheduled.getTime() + (log.windowAfterMinutes ?? 90) * 60000
+        );
+        if (!recent(target, end)) {
           continue;
         }
 
         await queuePwaEvent(
-          `followup:${log._id}:${count}`,
+          `followup:${log._id}:${scheduled.toISOString()}:${count}`,
           userId,
           {
             ...base,

@@ -1,3 +1,4 @@
+import { MAX_MEDICINES_PER_CHAMBER } from "./chamberSharing";
 
 import { createHash } from "node:crypto";
 
@@ -199,6 +200,7 @@ export function buildRxBoxDailyPlan(
   >();
 
   const errors: string[] = [];
+  const chamberMedicines = new Map<number, Set<string>>();
 
   for (const dose of sortedDoses) {
     const scheduledMinutes =
@@ -251,6 +253,12 @@ export function buildRxBoxDailyPlan(
      * share the chamber.
      */
     for (const chamberId of chamberIds) {
+      const medicines = chamberMedicines.get(chamberId) || new Set<string>();
+      medicines.add(dose.medicineId);
+      chamberMedicines.set(chamberId, medicines);
+      if (medicines.size > MAX_MEDICINES_PER_CHAMBER) {
+        errors.push(`Chamber ${chamberId} exceeds the ${MAX_MEDICINES_PER_CHAMBER}-medicine limit.`);
+      }
       const existingTime =
         chamberTimeMap.get(chamberId);
 

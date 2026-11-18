@@ -37,6 +37,8 @@ export interface NotificationPayload {
   chatRequestId?: string;
 
   logId?: string;
+  eventId?: string;
+  scheduledFor?: string;
 }
 
 export interface ChannelDeliveryResult {
@@ -105,6 +107,8 @@ function buildNotificationData(
     monitoringRequestId: optionalString(payload.monitoringRequestId),
     chatRequestId: optionalString(payload.chatRequestId),
     logId: optionalString(payload.logId),
+    eventId: optionalString(payload.eventId),
+    scheduledFor: optionalString(payload.scheduledFor),
     timestamp: new Date().toISOString(),
   };
 }

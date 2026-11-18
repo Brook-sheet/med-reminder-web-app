@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import User from "@/models/User";
+import { validateChamberSharing } from "@/lib/chamberSharing";
 import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import {
@@ -19,7 +22,6 @@ import type {
 } from "@/lib/interfaces/data/Api";
 
 import type {
-  IMedicineDocument,
   IMedicineChamberAssignment,
 } from "@/models/Medicine";
 
@@ -471,7 +473,8 @@ function normalizePayload(
  */
 async function findChamberConflict(
   userId: string,
-  payload: MedicinePayload
+  payload: MedicinePayload,
+  session: mongoose.ClientSession
 ): Promise<string | null> {
   const otherMedicines = await Medicine.find({
     userId,
@@ -480,59 +483,10 @@ async function findChamberConflict(
     .select(
       "name startDate endDate chamberAssignments"
     )
+    .session(session)
     .lean();
 
-  for (const other of otherMedicines) {
-    const otherStart =
-      other.startDate || "0000-01-01";
-
-    const otherEnd =
-      other.endDate || "9999-12-31";
-
-    const currentEnd =
-      payload.endDate || "9999-12-31";
-
-    const datesOverlap =
-      payload.startDate <= otherEnd &&
-      otherStart <= currentEnd;
-
-    if (!datesOverlap) {
-      continue;
-    }
-
-    for (const incoming of payload.chamberAssignments) {
-      const incomingMinutes =
-        parseMedicationTimeToMinutes(
-          incoming.scheduledTime
-        );
-
-      for (const existing of other.chamberAssignments ?? []) {
-        const existingMinutes =
-          parseMedicationTimeToMinutes(
-            existing.scheduledTime
-          );
-
-        const sharedChambers =
-          incoming.chamberIds.filter((id) =>
-            existing.chamberIds.includes(id)
-          );
-
-        if (
-          sharedChambers.length > 0 &&
-          incomingMinutes !== existingMinutes
-        ) {
-          return (
-            `Chamber ${sharedChambers.join(", ")} is already ` +
-            `assigned to ${other.name} at ` +
-            `${existing.scheduledTime}. ` +
-            "Choose a different chamber or use the same dispensing time."
-          );
-        }
-      }
-    }
-  }
-
-  return null;
+  return validateChamberSharing(payload, otherMedicines);
 }
 
 /**
@@ -549,7 +503,8 @@ async function createLogsFromStartDate(
   endDate: string | null,
   windowBeforeMinutes: number,
   windowAfterMinutes: number,
-  lateAfterMinutes: number
+  lateAfterMinutes: number,
+  session: mongoose.ClientSession
 ): Promise<void> {
   const today = getMedicationDateKey();
 
@@ -566,13 +521,13 @@ async function createLogsFromStartDate(
       medicineId,
       scheduledDate: today,
       scheduledTime: time,
-    });
+    }).session(session);
 
     if (existing) {
       continue;
     }
 
-    await MedicationLog.create({
+    await MedicationLog.create([{
       userId,
       medicineId,
       medicineName,
@@ -593,7 +548,7 @@ async function createLogsFromStartDate(
       lateAfterMinutes,
 
       countsTowardAdherence: true,
-    });
+    }], { session });
   }
 }
 
@@ -692,42 +647,18 @@ export async function POST(
 
     const payload = normalizePayload(body);
 
-    const conflict = await findChamberConflict(
-      user.userId,
-      payload
-    );
-
-    if (conflict) {
-      return NextResponse.json<ApiResponse>(
-        {
-          success: false,
-          error: conflict,
-        },
-        { status: 409 }
-      );
-    }
-
-    const medicine: IMedicineDocument =
-      await Medicine.create({
-        userId: user.userId,
-
-        ...payload,
-
-        isActive: true,
-      });
-
-    await createLogsFromStartDate(
-      user.userId,
-      medicine._id.toString(),
-      medicine.name,
-      medicine.dosage,
-      medicine.scheduledTimes,
-      payload.startDate,
-      payload.endDate,
-      medicine.windowBeforeMinutes,
-      medicine.windowAfterMinutes,
-      medicine.lateAfterMinutes
-    );
+    const result = await mongoose.connection.transaction(async (session) => {
+      await User.updateOne({ _id: user.userId }, { $inc: { __v: 1 } }, { session });
+      const conflict = await findChamberConflict(user.userId, payload, session);
+      if (conflict) return { conflict, medicine: null };
+      const [medicine] = await Medicine.create([{ userId: user.userId, ...payload, isActive: true }], { session });
+      await createLogsFromStartDate(user.userId, medicine._id.toString(), medicine.name,
+        medicine.dosage, medicine.scheduledTimes, payload.startDate, payload.endDate,
+        medicine.windowBeforeMinutes, medicine.windowAfterMinutes, medicine.lateAfterMinutes, session);
+      return { conflict: null, medicine };
+    });
+    if (result.conflict) return NextResponse.json<ApiResponse>({ success: false, error: result.conflict }, { status: 409 });
+    const medicine = result.medicine;
 
     return NextResponse.json<ApiResponse>(
       {

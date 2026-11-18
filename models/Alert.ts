@@ -8,10 +8,10 @@ import type {
   AlertEventType as StoredAlertEventType,
 } from '@/lib/interfaces/data/Alert';
 
-// The authenticated Rx Box route handles dispensing alerts separately.
+// Dispensing and advance reminders use their own authenticated server flows.
 export type AlertEventType = Exclude<
   StoredAlertEventType,
-  'MEDICATION_DISPENSED'
+  'MEDICATION_DISPENSED' | 'MEDICATION_UPCOMING'
 >;
 
 export type AlertSeverity =
@@ -125,6 +125,7 @@ const AlertSchema =
           'MEDICATION_LATE',
           'MEDICATION_MISSED',
           'MEDICATION_DISPENSED',
+          'MEDICATION_UPCOMING',
           'MEDICATION_VERIFIED',
           'MEDICATION_EVENT_WARNING',
           'CRITICAL_MEDICATION_EVENT',

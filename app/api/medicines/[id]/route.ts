@@ -1,3 +1,5 @@
+import User from "@/models/User";
+import { validateChamberSharing } from "@/lib/chamberSharing";
 import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -487,57 +489,7 @@ async function findChamberConflict(
     .session(session)
     .lean();
 
-  for (const other of otherMedicines) {
-    const otherStart =
-      other.startDate || "0000-01-01";
-
-    const otherEnd =
-      other.endDate || "9999-12-31";
-
-    const currentEnd =
-      payload.endDate || "9999-12-31";
-
-    const datesOverlap =
-      payload.startDate <= otherEnd &&
-      otherStart <= currentEnd;
-
-    if (!datesOverlap) {
-      continue;
-    }
-
-    for (const incoming of payload.chamberAssignments) {
-      const incomingMinutes =
-        parseMedicationTimeToMinutes(
-          incoming.scheduledTime
-        );
-
-      for (const existing of other.chamberAssignments ?? []) {
-        const existingMinutes =
-          parseMedicationTimeToMinutes(
-            existing.scheduledTime
-          );
-
-        const sharedChambers =
-          incoming.chamberIds.filter((id) =>
-            existing.chamberIds.includes(id)
-          );
-
-        if (
-          sharedChambers.length > 0 &&
-          incomingMinutes !== existingMinutes
-        ) {
-          return (
-            `Chamber ${sharedChambers.join(", ")} is already ` +
-            `assigned to ${other.name} at ` +
-            `${existing.scheduledTime}. ` +
-            "Choose a different chamber or use the same dispensing time."
-          );
-        }
-      }
-    }
-  }
-
-  return null;
+  return validateChamberSharing(payload, otherMedicines);
 }
 
 export async function GET(
@@ -692,6 +644,8 @@ export async function PUT(
     const result =
       await mongoose.connection.transaction(
         async (session) => {
+          // Serialize schedule writes for this patient, including concurrent adds.
+          await User.updateOne({ _id: user.userId }, { $inc: { __v: 1 } }, { session });
           const existingMedicine =
             await Medicine.findOne({
               _id: id,

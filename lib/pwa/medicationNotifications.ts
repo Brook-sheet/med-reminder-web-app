@@ -1,3 +1,5 @@
+import { medicationScheduledAt } from "@/lib/medicationTime";
+import MedicationLog from "@/models/MedicationLog";
 import mongoose from "mongoose";
 
 import type {
@@ -163,8 +165,9 @@ export async function queuePwaEvent(
     return;
   }
 
-  const delivery =
-    await PwaDelivery.findOneAndUpdate(
+  let delivery;
+  try {
+    delivery = await PwaDelivery.findOneAndUpdate(
       {
         eventKey,
       },
@@ -173,7 +176,7 @@ export async function queuePwaEvent(
           eventKey,
           userId,
           patientId,
-          payload,
+          payload: { ...payload, eventId: eventKey },
 
           expiresAt:
             new Date(
@@ -188,6 +191,12 @@ export async function queuePwaEvent(
         setDefaultsOnInsert: true,
       }
     );
+
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) throw error;
+    delivery = await PwaDelivery.findOne({ eventKey });
+  }
+  if (!delivery) return;
 
   if (
     recipient
@@ -416,6 +425,20 @@ export async function drainPwaDeliveries(
         );
 
         continue;
+      }
+
+      const payload = delivery.payload;
+      if (payload.logId && payload.scheduledFor) {
+        const log = await MedicationLog.findById(payload.logId).lean();
+        const scheduled = log ? medicationScheduledAt(log.scheduledDate, log.scheduledTime) : null;
+        const valid = log && ['pending', 'reminder', 'dispensed'].includes(log.status) &&
+          log.countsTowardAdherence !== false && scheduled?.toISOString() === payload.scheduledFor &&
+          now.getTime() < scheduled.getTime() + (log.windowAfterMinutes ?? 90) * 60000 &&
+          (payload.type !== 'upcoming_reminder' || now.getTime() < scheduled.getTime());
+        if (!valid) {
+          await PwaDelivery.updateOne({ _id: delivery._id }, { $set: { status: 'skipped' } });
+          continue;
+        }
       }
 
       const result =

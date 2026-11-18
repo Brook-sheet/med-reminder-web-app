@@ -1,3 +1,4 @@
+import { sendFamilyAdvanceReminders } from "@/lib/familyAdvanceReminders";
 import { notifyPredictedAdherenceRisk } from "@/lib/prediction/notifications";
 import mongoose from "mongoose";
 
@@ -259,7 +260,12 @@ async function ensureDeliveryRecord(
   now: Date
 ): Promise<string> {
   const dedupeKey =
-    `${log._id.toString()}:${reminderType}`;
+    `${log._id.toString()}:${reminderType}:${scheduledFor.toISOString()}`;
+
+  const legacy = await MedicationReminderDelivery.findOne({ dedupeKey: `${log._id}:${reminderType}` }).lean();
+  if (legacy && legacy.scheduledDate === log.scheduledDate && legacy.scheduledTime === log.scheduledTime) {
+    return legacy.dedupeKey;
+  }
 
   const expireAt =
     new Date(
@@ -457,15 +463,11 @@ async function createInAppNotification(
       log.medicineId;
   }
 
-  const notification =
-    new Notification(
-      notificationData
-    );
-
-  await notification.save();
-
-  const notificationId =
-    notification._id as mongoose.Types.ObjectId;
+  // Reuse the delivery ID: a crash between saving the bell record and updating
+  // the delivery cannot create a second notification on retry.
+  const notificationId = delivery._id;
+  await Notification.updateOne({ _id: notificationId }, { $setOnInsert: notificationData },
+    { upsert: true, runValidators: true });
 
   await MedicationReminderDelivery.updateOne(
     {
@@ -568,20 +570,13 @@ async function deliverReminder(
   user: SchedulerUser,
   log: SchedulerMedicationLog,
   reminderType: MedicationReminderType,
-  minutesUntilSchedule: number,
+  scheduledFor: Date,
   now: Date
 ): Promise<
   | "sent"
   | "failed"
   | "skipped"
 > {
-  const scheduledFor =
-    new Date(
-      now.getTime() +
-        minutesUntilSchedule *
-          MINUTE_IN_MILLISECONDS
-    );
-
   const dedupeKey =
     await ensureDeliveryRecord(
       log,
@@ -627,6 +622,12 @@ async function deliverReminder(
     return "skipped";
   }
 
+  const current = await MedicationLog.exists({ _id: log._id, scheduledDate: log.scheduledDate,
+    scheduledTime: log.scheduledTime, status: { $in: ['pending', 'reminder', 'dispensed'] }, countsTowardAdherence: { $ne: false } });
+  if (!current) {
+    await completeDelivery(delivery._id, now, { status: 'SKIPPED', error: 'Schedule changed or completed.' });
+    return 'skipped';
+  }
   const content =
     getReminderContent(
       log,
@@ -667,6 +668,9 @@ async function deliverReminder(
             url:
               "/",
 
+            logId: log._id.toString(),
+            eventId: dedupeKey,
+            scheduledFor: scheduledFor.toISOString(),
             medicineName:
               log.medicineName,
           }
@@ -883,6 +887,7 @@ export async function runMedicationReminderScheduler(
           continue;
         }
 
+        await sendFamilyAdvanceReminders(log, schedulerNow, timeZone);
         const reminderType =
           getReminderType(
             minutesUntilSchedule
@@ -897,7 +902,7 @@ export async function runMedicationReminderScheduler(
             user,
             log,
             reminderType,
-            minutesUntilSchedule,
+            medicationScheduledAt(log.scheduledDate, log.scheduledTime, timeZone),
             schedulerNow
           );
 
