@@ -462,7 +462,8 @@ const Medicines = () => {
         | "createdAt"
         | "updatedAt"
         | "isActive"
-      >
+      >,
+      sharedChamberConfirmation?: string
     ) => {
       const isEdit =
         Boolean(
@@ -493,7 +494,7 @@ const Medicines = () => {
 
               body:
                 JSON.stringify(
-                  formData
+                  { ...formData, sharedChamberConfirmation }
                 ),
             }
           );

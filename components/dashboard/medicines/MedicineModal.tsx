@@ -22,6 +22,7 @@ import TimePicker from "@/components/ui/TimePicker";
 import {
   overlappingMedicines,
   validateChamberSharing,
+  planSharedChamberTimeEdit,
 } from "@/lib/chamberSharing";
 import { RX_BOX_CHAMBER_IDS } from "@/lib/rxBoxConfig";
 import type {
@@ -33,7 +34,8 @@ interface MedicineModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (
-    data: Omit<Medicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">
+    data: Omit<Medicine, "_id" | "userId" | "createdAt" | "updatedAt" | "isActive">,
+    sharedChamberConfirmation?: string
   ) => Promise<void>;
   initialData?: Medicine | null;
 }
@@ -655,11 +657,14 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
 
     try {
       const others = await loadOtherMedicines();
-      const sharingConflict = validateChamberSharing(
-        { name, startDate, endDate, chamberAssignments },
-        others
-      );
-
+      const incoming = { name, startDate, endDate, chamberAssignments };
+      const plan = initialData
+        ? planSharedChamberTimeEdit(
+            initialData, incoming,
+            others.flatMap(medicine => medicine._id ? [{ ...medicine, _id: medicine._id }] : []),
+          )
+        : null;
+      const sharingConflict = plan ? plan.conflict : validateChamberSharing(incoming, others);
       if (sharingConflict) throw new Error(sharingConflict);
 
       const hasSharedChamber = overlappingMedicines(
@@ -673,7 +678,22 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         )
       );
 
-      if (hasSharedChamber) {
+      if (plan?.confirmation) {
+        const changes = plan.updates.flatMap(({ medicine, changes }) =>
+          changes.map(({ from, to, chambers }) =>
+            `${medicine.name} (chamber ${chambers.join(", ")}): ${minutesToTimeString(from)} to ${to}`
+          )
+        );
+        const confirmed = await requestConfirmation(
+          "Update shared chamber schedules?",
+          `Medicines sharing a chamber must dispense at the same time. Also apply these changes? ${changes.join("; ")}.`,
+          "Update schedules"
+        );
+        if (!confirmed) {
+          setError("Schedules were kept. Confirm the shared time change or choose a different chamber.");
+          return;
+        }
+      } else if (hasSharedChamber) {
         const confirmed = await requestConfirmation(
           "Save shared chamber schedule?",
           "All medicines in each shared chamber will use its established time, with at most 5 medicines per chamber.",
@@ -694,7 +714,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         endDate: endDate || undefined,
         notes: notes.trim(),
         windowAfterMinutes: Number(lateWindow),
-      });
+      }, plan?.confirmation ?? undefined);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error

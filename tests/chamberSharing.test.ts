@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateChamberSharing, type ChamberMedicine } from '../lib/chamberSharing';
+import { planSharedChamberTimeEdit, validateChamberSharing, type ChamberMedicine } from '../lib/chamberSharing';
 import { buildRxBoxDailyPlan } from '../lib/rxBoxPlanCore';
 import { medicationScheduledAt } from '../lib/medicationTime';
 import { isFamilyAdvanceWindow, isReminderWindow } from '../lib/reminderTiming';
@@ -49,4 +49,26 @@ test('follow-up catch-up windows do not overlap or fire at the next interval', (
   assert.equal(isReminderWindow(delayed, base + 20 * 60000, base + 40 * 60000), true);
   assert.equal(isReminderWindow(delayed, base + 40 * 60000, base + 60 * 60000), false);
   assert.equal(isReminderWindow(new Date(base + 40 * 60000), base + 20 * 60000, base + 40 * 60000), false);
+});
+test('shared time edits move only matching doses in overlapping original chambers', () => {
+  const previous = medicine('edited');
+  const peer = {
+    ...medicine('peer'), _id: 'peer', frequency: 'Twice daily',
+    scheduledTimes: ['07:00', '7:00 PM'],
+    chamberAssignments: [
+      { scheduledTime: '07:00', chamberIds: [1] },
+      { scheduledTime: '7:00 PM', chamberIds: [2] },
+    ],
+  };
+  const unrelated = {
+    ...medicine('unrelated'), _id: 'unrelated', frequency: 'Once daily', scheduledTimes: ['7:00 AM'],
+    chamberAssignments: [{ scheduledTime: '7:00 AM', chamberIds: [3] }],
+  };
+  const plan = planSharedChamberTimeEdit(previous, medicine('edited', '8:00 AM'), [peer, unrelated]);
+  assert.equal(plan.conflict, null);
+  assert.deepEqual(plan.updates.map(({ medicine }) => medicine._id), ['peer']);
+  assert.deepEqual(plan.updates[0].medicine.scheduledTimes, ['8:00 AM', '7:00 PM']);
+  assert.deepEqual(plan.updates[0].medicine.chamberAssignments?.[1], peer.chamberAssignments[1]);
+  assert.deepEqual(peer.scheduledTimes, ['07:00', '7:00 PM']);
+  assert.throws(() => planSharedChamberTimeEdit(previous, medicine('edited', '7:00 PM'), [peer]), /already has a dose/);
 });

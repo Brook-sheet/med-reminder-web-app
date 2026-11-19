@@ -1,5 +1,5 @@
 import User from "@/models/User";
-import { validateChamberSharing } from "@/lib/chamberSharing";
+import { planSharedChamberTimeEdit } from "@/lib/chamberSharing";
 import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -422,32 +422,19 @@ function normalizePayload(
   };
 }
 
-/**
- * Check for conflicting chamber assignments in
- * other active medicines belonging to the patient.
- *
- * Medicines scheduled at the same time may share
- * a chamber. Different dispensing times cannot
- * share one physical chamber on the same day.
- */
-async function findChamberConflict(
-  userId: string,
-  currentMedicineId: string,
-  payload: MedicineUpdatePayload,
-  session: mongoose.ClientSession
-): Promise<string | null> {
-  const otherMedicines = await Medicine.find({
-    userId,
-    isActive: true,
-    _id: { $ne: currentMedicineId },
-  })
-    .select(
-      "name startDate endDate chamberAssignments"
-    )
-    .session(session)
-    .lean();
-
-  return validateChamberSharing(payload, otherMedicines);
+async function syncScheduledLogs(
+  medicine: Parameters<typeof synchronizeMedicineLogs>[0],
+  session: mongoose.ClientSession,
+) {
+  const today = getMedicationDateKey();
+  const futureDates = await MedicationLog.distinct("scheduledDate", {
+    userId: medicine.userId,
+    medicineId: medicine._id,
+    scheduledDate: { $gte: today },
+  }).session(session);
+  for (const date of new Set<string>([today, ...futureDates])) {
+    await synchronizeMedicineLogs(medicine, date, session);
+  }
 }
 
 export async function GET(
@@ -617,19 +604,53 @@ export async function PUT(
             };
           }
 
-          const conflict =
-            await findChamberConflict(
-              user.userId,
-              id,
-              payload,
-              session
-            );
+          const others = (await Medicine.find({
+            userId: user.userId,
+            isActive: true,
+            _id: { $ne: id },
+          }).select("name startDate endDate chamberAssignments scheduledTimes frequency")
+            .session(session).lean()).map(medicine => ({
+              ...medicine,
+              _id: medicine._id.toString(),
+            }));
 
-          if (conflict) {
+          let plan;
+          try {
+            plan = planSharedChamberTimeEdit(existingMedicine, payload, others);
+          } catch (error) {
+            if (!(error instanceof Error)) throw error;
+            return { medicine: null, conflict: error.message };
+          }
+
+          if (plan.conflict) return { medicine: null, conflict: plan.conflict };
+          if (plan.confirmation !== (body.sharedChamberConfirmation ?? null)) {
             return {
               medicine: null,
-              conflict,
+              conflict: "Changing this shared chamber requires confirmation for the current list of affected medicines. Reopen the edit and review the shared schedules before saving.",
             };
+          }
+
+          if (plan.updates.length) {
+            const movedTimes = new Map<string, Set<number>>([[id, new Set()]]);
+            for (const { medicine, changes } of plan.updates) {
+              const minutes = changes.map(change => change.from);
+              movedTimes.set(medicine._id, new Set(minutes));
+              for (const minute of minutes) movedTimes.get(id)?.add(minute);
+            }
+            const completed = await MedicationLog.find({
+              userId: user.userId,
+              medicineId: { $in: [...movedTimes.keys()] },
+              scheduledDate: getMedicationDateKey(),
+              countsTowardAdherence: { $ne: false },
+              status: { $in: ["dispensed", "taken", "late", "missed", "incorrect_chamber"] },
+            }).select("medicineId scheduledTime").session(session).lean();
+            if (completed.some(log => movedTimes.get(String(log.medicineId))
+              ?.has(parseMedicationTimeToMinutes(log.scheduledTime)))) {
+              return {
+                medicine: null,
+                conflict: "A dose in this shared schedule has already been processed today. Try again tomorrow to avoid creating a second dose.",
+              };
+            }
           }
 
           const updated =
@@ -688,40 +709,20 @@ export async function PUT(
             };
           }
 
-          /*
-           * Preserve the existing synchronization
-           * process to prevent schedule duplication.
-           *
-           * This updates the medicine's planned logs
-           * rather than adding duplicate medicines.
-           */
-          const today = getMedicationDateKey();
-
-          const futureDates =
-            await MedicationLog.distinct(
-              "scheduledDate",
-              {
-                userId: user.userId,
-                medicineId: id,
-
-                scheduledDate: {
-                  $gte: today,
-                },
-              }
-            ).session(session);
-
-          const dates = new Set<string>([
-            today,
-            ...(futureDates as string[]),
-          ]);
-
-          for (const date of dates) {
-            await synchronizeMedicineLogs(
-              updated,
-              date,
-              session
+          for (const { medicine } of plan.updates) {
+            const peer = await Medicine.findOneAndUpdate(
+              { _id: medicine._id, userId: user.userId, isActive: true },
+              { $set: {
+                scheduledTimes: medicine.scheduledTimes,
+                chamberAssignments: medicine.chamberAssignments,
+              } },
+              { new: true, runValidators: true, session },
             );
+            if (!peer) throw new Error("An affected medicine changed during the edit.");
+            await syncScheduledLogs(peer, session);
           }
+
+          await syncScheduledLogs(updated, session);
 
           return {
             medicine: updated,
