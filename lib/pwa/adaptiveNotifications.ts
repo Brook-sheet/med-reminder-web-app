@@ -10,6 +10,7 @@ import {
 
 import {
   getMedicationDateKey,
+  medicationWindowEndsAt,
   medicationScheduledAt,
   resolveMedicationTimeZone,
 } from "@/lib/medicationTime";
@@ -206,7 +207,7 @@ export async function queueAdaptiveNotifications(
 
         const end = Math.min(
           target + config.followUpIntervalMinutes * 60000,
-          scheduled.getTime() + (log.windowAfterMinutes ?? 90) * 60000
+          medicationWindowEndsAt(scheduled, log.windowAfterMinutes).getTime()
         );
         if (!recent(target, end)) {
           continue;

@@ -754,3 +754,17 @@ test("rejects nonphysical chamber IDs without issuing a partial hardware plan", 
     assert.deepEqual(plan.groups, []);
   }
 });
+test("uses the first deadline to dispense a shared group and the last deadline for tray pickup", () => {
+  const plan = buildRxBoxDailyPlan(
+    [
+      dose("short", "Medicine A", "11:50 PM", [1], { windowAfterMinutes: 20 }),
+      dose("long", "Medicine B", "11:50 PM", [1], { windowAfterMinutes: 120 }),
+    ],
+    OPTIONS,
+  );
+  assert.equal(plan.hardwareDispensingEnabled, true);
+  const [group] = plan.groups;
+  assert.equal(group.scheduledAtEpochSeconds, Date.parse("2026-08-25T15:50:00Z") / 1000);
+  assert.equal(group.dispenseDeadlineEpochSeconds - group.scheduledAtEpochSeconds, 20 * 60);
+  assert.equal(group.pickupDeadlineEpochSeconds - group.scheduledAtEpochSeconds, 120 * 60);
+});

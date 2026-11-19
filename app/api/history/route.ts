@@ -290,7 +290,7 @@ async function ensureHistoryLogsForRange(
                 eventType: "SCHEDULED",
                 expectedChamberId: null,
                 expectedChamberIds: [],
-                windowBeforeMinutes: medicine.windowBeforeMinutes ?? 30,
+                windowBeforeMinutes: 0,
                 windowAfterMinutes: medicine.windowAfterMinutes ?? 90,
                 lateAfterMinutes: medicine.lateAfterMinutes ?? 30,
                 countsTowardAdherence: true,

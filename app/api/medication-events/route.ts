@@ -182,12 +182,6 @@ export async function POST(
         source,
         eventType,
 
-        timestamp:
-          typeof body.timestamp ===
-            'string'
-            ? body.timestamp
-            : undefined,
-
         chamberId,
 
         medicineId:

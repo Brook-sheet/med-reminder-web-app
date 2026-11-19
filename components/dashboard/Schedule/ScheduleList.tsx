@@ -362,14 +362,7 @@ const ScheduleList:
                   }
                 />
 
-                {[
-                  "Upcoming",
-                  "Scheduled",
-                  "Now",
-                ].includes(
-                  item.status,
-                ) &&
-                  item.logId && (
+                {item.status === "Now" && item.logId && (
                     <button
                       type="button"
                       onClick={() => {

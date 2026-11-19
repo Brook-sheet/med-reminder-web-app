@@ -45,13 +45,14 @@ interface RxBoxEventBody {
   chamberIds?: unknown;
   snoozeCount?: unknown;
   dispensedAt?: unknown;
+  pickedUpAt?: unknown;
 }
 
 function stringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function parseDispensedAt(value: unknown): Date | null {
+function parseDeviceTime(value: unknown): Date | null {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     return null;
   }
@@ -299,7 +300,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const timestamp = new Date();
+    const receivedAt = new Date();
+    const reportedAt = status === 'taken'
+      ? parseDeviceTime(body.pickedUpAt)
+      : status === 'dispensed'
+        ? parseDeviceTime(body.dispensedAt)
+        : null;
+    const timestamp = reportedAt ?? receivedAt;
+    if (timestamp > receivedAt) {
+      throw new Error('Invalid Rx Box event time.');
+    }
 
     // Multiple pills of the same dose share a single medication log.
     const logIds = uniqueRxBoxLogIds(exact.group.logIds);
@@ -312,7 +322,9 @@ export async function POST(request: NextRequest) {
 
     const results = [];
 
-    for (const logId of logIds) {
+    const expiredOrPickup = status !== 'missed' ||
+      timestamp.getTime() > exact.group.pickupDeadlineEpochSeconds * 1000;
+    for (const logId of expiredOrPickup ? logIds : []) {
       results.push(
         await processMedicationEvent({
           userId: device.userId,
@@ -321,7 +333,6 @@ export async function POST(request: NextRequest) {
           timestamp,
           logId,
           deviceId: device.deviceId,
-          allowHardwareMissedBeforeWindowEnd: status === 'missed',
         })
       );
     }
@@ -376,7 +387,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (status === 'dispensed') {
-      const dispensedAt = parseDispensedAt(body.dispensedAt);
+      const dispensedAt = parseDeviceTime(body.dispensedAt);
       const medications = results
         .filter((log) => log.status === 'dispensed')
         .map((log) => ({

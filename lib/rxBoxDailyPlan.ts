@@ -299,6 +299,7 @@ export async function getRxBoxDailyPlan(
         medicine.pillsPerDose ?? 1,
       medicineCreatedAt: medicine.createdAt,
       logStatus: log.status,
+      windowAfterMinutes: log.windowAfterMinutes,
       chamberIds: assignedChambers,
     };
 

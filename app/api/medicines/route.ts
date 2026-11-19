@@ -27,6 +27,7 @@ import type {
 
 import {
   getMedicationDateKey,
+  isPrescribedLateWindow,
   isValidMedicationDateKey,
   parseMedicationTimeToMinutes,
 } from "@/lib/medicationTime";
@@ -131,9 +132,7 @@ function validateMedicinePayload(
     chamberAssignments,
     startDate,
     endDate,
-    windowBeforeMinutes,
     windowAfterMinutes,
-    lateAfterMinutes,
   } = body;
 
   if (!sanitizeMedicineName(name)) {
@@ -360,47 +359,10 @@ function validateMedicinePayload(
     }
   }
 
-  for (const [field, value] of Object.entries({
-    windowBeforeMinutes,
-    windowAfterMinutes,
-    lateAfterMinutes,
-  })) {
-    if (
-      value !== undefined &&
-      value !== null &&
-      value !== ""
-    ) {
-      const minutes = Number(value);
-
-      if (
-        !Number.isInteger(minutes) ||
-        minutes < 0 ||
-        minutes > 720
-      ) {
-        return {
-          valid: false,
-          error:
-            `${field} must be a whole number from 0 to 720.`,
-        };
-      }
-    }
-  }
-
-  const after =
-    windowAfterMinutes == null
-      ? 90
-      : Number(windowAfterMinutes);
-
-  const late =
-    lateAfterMinutes == null
-      ? 30
-      : Number(lateAfterMinutes);
-
-  if (late > after) {
+  if (!isPrescribedLateWindow(windowAfterMinutes)) {
     return {
       valid: false,
-      error:
-        "Late threshold cannot be longer than the after-window.",
+      error: "Enter a prescribed late window of 1 to 720 whole minutes.",
     };
   }
 
@@ -436,20 +398,9 @@ function normalizePayload(
       ].sort((a, b) => a - b),
     })),
 
-    windowBeforeMinutes:
-      body.windowBeforeMinutes == null
-        ? 30
-        : Number(body.windowBeforeMinutes),
-
-    windowAfterMinutes:
-      body.windowAfterMinutes == null
-        ? 90
-        : Number(body.windowAfterMinutes),
-
-    lateAfterMinutes:
-      body.lateAfterMinutes == null
-        ? 30
-        : Number(body.lateAfterMinutes),
+    windowBeforeMinutes: 0,
+    windowAfterMinutes: body.windowAfterMinutes as number,
+    lateAfterMinutes: Math.min(30, body.windowAfterMinutes as number),
 
     notes:
       typeof body.notes === "string"

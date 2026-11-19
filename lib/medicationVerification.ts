@@ -19,6 +19,7 @@ import {
   addDaysToMedicationDateKey,
   formatMedicationTime,
   getMedicationDateKey,
+  medicationWindowEndsAt,
   medicationScheduledAt,
   parseMedicationTimeToMinutes,
   resolveMedicationTimeZone,
@@ -44,12 +45,6 @@ export interface MedicationEventInput {
   medicineId?: string | null;
   logId?: string | null;
   deviceId?: string | null;
-
-  /**
-   * Only the authenticated Rx Box plan/group handler
-   * may set this option.
-   */
-  allowHardwareMissedBeforeWindowEnd?: boolean;
 }
 
 export interface VerificationResult {
@@ -82,7 +77,6 @@ type CandidateLog = {
   scheduledTime: string;
   expectedChamberId?: number | null;
   expectedChamberIds?: number[];
-  windowBeforeMinutes?: number;
   windowAfterMinutes?: number;
   lateAfterMinutes?: number;
 };
@@ -1076,7 +1070,7 @@ export async function finalizeExpiredMedicationLogs(
       countsTowardAdherence: {
         $ne: false,
       },
-    });
+    }).lean();
 
   const expiredLogs =
     pending.filter(
@@ -1088,13 +1082,7 @@ export async function finalizeExpiredMedicationLogs(
             timeZone,
           );
 
-        const end = new Date(
-          scheduled.getTime() +
-          (
-            log.windowAfterMinutes ??
-            90
-          ) * 60_000,
-        );
+        const end = medicationWindowEndsAt(scheduled, log.windowAfterMinutes);
 
         return now > end;
       },
@@ -1108,6 +1096,9 @@ export async function finalizeExpiredMedicationLogs(
         {
           _id:
             expiredLog._id,
+          scheduledTime: expiredLog.scheduledTime,
+          // Compare the stored snapshot so a concurrent edit can extend the deadline.
+          windowAfterMinutes: expiredLog.windowAfterMinutes ?? null,
 
           status: {
             $in:
@@ -1297,6 +1288,8 @@ async function finalizeIncorrectAccess(
       {
         _id:
           target._id,
+        scheduledTime: target.scheduledTime,
+        windowAfterMinutes: target.windowAfterMinutes ?? null,
 
         status: {
           $in:
@@ -1474,7 +1467,7 @@ export async function processMedicationEvent(
   /*
    * Medication windows may cross midnight.
    */
-  const dates = [-1, 0, 1].map(
+  const dates = [-1, 0].map(
     (offset) =>
       addDaysToMedicationDateKey(
         eventDate,
@@ -1589,24 +1582,10 @@ export async function processMedicationEvent(
               timeZone,
             );
 
-          const start =
-            scheduled.getTime() -
-            (
-              log.windowBeforeMinutes ??
-              30
-            ) * 60_000;
+          const end = medicationWindowEndsAt(scheduled, log.windowAfterMinutes);
 
-          const end =
-            scheduled.getTime() +
-            (
-              log.windowAfterMinutes ??
-              90
-            ) * 60_000;
-
-          return (
-            eventAt.getTime() >= start &&
-            eventAt.getTime() <= end
-          );
+          return input.eventType !== 'MISSED' &&
+            eventAt >= scheduled && eventAt <= end;
         },
       )
       .sort(
@@ -1765,45 +1744,17 @@ export async function processMedicationEvent(
     input.eventType ===
       'MEDICATION_DISPENSED'
       ? 'dispensed'
-      : input.eventType === 'MISSED'
-        ? 'missed'
-        : delayMinutes >
-            (
-              target.lateAfterMinutes ??
-              30
-            )
-          ? 'late'
-          : 'taken';
-
-  /*
-   * Manual or unrelated calls cannot mark a dose
-   * missed before its medication window expires.
-   */
-  if (status === 'missed') {
-    const windowEndsAt =
-      new Date(
-        scheduled.getTime() +
-        (
-          target.windowAfterMinutes ??
-          90
-        ) * 60_000,
-      );
-
-    if (
-      eventAt <= windowEndsAt &&
-      !input.allowHardwareMissedBeforeWindowEnd
-    ) {
-      throw new Error(
-        'Medication cannot be marked missed until its medication window has expired.',
-      );
-    }
-  }
+      : delayMinutes > (target.lateAfterMinutes ?? 30)
+        ? 'late'
+        : 'taken';
 
   const updated =
     await MedicationLog.findOneAndUpdate(
       {
         _id:
           target._id,
+        scheduledTime: target.scheduledTime,
+        windowAfterMinutes: target.windowAfterMinutes ?? null,
 
         status: {
           $in: [
@@ -1826,15 +1777,7 @@ export async function processMedicationEvent(
               : {}
           ),
 
-          /*
-           * Dispensed means waiting for pickup.
-           * Missed events also do not receive takenAt.
-           */
-          takenAt:
-            status === 'missed' ||
-            status === 'dispensed'
-              ? null
-              : eventAt,
+          takenAt: status === 'dispensed' ? null : eventAt,
 
           source:
             input.source,
@@ -1857,9 +1800,7 @@ export async function processMedicationEvent(
               ? 'Medication was dispensed and is waiting for intake confirmation.'
               : status === 'late'
                 ? `Medication access was verified ${delayMinutes} minutes after the scheduled time.`
-                : status === 'missed'
-                  ? 'Medication was marked missed by an authorized event.'
-                  : 'Medication access was verified within the configured time window.',
+                : 'Medication access was verified within the configured time window.',
         },
       },
       { new: true },

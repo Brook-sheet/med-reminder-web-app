@@ -583,3 +583,23 @@ test(
     );
   },
 );
+test('uses each dose window through its inclusive deadline across midnight', () => {
+  const dose: RawLog = {
+    status: 'pending',
+    scheduledDate: '2026-11-19',
+    scheduledTime: '11:50 PM',
+    windowAfterMinutes: 20,
+  };
+  const scheduledAt = new Date('2026-11-19T15:50:00Z');
+  const deadline = new Date('2026-11-19T16:10:00Z');
+
+  assert.equal(evaluateMedicationLog(dose, new Date(+scheduledAt - 1), MANILA).lifecycle, 'upcoming');
+  assert.equal(evaluateMedicationLog(dose, scheduledAt, MANILA).lifecycle, 'due');
+  assert.equal(evaluateMedicationLog(dose, deadline, MANILA).lifecycle, 'due');
+  assert.equal(evaluateMedicationLog(dose, new Date(+deadline + 1), MANILA).lifecycle, 'missed');
+  assert.equal(evaluateMedicationLog(
+    { ...dose, windowAfterMinutes: 120 },
+    new Date(+deadline + 1),
+    MANILA,
+  ).lifecycle, 'due');
+});

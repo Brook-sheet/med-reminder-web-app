@@ -10,6 +10,7 @@ import {
   addDaysToMedicationDateKey,
   formatMedicationDateLabel,
   getMedicationDateKey,
+  medicationWindowEndsAt,
   medicationScheduledAt,
   parseMedicationTimeToMinutes,
   resolveMedicationTimeZone,
@@ -190,14 +191,7 @@ export function evaluateMedicationLog(
     timeZone,
   );
 
-  const windowAfterMinutes = Math.max(
-    0,
-    log.windowAfterMinutes ?? 90,
-  );
-
-  const windowEndsAt = new Date(
-    scheduledAt.getTime() + windowAfterMinutes * 60_000,
-  );
+  const windowEndsAt = medicationWindowEndsAt(scheduledAt, log.windowAfterMinutes);
 
   const counts = log.countsTowardAdherence !== false;
 

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { formatMedicationDateLabel } from '@/lib/medicationTime';
+import { formatMedicationDateLabel, formatMedicationTime, getMedicationDateKey } from '@/lib/medicationTime';
 
 interface Dose {
   id: string;
@@ -11,11 +11,14 @@ interface Dose {
   minute: number;
   chambers: number[];
   endDate: string | null;
+  windowAfterMinutes: number | null;
+  windowEndsAt: string | null;
   status: string;
 }
 
 interface Schedule {
   date: string;
+  timezone: string;
   patients: { patientId: string; doses: Dose[] }[];
 }
 
@@ -177,8 +180,19 @@ export function TodayMedicationSchedule({
                   : 'grid-cols-2 md:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]'
               }`}
             >
-              <span className={`whitespace-nowrap tabular-nums text-muted-foreground ${preview ? '' : 'md:order-2'}`}>
-                {formatTime(dose.minute)}
+              <span className={`tabular-nums text-muted-foreground ${preview ? '' : 'md:order-2'}`}>
+                <span className="block whitespace-nowrap">{formatTime(dose.minute)}</span>
+                {dose.windowEndsAt && dose.windowAfterMinutes != null && state?.schedule && (
+                  <span className="block text-xs">
+                    {dose.windowAfterMinutes} min late window
+                    <time className="block" dateTime={dose.windowEndsAt}>
+                      Until {formatMedicationTime(new Date(dose.windowEndsAt), state.schedule.timezone)}
+                      {getMedicationDateKey(new Date(dose.windowEndsAt), state.schedule.timezone) !== state.schedule.date
+                        ? ' next day'
+                        : ''}
+                    </time>
+                  </span>
+                )}
               </span>
 
               <span className={`min-w-0 break-words font-medium text-foreground ${preview ? '' : 'md:order-1'}`}>

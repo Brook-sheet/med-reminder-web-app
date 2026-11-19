@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  isPrescribedLateWindow,
+  MIN_LATE_WINDOW_MINUTES,
+  MAX_LATE_WINDOW_MINUTES,
+} from "@/lib/medicationTime";
+
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -232,6 +238,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
 }) => {
   const [name, setName] = useState("");
   const [dosage, setDosage] = useState("");
+  const [lateWindow, setLateWindow] = useState("");
   const [frequency, setFrequency] = useState("Once daily");
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([
     createScheduleRow("schedule-0", "8:00 AM"),
@@ -314,6 +321,9 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
     if (initialData) {
       setName(initialData.name ?? "");
       setDosage(parseDosageValue(initialData.dosage ?? ""));
+      setLateWindow(isPrescribedLateWindow(initialData.windowAfterMinutes)
+        ? String(initialData.windowAfterMinutes)
+        : "");
       setFrequency(initialData.frequency ?? "Once daily");
 
       const times = initialData.scheduledTimes?.length
@@ -338,6 +348,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
     } else {
       setName("");
       setDosage("");
+      setLateWindow("");
       setFrequency("Once daily");
       setScheduleRows([createScheduleRow("new-0", "8:00 AM")]);
       setNextRowNumber(1);
@@ -553,6 +564,11 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
       return;
     }
 
+    if (!isPrescribedLateWindow(Number(lateWindow))) {
+      setError("Enter a prescribed late window of 1 to 720 whole minutes.");
+      return;
+    }
+
     if (!startDate) {
       setError("Start date is required.");
       return;
@@ -677,9 +693,7 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
         startDate,
         endDate: endDate || undefined,
         notes: notes.trim(),
-        windowBeforeMinutes: initialData?.windowBeforeMinutes ?? 30,
-        windowAfterMinutes: initialData?.windowAfterMinutes ?? 90,
-        lateAfterMinutes: initialData?.lateAfterMinutes ?? 30,
+        windowAfterMinutes: Number(lateWindow),
       });
     } catch (caughtError) {
       setError(
@@ -788,6 +802,29 @@ const MedicineModal: React.FC<MedicineModalProps> = ({
                   mg
                 </span>
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="medicine-late-window" className={labelClass}>
+                Prescribed Late Window (minutes) <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="medicine-late-window"
+                type="number"
+                inputMode="numeric"
+                min={MIN_LATE_WINDOW_MINUTES}
+                max={MAX_LATE_WINDOW_MINUTES}
+                step={1}
+                required
+                value={lateWindow}
+                onChange={(event) => setLateWindow(event.target.value)}
+                aria-describedby="medicine-late-window-help"
+                disabled={saving}
+                className={inputClass}
+              />
+              <p id="medicine-late-window-help" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Enter the allowed minutes after the scheduled time. After this window, an unconfirmed dose is marked Missed.
+              </p>
             </div>
 
             <div>

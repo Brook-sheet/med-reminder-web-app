@@ -1,4 +1,4 @@
-import { medicationScheduledAt } from "@/lib/medicationTime";
+import { medicationScheduledAt, medicationWindowEndsAt } from "@/lib/medicationTime";
 import MedicationLog from "@/models/MedicationLog";
 import mongoose from "mongoose";
 
@@ -433,7 +433,7 @@ export async function drainPwaDeliveries(
         const scheduled = log ? medicationScheduledAt(log.scheduledDate, log.scheduledTime) : null;
         const valid = log && ['pending', 'reminder', 'dispensed'].includes(log.status) &&
           log.countsTowardAdherence !== false && scheduled?.toISOString() === payload.scheduledFor &&
-          now.getTime() < scheduled.getTime() + (log.windowAfterMinutes ?? 90) * 60000 &&
+          now <= medicationWindowEndsAt(scheduled, log.windowAfterMinutes) &&
           (payload.type !== 'upcoming_reminder' || now.getTime() < scheduled.getTime());
         if (!valid) {
           await PwaDelivery.updateOne({ _id: delivery._id }, { $set: { status: 'skipped' } });

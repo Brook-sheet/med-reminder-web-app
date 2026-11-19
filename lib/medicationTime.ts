@@ -260,3 +260,20 @@ export function formatMedicationTime(
     hour12: true,
   });
 }
+
+export const MIN_LATE_WINDOW_MINUTES = 1;
+export const MAX_LATE_WINDOW_MINUTES = 720;
+const LEGACY_WINDOW_AFTER_MINUTES = 90;
+
+export function isPrescribedLateWindow(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) &&
+    value >= MIN_LATE_WINDOW_MINUTES && value <= MAX_LATE_WINDOW_MINUTES;
+}
+
+export function medicationWindowEndsAt(
+  scheduledAt: Date,
+  windowAfterMinutes?: number | null,
+): Date {
+  return new Date(scheduledAt.getTime() +
+    Math.max(0, windowAfterMinutes ?? LEGACY_WINDOW_AFTER_MINUTES) * 60_000);
+}

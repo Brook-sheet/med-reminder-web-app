@@ -3,6 +3,8 @@ import { MAX_MEDICINES_PER_CHAMBER } from "./chamberSharing";
 import { createHash } from "node:crypto";
 
 import {
+  medicationWindowEndsAt,
+  medicationScheduledAt,
   parseMedicationTimeToMinutes,
   resolveMedicationTimeZone,
 } from "./medicationTime";
@@ -26,6 +28,7 @@ export interface RxBoxDoseInput {
   pillsPerDose: number;
   medicineCreatedAt: Date | string;
   logStatus: string;
+  windowAfterMinutes?: number;
 
   /**
    * Manually selected chambers for this
@@ -54,6 +57,9 @@ export interface RxBoxAlarmGroup {
   chamberIds: number[];
   logIds: string[];
   status: RxBoxGroupStatus;
+  scheduledAtEpochSeconds: number;
+  dispenseDeadlineEpochSeconds: number;
+  pickupDeadlineEpochSeconds: number;
 }
 
 export interface RxBoxDailyPlan {
@@ -122,9 +128,10 @@ function groupStatus(
       (status) => !unresolved.has(status)
     )
   ) {
-    return statuses.includes("missed")
-      ? "missed"
-      : "dispensed";
+    if (statuses.includes("dispensed")) return "dispensed";
+    return statuses.some((status) => status === "taken" || status === "late")
+      ? "taken"
+      : "missed";
   }
 
   return "pending";
@@ -408,6 +415,11 @@ export function buildRxBoxDailyPlan(
         const scheduledTime =
           items[0].scheduledTime;
 
+        const scheduledAt = medicationScheduledAt(options.date, scheduledTime, timezone);
+        const deadlines = logIds.map((logId) =>
+          medicationWindowEndsAt(scheduledAt, doseByLogId.get(logId)?.windowAfterMinutes).getTime() / 1000
+        );
+
         const groupSeed = [
           planId,
           String(minutes),
@@ -426,6 +438,10 @@ export function buildRxBoxDailyPlan(
           minute: minutes % 60,
 
           scheduledTime,
+          scheduledAtEpochSeconds: scheduledAt.getTime() / 1000,
+          // A shared group may physically contain pills from every dose.
+          dispenseDeadlineEpochSeconds: Math.min(...deadlines),
+          pickupDeadlineEpochSeconds: Math.max(...deadlines),
 
           chamberIds,
 

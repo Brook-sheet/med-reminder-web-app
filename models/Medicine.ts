@@ -171,9 +171,7 @@ const MedicineSchema =
 
       windowBeforeMinutes: {
         type: Number,
-        min: 0,
-        max: 720,
-        default: 30,
+        default: 0,
       },
 
       windowAfterMinutes: {

@@ -224,7 +224,7 @@ const MedicationLogSchema =
       },
       windowBeforeMinutes: {
         type: Number,
-        default: 30,
+        default: 0,
       },
       windowAfterMinutes: {
         type: Number,
