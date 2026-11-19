@@ -30,44 +30,57 @@ import MedicationReminderDelivery, {
 import Notification from "@/models/Notification";
 import User from "@/models/User";
 
-const MINUTE_IN_MILLISECONDS = 60_000;
+const MINUTE_IN_MILLISECONDS =
+  60_000;
+
 const WINDOW_CLOSING_LEAD_MS = 10 * MINUTE_IN_MILLISECONDS;
-const DAY_IN_MILLISECONDS = 24 * 60 * MINUTE_IN_MILLISECONDS;
 
-const UPCOMING_REMINDER_MINUTES = getNumberEnvironmentVariable(
-  "MEDICATION_UPCOMING_MINUTES",
-  30,
-  1,
-  720
-);
+const DAY_IN_MILLISECONDS =
+  24 * 60 * MINUTE_IN_MILLISECONDS;
 
-const DUE_REMINDER_GRACE_MINUTES = getNumberEnvironmentVariable(
-  "MEDICATION_DUE_GRACE_MINUTES",
-  5,
-  1,
-  60
-);
+const UPCOMING_REMINDER_MINUTES =
+  getNumberEnvironmentVariable(
+    "MEDICATION_UPCOMING_MINUTES",
+    30,
+    1,
+    720
+  );
 
-const MAX_DELIVERY_ATTEMPTS = getNumberEnvironmentVariable(
-  "MEDICATION_REMINDER_MAX_ATTEMPTS",
-  5,
-  1,
-  20
-);
+const DUE_REMINDER_GRACE_MINUTES =
+  getNumberEnvironmentVariable(
+    "MEDICATION_DUE_GRACE_MINUTES",
+    5,
+    1,
+    60
+  );
 
-const RETRY_DELAY_MINUTES = getNumberEnvironmentVariable(
-  "MEDICATION_REMINDER_RETRY_MINUTES",
-  5,
-  1,
-  120
-);
+const MAX_DELIVERY_ATTEMPTS =
+  getNumberEnvironmentVariable(
+    "MEDICATION_REMINDER_MAX_ATTEMPTS",
+    5,
+    1,
+    20
+  );
 
-const PROCESSING_LEASE_MINUTES = 10;
-const DELIVERY_RETENTION_DAYS = 90;
+const RETRY_DELAY_MINUTES =
+  getNumberEnvironmentVariable(
+    "MEDICATION_REMINDER_RETRY_MINUTES",
+    5,
+    1,
+    120
+  );
+
+const PROCESSING_LEASE_MINUTES =
+  10;
+
+const DELIVERY_RETENTION_DAYS =
+  90;
 
 interface SchedulerUser {
   _id: mongoose.Types.ObjectId;
+
   firstName?: string;
+
   notificationPreferences?: {
     inApp?: boolean;
     push?: boolean;
@@ -76,14 +89,22 @@ interface SchedulerUser {
 
 interface SchedulerMedicationLog {
   _id: mongoose.Types.ObjectId;
+
   userId: mongoose.Types.ObjectId;
+
   medicineId?: mongoose.Types.ObjectId | null;
+
   medicineName: string;
+
   dosage: string;
+
   scheduledDate: string;
+
   scheduledTime: string;
+
   status: string;
   windowAfterMinutes?: number;
+
   countsTowardAdherence?: boolean;
 }
 
@@ -94,13 +115,21 @@ interface ReminderContent {
 
 export interface MedicationReminderSchedulerResult {
   timeZone: string;
+
   checkedAt: string;
+
   patientsChecked: number;
+
   logsChecked: number;
+
   sent: number;
+
   failed: number;
+
   skipped: number;
+
   invalidSchedules: number;
+
   errors: string[];
 }
 
@@ -110,13 +139,15 @@ function getNumberEnvironmentVariable(
   minimum: number,
   maximum: number
 ): number {
-  const rawValue = process.env[name]?.trim();
+  const rawValue =
+    process.env[name]?.trim();
 
   if (!rawValue) {
     return fallback;
   }
 
-  const parsedValue = Number(rawValue);
+  const parsedValue =
+    Number(rawValue);
 
   if (
     !Number.isFinite(parsedValue) ||
@@ -138,20 +169,24 @@ function getMinutesUntilSchedule(
   now: Date,
   timeZone: string
 ): number | null {
-  const scheduleTime = medicationScheduledAt(
-    log.scheduledDate,
-    log.scheduledTime,
-    timeZone
-  );
+  const scheduleTime =
+    medicationScheduledAt(
+      log.scheduledDate,
+      log.scheduledTime,
+      timeZone,
+    );
 
   if (Number.isNaN(scheduleTime.getTime())) {
     return null;
   }
 
   const difference =
-    (scheduleTime.getTime() - now.getTime()) / MINUTE_IN_MILLISECONDS;
+    (scheduleTime.getTime() - now.getTime()) /
+    MINUTE_IN_MILLISECONDS;
 
-  return difference > 0 ? Math.ceil(difference) : Math.floor(difference);
+  return difference > 0
+    ? Math.ceil(difference)
+    : Math.floor(difference);
 }
 
 function getReminderType(
@@ -159,14 +194,16 @@ function getReminderType(
 ): MedicationReminderType | null {
   if (
     minutesUntilSchedule > 0 &&
-    minutesUntilSchedule <= UPCOMING_REMINDER_MINUTES
+    minutesUntilSchedule <=
+      UPCOMING_REMINDER_MINUTES
   ) {
     return "upcoming_reminder";
   }
 
   if (
     minutesUntilSchedule <= 0 &&
-    minutesUntilSchedule >= -DUE_REMINDER_GRACE_MINUTES
+    minutesUntilSchedule >=
+      -DUE_REMINDER_GRACE_MINUTES
   ) {
     return "due_alarm";
   }
@@ -178,7 +215,9 @@ function getReminderContent(
   log: SchedulerMedicationLog,
   reminderType: MedicationReminderType
 ): ReminderContent {
-  const medication = `${log.medicineName} ${log.dosage}`.trim();
+  const medication =
+    `${log.medicineName} ${log.dosage}`
+      .trim();
 
   if (reminderType === "window_closing") {
     return {
@@ -187,25 +226,41 @@ function getReminderContent(
     };
   }
 
-  if (reminderType === "upcoming_reminder") {
+  if (
+    reminderType ===
+    "upcoming_reminder"
+  ) {
     return {
-      title: "Upcoming Medication",
-      message: `${medication} is scheduled at ${log.scheduledTime}.`,
+      title:
+        "Upcoming Medication",
+
+      message:
+        `${medication} is scheduled at ${log.scheduledTime}.`,
     };
   }
 
   return {
-    title: "Medication Due Now",
-    message: `It is time to take ${medication}.`,
+    title:
+      "Medication Due Now",
+
+    message:
+      `It is time to take ${medication}.`,
   };
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
+function isDuplicateKeyError(
+  error: unknown
+): boolean {
   return (
-    typeof error === "object" &&
+    typeof error ===
+      "object" &&
     error !== null &&
     "code" in error &&
-    (error as { code?: number }).code === 11000
+    (
+      error as {
+        code?: number;
+      }
+    ).code === 11000
   );
 }
 
@@ -218,45 +273,69 @@ async function ensureDeliveryRecord(
   const dedupeKey =
     `${log._id.toString()}:${reminderType}:${scheduledFor.toISOString()}`;
 
-  const legacy = await MedicationReminderDelivery.findOne({
-    dedupeKey: `${log._id}:${reminderType}`,
-  }).lean();
-
-  if (
-    legacy &&
-    legacy.scheduledDate === log.scheduledDate &&
-    legacy.scheduledTime === log.scheduledTime
-  ) {
+  const legacy = await MedicationReminderDelivery.findOne({ dedupeKey: `${log._id}:${reminderType}` }).lean();
+  if (legacy && legacy.scheduledDate === log.scheduledDate && legacy.scheduledTime === log.scheduledTime) {
     return legacy.dedupeKey;
   }
 
-  const expireAt = new Date(
-    now.getTime() + DELIVERY_RETENTION_DAYS * DAY_IN_MILLISECONDS
-  );
+  const expireAt =
+    new Date(
+      now.getTime() +
+        DELIVERY_RETENTION_DAYS *
+          DAY_IN_MILLISECONDS
+    );
 
   try {
     await MedicationReminderDelivery.updateOne(
-      { dedupeKey },
+      {
+        dedupeKey,
+      },
       {
         $setOnInsert: {
           dedupeKey,
-          userId: log.userId,
-          medicationLogId: log._id,
-          medicineId: log.medicineId ?? null,
+
+          userId:
+            log.userId,
+
+          medicationLogId:
+            log._id,
+
+          medicineId:
+            log.medicineId ??
+            null,
+
           reminderType,
-          scheduledDate: log.scheduledDate,
-          scheduledTime: log.scheduledTime,
+
+          scheduledDate:
+            log.scheduledDate,
+
+          scheduledTime:
+            log.scheduledTime,
+
           scheduledFor,
-          status: "pending",
-          attemptCount: 0,
-          nextAttemptAt: now,
+
+          status:
+            "pending",
+
+          attemptCount:
+            0,
+
+          nextAttemptAt:
+            now,
+
           expireAt,
         },
       },
-      { upsert: true }
+      {
+        upsert: true,
+      }
     );
   } catch (error) {
-    if (!isDuplicateKeyError(error)) {
+    if (
+      !isDuplicateKeyError(
+        error
+      )
+    ) {
       throw error;
     }
   }
@@ -268,30 +347,75 @@ async function claimDelivery(
   dedupeKey: string,
   now: Date
 ): Promise<IMedicationReminderDeliveryDocument | null> {
-  const staleClaimTime = new Date(
-    now.getTime() - PROCESSING_LEASE_MINUTES * MINUTE_IN_MILLISECONDS
-  );
+  const staleClaimTime =
+    new Date(
+      now.getTime() -
+        PROCESSING_LEASE_MINUTES *
+          MINUTE_IN_MILLISECONDS
+    );
 
   return MedicationReminderDelivery.findOneAndUpdate(
     {
       dedupeKey,
-      attemptCount: { $lt: MAX_DELIVERY_ATTEMPTS },
+
+      attemptCount: {
+        $lt:
+          MAX_DELIVERY_ATTEMPTS,
+      },
+
       $or: [
-        { status: "pending", nextAttemptAt: { $lte: now } },
-        { status: "failed", nextAttemptAt: { $lte: now } },
-        { status: "processing", claimedAt: { $lte: staleClaimTime } },
+        {
+          status:
+            "pending",
+
+          nextAttemptAt: {
+            $lte: now,
+          },
+        },
+
+        {
+          status:
+            "failed",
+
+          nextAttemptAt: {
+            $lte: now,
+          },
+        },
+
+        {
+          status:
+            "processing",
+
+          claimedAt: {
+            $lte:
+              staleClaimTime,
+          },
+        },
       ],
     },
     {
       $set: {
-        status: "processing",
-        claimedAt: now,
-        lastAttemptAt: now,
-        lastError: "",
+        status:
+          "processing",
+
+        claimedAt:
+          now,
+
+        lastAttemptAt:
+          now,
+
+        lastError:
+          "",
       },
-      $inc: { attemptCount: 1 },
+
+      $inc: {
+        attemptCount:
+          1,
+      },
     },
-    { new: true }
+    {
+      new: true,
+    }
   );
 }
 
@@ -301,49 +425,84 @@ async function createInAppNotification(
   reminderType: MedicationReminderType,
   content: ReminderContent
 ): Promise<mongoose.Types.ObjectId> {
-  if (delivery.notificationId) {
+  if (
+    delivery.notificationId
+  ) {
     return delivery.notificationId;
   }
 
   /*
    * medicineId is deliberately added only when it exists.
+   *
    * Notification.medicineId is optional, but its Mongoose
    * type does not accept an explicit null value.
    */
-  const notificationData: Record<string, unknown> = {
-    userId: log.userId,
-    type: reminderType === "window_closing" ? "due_alarm" : reminderType,
-    title: content.title,
-    message: content.message,
-    medicineName: log.medicineName,
-    medicationLogId: log._id,
-    screen: "dashboard",
-    url: "/",
-    read: false,
+  const notificationData: Record<
+    string,
+    unknown
+  > = {
+    userId:
+      log.userId,
+
+    type:
+      reminderType === "window_closing" ? "due_alarm" : reminderType,
+
+    title:
+      content.title,
+
+    message:
+      content.message,
+
+    medicineName:
+      log.medicineName,
+
+    medicationLogId:
+      log._id,
+
+    screen:
+      "dashboard",
+
+    url:
+      "/",
+
+    read:
+      false,
   };
 
   if (log.medicineId) {
-    notificationData.medicineId = log.medicineId;
+    notificationData.medicineId =
+      log.medicineId;
   }
 
-  // Reuse the delivery ID so a retry cannot create a second bell entry.
+  // Reuse the delivery ID: a crash between saving the bell record and updating
+  // the delivery cannot create a second notification on retry.
   const notificationId = delivery._id;
-
-  await Notification.updateOne(
-    { _id: notificationId },
-    { $setOnInsert: notificationData },
-    { upsert: true, runValidators: true }
-  );
+  await Notification.updateOne({ _id: notificationId }, { $setOnInsert: notificationData },
+    { upsert: true, runValidators: true });
 
   await MedicationReminderDelivery.updateOne(
     {
-      _id: delivery._id,
+      _id:
+        delivery._id,
+
       $or: [
-        { notificationId: { $exists: false } },
-        { notificationId: null },
+        {
+          notificationId: {
+            $exists: false,
+          },
+        },
+
+        {
+          notificationId:
+            null,
+        },
       ],
     },
-    { $set: { notificationId } }
+    {
+      $set: {
+        notificationId,
+      },
+    }
   );
 
   return notificationId;
@@ -355,13 +514,24 @@ async function completeDelivery(
   pushResult?: ChannelDeliveryResult
 ): Promise<void> {
   await MedicationReminderDelivery.updateOne(
-    { _id: deliveryId },
+    {
+      _id:
+        deliveryId,
+    },
     {
       $set: {
-        status: "sent",
-        deliveredAt: now,
-        claimedAt: null,
-        lastError: pushResult?.error || "",
+        status:
+          "sent",
+
+        deliveredAt:
+          now,
+
+        claimedAt:
+          null,
+
+        lastError:
+          pushResult?.error ||
+          "",
       },
     }
   );
@@ -378,15 +548,30 @@ async function failDelivery(
       : "Medication reminder delivery failed.";
 
   await MedicationReminderDelivery.updateOne(
-    { _id: deliveryId },
+    {
+      _id:
+        deliveryId,
+    },
     {
       $set: {
-        status: "failed",
-        claimedAt: null,
-        nextAttemptAt: new Date(
-          now.getTime() + RETRY_DELAY_MINUTES * MINUTE_IN_MILLISECONDS
-        ),
-        lastError: message.slice(0, 500),
+        status:
+          "failed",
+
+        claimedAt:
+          null,
+
+        nextAttemptAt:
+          new Date(
+            now.getTime() +
+              RETRY_DELAY_MINUTES *
+                MINUTE_IN_MILLISECONDS
+          ),
+
+        lastError:
+          message.slice(
+            0,
+            500
+          ),
       },
     }
   );
@@ -398,96 +583,167 @@ async function deliverReminder(
   reminderType: MedicationReminderType,
   scheduledFor: Date,
   now: Date
-): Promise<"sent" | "failed" | "skipped"> {
-  const dedupeKey = await ensureDeliveryRecord(
-    log,
-    reminderType,
-    scheduledFor,
-    now
-  );
+): Promise<
+  | "sent"
+  | "failed"
+  | "skipped"
+> {
+  const dedupeKey =
+    await ensureDeliveryRecord(
+      log,
+      reminderType,
+      scheduledFor,
+      now
+    );
 
-  const delivery = await claimDelivery(dedupeKey, now);
+  const delivery =
+    await claimDelivery(
+      dedupeKey,
+      now
+    );
 
   if (!delivery) {
     return "skipped";
   }
 
-  const inAppEnabled = user.notificationPreferences?.inApp !== false;
-  const pushEnabled = user.notificationPreferences?.push !== false;
+  const inAppEnabled =
+    user.notificationPreferences
+      ?.inApp !== false;
 
-  if (!inAppEnabled && !pushEnabled) {
-    await completeDelivery(delivery._id, now, {
-      status: "SKIPPED",
-      error: "The user disabled medication notifications.",
-    });
+  const pushEnabled =
+    user.notificationPreferences
+      ?.push !== false;
+
+  if (
+    !inAppEnabled &&
+    !pushEnabled
+  ) {
+    await completeDelivery(
+      delivery._id,
+      now,
+      {
+        status:
+          "SKIPPED",
+
+        error:
+          "The user disabled medication notifications.",
+      }
+    );
 
     return "skipped";
   }
 
-  const current = await MedicationLog.exists({
-    _id: log._id,
-    scheduledDate: log.scheduledDate,
+  const current = await MedicationLog.exists({ _id: log._id, scheduledDate: log.scheduledDate,
     scheduledTime: log.scheduledTime,
-    ...(reminderType === "window_closing"
-      ? { windowAfterMinutes: log.windowAfterMinutes ?? null }
-      : {}),
-    status: { $in: ["pending", "reminder", "dispensed"] },
-    countsTowardAdherence: { $ne: false },
-  });
-
+    ...(reminderType === "window_closing" ? { windowAfterMinutes: log.windowAfterMinutes ?? null } : {}),
+    status: { $in: ['pending', 'reminder', 'dispensed'] }, countsTowardAdherence: { $ne: false } });
   if (!current) {
-    await completeDelivery(delivery._id, now, {
-      status: "SKIPPED",
-      error: "Schedule changed or completed.",
-    });
-
-    return "skipped";
+    await completeDelivery(delivery._id, now, { status: 'SKIPPED', error: 'Schedule changed or completed.' });
+    return 'skipped';
   }
-
-  const content = getReminderContent(log, reminderType);
+  const content =
+    getReminderContent(
+      log,
+      reminderType
+    );
 
   try {
     if (inAppEnabled) {
-      await createInAppNotification(delivery, log, reminderType, content);
+      await createInAppNotification(
+        delivery,
+        log,
+        reminderType,
+        content
+      );
     }
 
-    let pushResult: ChannelDeliveryResult | undefined;
+    let pushResult:
+      | ChannelDeliveryResult
+      | undefined;
 
     if (pushEnabled) {
-      pushResult = await sendWebPushToUser(log.userId.toString(), {
-        title: content.title,
-        body: content.message,
-        type: reminderType === "window_closing" ? "due_alarm" : reminderType,
-        screen: "dashboard",
-        url: "/",
-        logId: log._id.toString(),
-        eventId: dedupeKey,
-        scheduledFor: scheduledFor.toISOString(),
-        medicineName: log.medicineName,
-      });
+      pushResult =
+        await sendWebPushToUser(
+          log.userId.toString(),
+          {
+            title:
+              content.title,
 
-      if (pushResult.status === "FAILED") {
-        throw new Error(pushResult.error || "Push delivery failed.");
+            body:
+              content.message,
+
+            type:
+              reminderType === "window_closing" ? "due_alarm" : reminderType,
+
+            screen:
+              "dashboard",
+
+            url:
+              "/",
+
+            logId: log._id.toString(),
+            eventId: dedupeKey,
+            scheduledFor: scheduledFor.toISOString(),
+            medicineName:
+              log.medicineName,
+          }
+        );
+
+      if (
+        pushResult.status ===
+        "FAILED"
+      ) {
+        throw new Error(
+          pushResult.error ||
+            "Push delivery failed."
+        );
       }
     }
 
-    await completeDelivery(delivery._id, now, pushResult);
+    await completeDelivery(
+      delivery._id,
+      now,
+      pushResult
+    );
 
     await MedicationLog.updateOne(
-      { _id: log._id, status: "pending" },
-      { $set: { status: "reminder" } }
+      {
+        _id:
+          log._id,
+
+        status:
+          "pending",
+      },
+      {
+        $set: {
+          status:
+            "reminder",
+        },
+      }
     );
 
     return "sent";
   } catch (error) {
-    await failDelivery(delivery._id, error, now);
-
-    console.error("[Medication Reminder Scheduler] Delivery failed:", {
-      dedupeKey,
-      userId: log.userId.toString(),
-      medicationLogId: log._id.toString(),
+    await failDelivery(
+      delivery._id,
       error,
-    });
+      now
+    );
+
+    console.error(
+      "[Medication Reminder Scheduler] Delivery failed:",
+      {
+        dedupeKey,
+
+        userId:
+          log.userId.toString(),
+
+        medicationLogId:
+          log._id.toString(),
+
+        error,
+      }
+    );
 
     return "failed";
   }
@@ -496,56 +752,117 @@ async function deliverReminder(
 export async function runMedicationReminderScheduler(
   schedulerNow = new Date()
 ): Promise<MedicationReminderSchedulerResult> {
-  const timeZone = resolveMedicationTimeZone();
+  const timeZone =
+    resolveMedicationTimeZone();
 
-  const result: MedicationReminderSchedulerResult = {
-    timeZone,
-    checkedAt: schedulerNow.toISOString(),
-    patientsChecked: 0,
-    logsChecked: 0,
-    sent: 0,
-    failed: 0,
-    skipped: 0,
-    invalidSchedules: 0,
-    errors: [],
-  };
+  const result: MedicationReminderSchedulerResult =
+    {
+      timeZone,
 
-  const currentDateKey = getMedicationDateKey(schedulerNow, timeZone);
+      checkedAt:
+        schedulerNow.toISOString(),
+
+      patientsChecked:
+        0,
+
+      logsChecked:
+        0,
+
+      sent:
+        0,
+
+      failed:
+        0,
+
+      skipped:
+        0,
+
+      invalidSchedules:
+        0,
+
+      errors:
+        [],
+    };
+
+  const currentDateKey =
+    getMedicationDateKey(
+      schedulerNow,
+      timeZone
+    );
 
   const dateKeys = [
-    addDaysToMedicationDateKey(currentDateKey, -1),
+    addDaysToMedicationDateKey(
+      currentDateKey,
+      -1
+    ),
+
     currentDateKey,
-    addDaysToMedicationDateKey(currentDateKey, 1),
+
+    addDaysToMedicationDateKey(
+      currentDateKey,
+      1
+    ),
   ];
 
   const patients = (
     await User.find({
-      role: "patient",
-      isDeleted: { $ne: true },
+      role:
+        "patient",
+
+      isDeleted: {
+        $ne: true,
+      },
     })
-      .select("_id firstName notificationPreferences")
+      .select(
+        "_id firstName notificationPreferences"
+      )
       .lean()
   ) as unknown as SchedulerUser[];
 
   for (const user of patients) {
-    result.patientsChecked += 1;
+    result.patientsChecked +=
+      1;
 
     try {
       await Promise.all(
-        dateKeys.map((dateKey) =>
-          ensureMedicationLogsForDate(user._id.toString(), dateKey)
+        dateKeys.map(
+          (dateKey) =>
+            ensureMedicationLogsForDate(
+              user._id.toString(),
+              dateKey
+            )
         )
       );
 
-      // Finalize expired doses and generate their family missed alerts.
-      await finalizeExpiredMedicationLogs(user._id.toString(), schedulerNow);
+      // Finalize unresolved schedules only after their configured medication
+      // windows expire. This also creates the deduplicated family missed alert.
+      await finalizeExpiredMedicationLogs(
+        user._id.toString(),
+        schedulerNow,
+        true
+      );
 
       const logs = (
         await MedicationLog.find({
-          userId: user._id,
-          scheduledDate: { $in: dateKeys },
-          status: { $in: ["pending", "reminder", "dispensed"] },
-          countsTowardAdherence: { $ne: false },
+          userId:
+            user._id,
+
+          scheduledDate: {
+            $in:
+              dateKeys,
+          },
+
+          status: {
+            $in: [
+              "pending",
+              "reminder",
+              "dispensed",
+            ],
+          },
+
+          countsTowardAdherence: {
+            $ne: false,
+          },
         })
           .select(
             [
@@ -564,67 +881,44 @@ export async function runMedicationReminderScheduler(
           .lean()
       ) as unknown as SchedulerMedicationLog[];
 
-      result.logsChecked += logs.length;
+      result.logsChecked +=
+        logs.length;
 
       for (const log of logs) {
-        const minutesUntilSchedule = getMinutesUntilSchedule(
-          log,
-          schedulerNow,
-          timeZone
-        );
+        const minutesUntilSchedule =
+          getMinutesUntilSchedule(
+            log,
+            schedulerNow,
+            timeZone
+          );
 
-        if (minutesUntilSchedule === null) {
-          result.invalidSchedules += 1;
+        if (
+          minutesUntilSchedule ===
+          null
+        ) {
+          result.invalidSchedules +=
+            1;
+
           continue;
         }
 
-        const scheduledFor = medicationScheduledAt(
-          log.scheduledDate,
-          log.scheduledTime,
-          timeZone
-        );
-
-        const windowEndsAt = medicationWindowEndsAt(
-          scheduledFor,
-          log.windowAfterMinutes
-        );
-
+        const scheduledFor = medicationScheduledAt(log.scheduledDate, log.scheduledTime, timeZone);
+        const windowEndsAt = medicationWindowEndsAt(scheduledFor, log.windowAfterMinutes);
         if (schedulerNow > windowEndsAt) {
           continue;
         }
 
         await sendFamilyAdvanceReminders(log, schedulerNow, timeZone);
-
         const reminderType = getReminderType(minutesUntilSchedule);
-
         if (reminderType) {
-          const deliveryResult = await deliverReminder(
-            user,
-            log,
-            reminderType,
-            scheduledFor,
-            schedulerNow
-          );
-
+          const deliveryResult = await deliverReminder(user, log, reminderType, scheduledFor, schedulerNow);
           result[deliveryResult] += 1;
         }
 
-        const closingReminderAt =
-          windowEndsAt.getTime() - WINDOW_CLOSING_LEAD_MS;
-
-        if (
-          closingReminderAt > scheduledFor.getTime() &&
-          schedulerNow.getTime() >= closingReminderAt &&
-          schedulerNow < windowEndsAt
-        ) {
-          const deliveryResult = await deliverReminder(
-            user,
-            log,
-            "window_closing",
-            scheduledFor,
-            schedulerNow
-          );
-
+        const closingReminderAt = windowEndsAt.getTime() - WINDOW_CLOSING_LEAD_MS;
+        if (closingReminderAt > scheduledFor.getTime() &&
+            schedulerNow.getTime() >= closingReminderAt && schedulerNow < windowEndsAt) {
+          const deliveryResult = await deliverReminder(user, log, "window_closing", scheduledFor, schedulerNow);
           result[deliveryResult] += 1;
         }
       }
@@ -636,12 +930,19 @@ export async function runMedicationReminderScheduler(
           ? error.message
           : "Unknown patient scheduler error.";
 
-      result.errors.push(`Patient ${user._id.toString()}: ${message}`);
+      result.errors.push(
+        `Patient ${user._id.toString()}: ${message}`
+      );
 
-      console.error("[Medication Reminder Scheduler] Patient processing failed:", {
-        userId: user._id.toString(),
-        error,
-      });
+      console.error(
+        "[Medication Reminder Scheduler] Patient processing failed:",
+        {
+          userId:
+            user._id.toString(),
+
+          error,
+        }
+      );
     }
   }
 

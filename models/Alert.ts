@@ -124,6 +124,7 @@ const AlertSchema =
           'PREDICTED_ADHERENCE_RISK',
           'MEDICATION_LATE',
           'MEDICATION_MISSED',
+          'REPEATED_MISSED_DOSES',
           'MEDICATION_DISPENSED',
           'MEDICATION_UPCOMING',
           'MEDICATION_VERIFIED',

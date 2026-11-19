@@ -154,6 +154,14 @@ const ALERT_POLICIES:
       "Medication taken late",
   },
 
+  REPEATED_MISSED_DOSES: {
+    createAlert: true,
+    severity: "WARNING",
+    push: true,
+    sms: true,
+    defaultTitle: "Recent missed doses — check-in suggested",
+  },
+
   MEDICATION_MISSED: {
     createAlert:
       true,
@@ -261,6 +269,9 @@ function defaultMessage(
   ) {
     case "MEDICATION_LATE":
       return `${patientName} took ${medicine} later than scheduled${time}.`;
+
+    case "REPEATED_MISSED_DOSES":
+      return `${patientName} missed ${event.metadata?.missedDoseCount} scheduled doses in the last 7 days. Please check in.`;
 
     case "MEDICATION_MISSED":
       return `${patientName} did not verify ${medicine} before its medication window ended${time}.`;
@@ -399,6 +410,9 @@ function smsMessage(
     case "MEDICATION_LATE":
       return `Rx Box Alert: ${name} took ${schedule.medicine} late. It was scheduled on ${schedule.date} at ${schedule.time}.`;
 
+    case "REPEATED_MISSED_DOSES":
+      return `Rx Box Alert: ${name} missed ${event.metadata?.missedDoseCount} doses in the last 7 days. Please check in.`;
+
     case "MEDICATION_MISSED":
       return `Rx Box Alert: ${name} missed ${schedule.medicine}, scheduled on ${schedule.date} at ${schedule.time}. Please check on the patient.`;
 
@@ -416,6 +430,7 @@ function smsAlertType(
 ): SmsAlertType {
   if (
     eventType === "PREDICTED_ADHERENCE_RISK" ||
+    eventType === "REPEATED_MISSED_DOSES" ||
     eventType ===
       "MEDICATION_EVENT_WARNING" ||
     eventType ===
@@ -741,6 +756,8 @@ async function processMedicationAlertEventInternal(
     const recipient
     of recipients
   ) {
+    if (event.eventType === "REPEATED_MISSED_DOSES" && !recipient.id) continue;
+
     const pushRequested =
       Boolean(
         recipient.id &&

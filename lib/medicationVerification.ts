@@ -1,6 +1,7 @@
 import { RX_BOX_CAPACITY } from "@/lib/rxBoxConfig";
 // lib/medicationVerification.ts
 
+import { notifyRepeatedMissedDoses } from '@/lib/missedDoseCheckIn';
 import mongoose from 'mongoose';
 
 import MedicationLog, {
@@ -1041,6 +1042,7 @@ export async function ensureMedicationLogsForRange(
 export async function finalizeExpiredMedicationLogs(
   userId: string,
   now = new Date(),
+  checkInAfterCooldown = false,
 ): Promise<void> {
   const timeZone =
     resolveMedicationTimeZone();
@@ -1088,6 +1090,7 @@ export async function finalizeExpiredMedicationLogs(
       },
     );
 
+  let finalizedMiss = false;
   for (
     const expiredLog of expiredLogs
   ) {
@@ -1130,6 +1133,7 @@ export async function finalizeExpiredMedicationLogs(
       continue;
     }
 
+    finalizedMiss = true;
     try {
       await sendFinalStatusAlert(
         updated as FinalMedicationLog,
@@ -1144,6 +1148,14 @@ export async function finalizeExpiredMedicationLogs(
           error,
         },
       );
+    }
+  }
+
+  if (finalizedMiss || checkInAfterCooldown) {
+    try {
+      await notifyRepeatedMissedDoses(userId);
+    } catch (error) {
+      console.error('[Medication Verification] Missed-dose check-in failed:', error);
     }
   }
 }
