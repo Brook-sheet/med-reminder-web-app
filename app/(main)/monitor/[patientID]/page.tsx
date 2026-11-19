@@ -811,6 +811,7 @@ export default function MonitorDashboardPage() {
                 />
               </div>
 
+              <p className="text-xs text-muted-foreground">Time of day · Last 7 days</p>
               <div className="grid gap-3 md:grid-cols-3">
                 {adherence.behavioral.timeOfDay.map((period) => (
                   <div
@@ -841,7 +842,7 @@ export default function MonitorDashboardPage() {
 
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                  Detected Patterns
+                  Detected Patterns · Last 7 days
                 </h3>
 
                 <div className="mt-3 space-y-2">

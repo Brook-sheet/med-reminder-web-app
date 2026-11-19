@@ -1,7 +1,7 @@
-import { medicationScheduledAt, parseMedicationTimeToMinutes } from '../medicationTime';
+import { getMedicationMinutesOfDay, medicationScheduledAt, parseMedicationTimeToMinutes } from '../medicationTime';
 import { fit, probability, metrics, type Example } from './model';
 
-export const MODEL_VERSION = 'personal-logistic-v1';
+export const MODEL_VERSION = 'personal-logistic-v2';
 const DAY = 86_400_000;
 export interface PredictionLog {
   id: string;
@@ -18,12 +18,13 @@ export interface PredictionLog {
   windowAfterMinutes?: number | null;
 }
 export interface PredictionTarget { scheduledDate: string; scheduledTime: string }
-interface Group { at: number; knownAt: number; missed: number; late: number; y: number }
+interface Group { at: number; minute: number; knownAt: number; missed: number; late: number; y: number }
 const timestamp = (value?: Date | string | null) => value ? new Date(value).getTime() : NaN;
 const FEATURE_NAMES = [
-  'Missed fraction in last 7 groups', 'Delayed fraction in last 7 groups',
-  'Problem fraction in last 28 groups', 'Recent change in problem fraction',
-  'Current missed streak', 'Schedule hour (sine)', 'Schedule hour (cosine)', 'Weekend schedule',
+  'Recent missed doses', 'Recent delayed doses',
+  'Missed or delayed doses over time', 'Recent change in adherence',
+  'Consecutive missed doses', 'Scheduled time of day', 'Scheduled time of day',
+  'Weekend schedule', 'Past adherence at this time of day',
 ];
 export interface PredictionResult {
   modelVersion: string;
@@ -76,18 +77,32 @@ export function prepareGroups(logs: PredictionLog[], now: Date, zone: string) {
       knownAt = Math.max(knownAt, updated, row.status === 'missed' ? at + windowAfter * 60_000 : taken);
     }
     if (!valid || knownAt > +now) { excludedRecords += rows.length; continue; }
-    groups.push({ at, knownAt, missed, late, y: Number(Boolean(missed || late)) });
+    groups.push({ at, minute: getMedicationMinutesOfDay(new Date(at), zone), knownAt, missed, late, y: Number(Boolean(missed || late)) });
   }
   return { groups: groups.sort((a, b) => a.at - b.at), excludedRecords };
 }
+// Match the Morning, Afternoon, and Evening boundaries in Behavioral Insights.
+function timePeriod(minute: number) {
+  if (minute < 12 * 60) return 'morning';
+  if (minute < 17 * 60) return 'afternoon';
+  return 'evening';
+}
+
 function features(history: Group[], target: PredictionTarget): number[] {
   const recent = history.slice(-7), previous = history.slice(-14, -7), longer = history.slice(-28);
   const rate = (rows: Group[], key: 'y' | 'missed' | 'late') => rows.length ? rows.reduce((s, r) => s + r[key], 0) / rows.length : 0;
   let streak = 0;
   for (let i = history.length - 1; i >= 0 && history[i].missed; i--) streak++;
-  const angle = parseMedicationTimeToMinutes(target.scheduledTime) / 1440 * 2 * Math.PI;
-  const weekday = new Date(`${target.scheduledDate}T12:00:00Z`).getUTCDay();
-  return [rate(recent, 'missed'), rate(recent, 'late'), rate(longer, 'y'), rate(recent, 'y') - rate(previous, 'y'), Math.min(streak, 7) / 7, Math.sin(angle), Math.cos(angle), Number(weekday === 0 || weekday === 6)];
+  const minute = parseMedicationTimeToMinutes(target.scheduledTime);
+  const angle = minute / 1440 * 2 * Math.PI;
+  const period = timePeriod(minute);
+  const similar = longer.filter(group => timePeriod(group.minute) === period);
+  const overallRate = rate(longer, 'y');
+  // Shrink small time-of-day samples toward the patient's recent overall rate.
+  const periodRate = (similar.reduce((sum, group) => sum + group.y, 0) + 3 * overallRate) /
+    (similar.length + 3);
+  const weekday = new Date(target.scheduledDate + 'T12:00:00Z').getUTCDay();
+  return [rate(recent, 'missed'), rate(recent, 'late'), overallRate, rate(recent, 'y') - rate(previous, 'y'), Math.min(streak, 7) / 7, Math.sin(angle), Math.cos(angle), Number(weekday === 0 || weekday === 6), periodRate - overallRate];
 }
 export function buildExamples(groups: Group[], zone: string): Example[] {
   return groups.flatMap(group => {
@@ -95,7 +110,7 @@ export function buildExamples(groups: Group[], zone: string): Example[] {
     if (history.length < 14) return [];
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(group.at);
     const get = (name: string) => parts.find(p => p.type === name)!.value;
-    return [{ x: features(history, { scheduledDate: `${get('year')}-${get('month')}-${get('day')}`, scheduledTime: `${get('hour')}:${get('minute')}` }), y: group.y, at: group.at, knownAt: group.knownAt }];
+    return [{ x: features(history, { scheduledDate: [get('year'), get('month'), get('day')].join('-'), scheduledTime: [get('hour'), get('minute')].join(':') }), y: group.y, at: group.at, knownAt: group.knownAt }];
   });
 }
 export function predictAdherence(logs: PredictionLog[], target: PredictionTarget | null, now: Date, zone: string): PredictionResult {
@@ -128,6 +143,13 @@ export function predictAdherence(logs: PredictionLog[], target: PredictionTarget
   const model = fit(rows);
   const x = features(groups.filter(g => g.knownAt <= +now), target);
   const p = probability(model, x);
+  const contributions = new Map<string, { value: number; contribution: number }>();
+  x.forEach((value, index) => {
+    const name = FEATURE_NAMES[index];
+    const contribution = model.weights[index] * (value - model.means[index]);
+    const previous = contributions.get(name);
+    contributions.set(name, { value: previous?.value ?? value, contribution: (previous?.contribution ?? 0) + contribution });
+  });
   const stale = +now - groups[groups.length - 1].knownAt > 14 * DAY;
   const validated = Boolean(result.evaluation?.passed) && !stale;
   return {
@@ -137,7 +159,11 @@ export function predictAdherence(logs: PredictionLog[], target: PredictionTarget
       ? 'Passed an initial chronological holdout check. This estimates a recorded missed or delayed outcome for the next group, not ingestion or a medical condition.'
       : stale ? 'Recent history is older than 14 days. This estimate is preliminary; family risk alerts are suppressed.'
       : 'A model was fitted to this patient’s records, but evidence is not yet sufficient for the alert validation gate. Treat this estimate as preliminary.',
-    factors: x.map((value, i) => ({ name: FEATURE_NAMES[i], value, contribution: model.weights[i] * (value - model.means[i]), direction: model.weights[i] * (value - model.means[i]) >= 0 ? 'increases' as const : 'decreases' as const }))
-      .filter(f => Math.abs(f.contribution) > 0.001).sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)).slice(0, 4),
+    factors: Array.from(contributions, ([name, factor]) => ({
+      name,
+      ...factor,
+      direction: factor.contribution >= 0 ? 'increases' as const : 'decreases' as const,
+    })).filter(factor => Math.abs(factor.contribution) > 0.001)
+      .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)).slice(0, 4),
   };
 }

@@ -436,6 +436,7 @@ export async function buildPatientMedicationReport(input: {
     rawLogs,
     analysisNow,
     timeZone,
+    "full",
   );
 
   const regimen: MedicationReportRegimenItem[] =

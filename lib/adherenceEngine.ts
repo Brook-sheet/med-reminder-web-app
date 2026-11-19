@@ -484,6 +484,9 @@ function buildInsights(
   timeOfDay: TimePattern[],
   byMedication: MedicationPattern[],
   recent: EvaluatedLog[],
+  verifiedStreak: number,
+  incorrectChamberEvents: number,
+  recentOnly: boolean,
 ): BehavioralInsight[] {
   const insights: BehavioralInsight[] = [];
 
@@ -563,13 +566,13 @@ function buildInsights(
     });
   }
 
-  if (features.incorrectChamberEvents >= 3) {
+  if (incorrectChamberEvents >= 3) {
     insights.push({
       id: 'incorrect-chamber',
       tone: 'critical',
       title: 'Repeated incorrect chamber access detected',
       detail:
-        `${features.incorrectChamberEvents} incorrect chamber ` +
+        `${incorrectChamberEvents} incorrect chamber ` +
         'events were recorded. These were not counted as ' +
         'successful intake.',
     });
@@ -597,13 +600,13 @@ function buildInsights(
     });
   }
 
-  if (features.consecutiveVerified >= 5) {
+  if (verifiedStreak >= 5) {
     insights.push({
       id: 'verified-streak',
       tone: 'positive',
-      title: 'Consistent verified-dose streak',
+      title: recentOnly ? 'Current verified-dose streak' : 'Consistent verified-dose streak',
       detail:
-        `${features.consecutiveVerified} consecutive doses ` +
+        `${verifiedStreak} consecutive doses ` +
         'were correctly verified.',
     });
   }
@@ -857,6 +860,7 @@ export function analyzeAdherence(
   logs: RawLog[],
   now = new Date(),
   requestedTimeZone?: string | null,
+  behavioralPeriod: "recent" | "full" = "recent",
 ): AdherenceAnalysis {
   const timeZone =
     resolveMedicationTimeZone(requestedTimeZone);
@@ -893,17 +897,24 @@ export function analyzeAdherence(
     timeZone,
   );
 
-  const recent = logsWithinDateKeys(
-    eligible,
-    addDaysToMedicationDateKey(today, -6),
-    addDaysToMedicationDateKey(today, 1),
-  );
+  const recentFrom = addDaysToMedicationDateKey(today, -6);
+  const recentTo = addDaysToMedicationDateKey(today, 1);
+  const recent = logsWithinDateKeys(eligible, recentFrom, recentTo);
+  const recentOnly = behavioralPeriod === 'recent';
+  const patternLogs = recentOnly ? recent : eligible;
+  const patternAudit = recentOnly
+    ? audit.filter(log => log.scheduledDate >= recentFrom && log.scheduledDate < recentTo)
+    : audit;
 
-  const timeOfDay =
-    createTimePatterns(eligible);
+  let currentVerifiedStreak = 0;
+  for (let index = recent.length - 1; index >= 0; index--) {
+    const { lifecycle } = recent[index];
+    if (lifecycle !== 'taken' && lifecycle !== 'late') break;
+    currentVerifiedStreak++;
+  }
 
-  const byMedication =
-    createMedicationPatterns(eligible, audit);
+  const timeOfDay = createTimePatterns(patternLogs);
+  const byMedication = createMedicationPatterns(patternLogs, patternAudit);
 
   const behavioral: BehavioralAnalysis = {
     timeOfDay,
@@ -918,6 +929,11 @@ export function analyzeAdherence(
       timeOfDay,
       byMedication,
       recent,
+      recentOnly ? currentVerifiedStreak : features.consecutiveVerified,
+      recentOnly
+        ? patternAudit.filter(log => log.lifecycle === 'incorrect_chamber').length
+        : features.incorrectChamberEvents,
+      recentOnly,
     ),
   };
 
